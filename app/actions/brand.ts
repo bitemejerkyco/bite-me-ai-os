@@ -1,10 +1,10 @@
 "use server";
 
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import type { BrandProfile } from "@/lib/brand/types";
 
 export async function listBrands(): Promise<{ success: boolean; brands: BrandProfile[]; error?: string }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("brands")
     .select("*")
     .order("updated_at", { ascending: false });
@@ -34,8 +34,8 @@ export async function saveBrand(brand: BrandProfile) {
   };
 
   const query = brand.id
-    ? supabaseAdmin.from("brands").update(payload).eq("id", brand.id)
-    : supabaseAdmin.from("brands").insert(payload);
+    ? getSupabaseAdmin().from("brands").update(payload).eq("id", brand.id)
+    : getSupabaseAdmin().from("brands").insert(payload);
 
   const { data, error } = await query.select().single();
   if (error) return { success: false, error: error.message };
@@ -43,7 +43,7 @@ export async function saveBrand(brand: BrandProfile) {
 }
 
 export async function deleteBrand(id: string) {
-  const { error } = await supabaseAdmin.from("brands").delete().eq("id", id);
+  const { error } = await getSupabaseAdmin().from("brands").delete().eq("id", id);
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
