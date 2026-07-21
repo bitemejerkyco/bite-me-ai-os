@@ -94,11 +94,12 @@ function SidebarGroup({ label, children, collapsed }: SidebarGroupProps) {
 interface SidebarProps {
   mobileOpen: boolean;
   onMobileClose: () => void;
+  onMobileOpen: () => void;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
 }
 
-export function Sidebar({ mobileOpen, onMobileClose, collapsed, onCollapsedChange }: SidebarProps) {
+export function Sidebar({ mobileOpen, onMobileClose, onMobileOpen, collapsed, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
 
   // Close mobile sidebar on route change
@@ -188,8 +189,8 @@ export function Sidebar({ mobileOpen, onMobileClose, collapsed, onCollapsedChang
       {/* Mobile toggle button (rendered outside sidebar) */}
       <button
         className="fixed bottom-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-        onClick={onMobileClose}
-        aria-label="Toggle navigation"
+        onClick={mobileOpen ? onMobileClose : onMobileOpen}
+        aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
       >
         {mobileOpen ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
       </button>

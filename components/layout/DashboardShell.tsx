@@ -34,6 +34,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <Sidebar
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
+        onMobileOpen={() => setMobileOpen(true)}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
       />
