@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { env, isDatabaseConfigured } from "@/lib/env";
 
 declare global {
-  var prismaGlobal: PrismaClient | null | undefined;
+  var prismaInstance: PrismaClient | null | undefined;
 }
 
 function createPrismaClient() {
@@ -15,8 +15,8 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalThis.prismaGlobal ?? createPrismaClient();
+export const prisma = globalThis.prismaInstance ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.prismaGlobal = prisma;
+  globalThis.prismaInstance = prisma;
 }

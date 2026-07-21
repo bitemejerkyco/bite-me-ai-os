@@ -20,7 +20,7 @@ const fallbackEnv = {
 
 export const env = parsedEnv.success ? parsedEnv.data : fallbackEnv;
 
-const urlSchema = z.url();
+const urlSchema = z.string().url();
 const isValidUrl = (value: string) => urlSchema.safeParse(value).success;
 
 export const isDatabaseConfigured = env.DATABASE_URL.length > 0;

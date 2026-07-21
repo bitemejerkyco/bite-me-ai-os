@@ -13,7 +13,7 @@ export type AuthActionResult = {
   fieldErrors?: Record<string, string[]>;
 };
 
-const emailSchema = z.email("Enter a valid email address.");
+const emailSchema = z.string().email("Enter a valid email address.");
 const passwordSchema = z.string().min(8, "Password must be at least 8 characters.");
 
 const loginSchema = z.object({
