@@ -21,9 +21,14 @@ const loginSchema = z.object({
   password: passwordSchema,
 });
 
-const signupSchema = loginSchema.extend({
-  confirmPassword: passwordSchema,
-});
+const signupSchema = loginSchema
+  .extend({
+    confirmPassword: passwordSchema,
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords must match.",
+    path: ["confirmPassword"],
+  });
 
 const forgotPasswordSchema = z.object({
   email: emailSchema,
@@ -94,16 +99,6 @@ export async function signup(values: unknown): Promise<AuthActionResult> {
 
   if (!parsed.success) {
     return fromValidationError(parsed.error);
-  }
-
-  if (parsed.data.password !== parsed.data.confirmPassword) {
-    return {
-      success: false,
-      message: "Passwords must match.",
-      fieldErrors: {
-        confirmPassword: ["Passwords must match."],
-      },
-    };
   }
 
   if (!isSupabaseConfigured) {

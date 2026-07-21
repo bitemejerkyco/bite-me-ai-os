@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { env, isDatabaseConfigured } from "@/lib/env";
 
 declare global {
+  // `var` is required for global scope augmentation in TypeScript.
   var prismaInstance: PrismaClient | null | undefined;
 }
 

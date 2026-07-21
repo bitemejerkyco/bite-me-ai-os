@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { env, isSupabaseConfigured } from "@/lib/env";
+import { logger } from "@/lib/logger";
 
 export async function createServerSupabaseClient() {
   if (!isSupabaseConfigured) {
@@ -19,7 +20,11 @@ export async function createServerSupabaseClient() {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
           });
-        } catch {
+        } catch (error) {
+          if (process.env.NODE_ENV !== "production") {
+            logger.warn("Supabase cookie write skipped during server rendering", error);
+          }
+          
           // Server Components cannot always write cookies; refresh is handled in proxy.ts.
         }
       },
