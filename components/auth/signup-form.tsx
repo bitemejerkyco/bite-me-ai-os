@@ -41,9 +41,14 @@ export function SignupForm() {
       const result = await signup(values);
 
       if (!result.success) {
-        result.fieldErrors?.email?.[0] && form.setError("email", { message: result.fieldErrors.email[0] });
-        result.fieldErrors?.password?.[0] &&
+        if (result.fieldErrors?.email?.[0]) {
+          form.setError("email", { message: result.fieldErrors.email[0] });
+        }
+
+        if (result.fieldErrors?.password?.[0]) {
           form.setError("password", { message: result.fieldErrors.password[0] });
+        }
+
         toast.error(result.message);
         return;
       }
