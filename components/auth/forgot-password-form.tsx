@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const forgotPasswordSchema = z.object({
-  email: z.email("Enter a valid email address."),
+  email: z.string().email("Enter a valid email address."),
 });
 
 type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
