@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { DASHBOARD_NAVIGATION } from "@/lib/constants";
+import { DASHBOARD_NAVIGATION } from "@/config/navigation";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

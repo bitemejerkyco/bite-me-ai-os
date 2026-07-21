@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DASHBOARD_NAVIGATION } from "@/lib/constants";
+import { DASHBOARD_NAVIGATION } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 
 export function MobileSidebar() {

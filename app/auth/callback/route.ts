@@ -28,6 +28,11 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await createSupabaseServerClient();
+    if (!supabase) {
+      destination.pathname = "/login";
+      destination.searchParams.set("message", "supabase-not-configured");
+      return NextResponse.redirect(destination);
+    }
     await supabase.auth.exchangeCodeForSession(code);
     return NextResponse.redirect(destination);
   } catch {

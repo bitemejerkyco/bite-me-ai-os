@@ -9,7 +9,7 @@ function isProtectedPath(pathname: string) {
 }
 
 export async function updateSupabaseSession(request: NextRequest) {
-  if (!isSupabaseConfigured || !env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+  if (!isSupabaseConfigured || !env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_PUBLIC_KEY) {
     return NextResponse.next();
   }
 
@@ -19,7 +19,7 @@ export async function updateSupabaseSession(request: NextRequest) {
     },
   });
 
-  const supabase = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
+  const supabase = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_PUBLIC_KEY, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

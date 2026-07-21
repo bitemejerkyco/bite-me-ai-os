@@ -2,7 +2,8 @@ type LogLevel = "info" | "warn" | "error";
 
 type LogMeta = Record<string, unknown>;
 
-const SECRET_KEYS = ["password", "token", "secret", "apikey", "api_key", "authorization", "cookie"];
+const SECRET_KEYS = ["password", "token", "secret", "apikey", "api_key", "authorization", "cookie", "key"];
+const REDACTED = "[REDACTED]";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -21,9 +22,15 @@ function redactValue(value: unknown): unknown {
   for (const [key, item] of Object.entries(value)) {
     const normalized = key.toLowerCase();
     if (SECRET_KEYS.some((secret) => normalized.includes(secret))) {
-      output[key] = "[REDACTED]";
+      output[key] = REDACTED;
       continue;
     }
+
+    if (typeof item === "string" && /^Bearer\s+/i.test(item)) {
+      output[key] = REDACTED;
+      continue;
+    }
+
     output[key] = redactValue(item);
   }
   return output;
@@ -61,5 +68,8 @@ export const logger = {
   },
   error(message: string, meta?: LogMeta) {
     write("error", message, meta);
+  },
+  redact(meta?: LogMeta) {
+    return meta ? (redactValue(meta) as LogMeta) : undefined;
   },
 };

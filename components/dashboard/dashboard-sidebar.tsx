@@ -17,7 +17,8 @@ import {
   Settings,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { APP_NAME, APP_TAGLINE, DASHBOARD_NAVIGATION } from "@/lib/constants";
+import { DASHBOARD_NAVIGATION } from "@/config/navigation";
+import { APP_CONFIG } from "@/config/app";
 import { cn } from "@/lib/utils";
 import type { NavigationIconKey } from "@/types/navigation";
 
@@ -43,8 +44,8 @@ export function DashboardSidebar() {
     <aside className="hidden w-72 flex-col border-r border-[var(--border)] bg-zinc-950/90 p-5 md:flex">
       <Link href="/dashboard" className="mb-8 block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
         <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary)] text-white">P</div>
-        <p className="mt-3 text-sm font-semibold text-[var(--foreground)]">{APP_NAME}</p>
-        <p className="text-xs text-[var(--muted-foreground)]">{APP_TAGLINE}</p>
+        <p className="mt-3 text-sm font-semibold text-[var(--foreground)]">{APP_CONFIG.name}</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{APP_CONFIG.tagline}</p>
       </Link>
 
       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)]">Mission Control</p>

@@ -5,6 +5,7 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { QuickActionCard } from "@/components/dashboard/quick-action-card";
 import { Section } from "@/components/dashboard/section";
 import { StatusBadge } from "@/components/dashboard/status-badge";
+import { DASHBOARD_QUICK_ACTIONS, getSetupChecklist } from "@/config/dashboard";
 
 export function MissionControlWidgets({
   isDatabaseConfigured,
@@ -65,22 +66,37 @@ export function MissionControlWidgets({
         <Section title="Getting Started" description="Complete these tasks to activate production workflows." className="xl:col-span-2">
           <Card>
             <CardContent className="space-y-2 p-5">
-              <SetupRow icon={<Plug className="h-4 w-4" />} label="Configure Supabase" complete={isSupabaseConfigured} />
-              <SetupRow icon={<Database className="h-4 w-4" />} label="Configure database" complete={isDatabaseConfigured} />
-              <SetupRow icon={<CircleDashed className="h-4 w-4" />} label="Create first brand" complete={false} />
-              <SetupRow icon={<CircleDashed className="h-4 w-4" />} label="Connect social accounts" complete={false} />
+              {getSetupChecklist(isSupabaseConfigured, isDatabaseConfigured).map((item) => (
+                <SetupRow
+                  key={item.id}
+                  icon={
+                    item.id === "supabase" ? (
+                      <Plug className="h-4 w-4" />
+                    ) : item.id === "database" ? (
+                      <Database className="h-4 w-4" />
+                    ) : (
+                      <CircleDashed className="h-4 w-4" />
+                    )
+                  }
+                  label={item.label}
+                  complete={item.completed}
+                />
+              ))}
             </CardContent>
           </Card>
         </Section>
 
         <Section title="Quick Actions" description="Jump directly into setup and creation flows.">
           <div className="space-y-3">
-            <QuickActionCard title="Create Brand" description="Launch the brand setup wizard." href="/brand-brain" cta="Start brand setup" />
-            <QuickActionCard title="Import Website" description="Bring website context into Brand Brain." href="/brand-brain" cta="Import website" />
-            <QuickActionCard title="Upload Documents" description="Add source docs to Knowledge Hub." href="/knowledge-hub" cta="Upload documents" />
-            <QuickActionCard title="Connect Social Account" description="Prepare external channel publishing." href="/settings" cta="Connect account" />
-            <QuickActionCard title="New Campaign" description="Open campaign planning workspace." href="/campaigns" cta="Create campaign" />
-            <QuickActionCard title="Generate Content" description="Start content generation workflows." href="/content-studio" cta="Generate content" />
+            {DASHBOARD_QUICK_ACTIONS.map((action) => (
+              <QuickActionCard
+                key={action.id}
+                title={action.label}
+                description={action.description}
+                href={action.href}
+                cta={action.cta}
+              />
+            ))}
           </div>
         </Section>
       </div>

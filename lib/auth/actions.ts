@@ -56,6 +56,7 @@ export async function login(_: AuthActionResult, formData: FormData): Promise<Au
 
   try {
     const supabase = await createSupabaseServerClient();
+    if (!supabase) return setupModeResult();
     const { error } = await supabase.auth.signInWithPassword({
       email: parsed.data.email,
       password: parsed.data.password,
@@ -93,6 +94,7 @@ export async function signup(_: AuthActionResult, formData: FormData): Promise<A
 
   try {
     const supabase = await createSupabaseServerClient();
+    if (!supabase) return setupModeResult();
     const { error } = await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
@@ -134,6 +136,7 @@ export async function requestPasswordReset(_: AuthActionResult, formData: FormDa
 
   try {
     const supabase = await createSupabaseServerClient();
+    if (!supabase) return setupModeResult();
     const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     await supabase.auth.resetPasswordForEmail(parsed.data.email, {
       redirectTo: `${origin}/auth/callback?next=/settings`,
@@ -161,6 +164,12 @@ export async function logout(): Promise<AuthActionResult> {
 
   try {
     const supabase = await createSupabaseServerClient();
+    if (!supabase) {
+      return {
+        success: true,
+        message: "Signed out.",
+      };
+    }
     await supabase.auth.signOut();
     return {
       success: true,

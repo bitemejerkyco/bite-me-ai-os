@@ -1,0 +1,4 @@
+# ai-employees
+
+Status: planned
+

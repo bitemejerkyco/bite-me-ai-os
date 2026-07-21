@@ -13,7 +13,15 @@ export type NavigationIconKey =
   | "bot";
 
 export type NavigationItem = {
+  id: string;
   label: string;
   href: string;
   icon: NavigationIconKey;
+  feature?: import("@/types/feature-flags").FeatureFlagKey;
+};
+
+export type NavigationSection = {
+  id: string;
+  label: string;
+  items: NavigationItem[];
 };

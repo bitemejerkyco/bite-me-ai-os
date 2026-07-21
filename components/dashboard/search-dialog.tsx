@@ -4,17 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search } from "lucide-react";
-import { DASHBOARD_NAVIGATION } from "@/lib/constants";
+import { DASHBOARD_NAVIGATION } from "@/config/navigation";
+import { DASHBOARD_QUICK_ACTIONS } from "@/config/dashboard";
 import { cn } from "@/lib/utils";
-
-const QUICK_ACTIONS = [
-  { label: "Create Brand", href: "/brand-brain" },
-  { label: "Import Website", href: "/brand-brain" },
-  { label: "Upload Documents", href: "/knowledge-hub" },
-  { label: "Connect Social Account", href: "/settings" },
-  { label: "New Campaign", href: "/campaigns" },
-  { label: "Generate Content", href: "/content-studio" },
-] as const;
 
 export function SearchDialog({
   open,
@@ -44,7 +36,7 @@ export function SearchDialog({
   const allItems = useMemo(
     () => [
       ...DASHBOARD_NAVIGATION.map((item) => ({ label: item.label, href: item.href, section: "Navigation" })),
-      ...QUICK_ACTIONS.map((item) => ({ ...item, section: "Quick Actions" })),
+      ...DASHBOARD_QUICK_ACTIONS.map((item) => ({ label: item.label, href: item.href, section: "Quick Actions" })),
     ],
     []
   );

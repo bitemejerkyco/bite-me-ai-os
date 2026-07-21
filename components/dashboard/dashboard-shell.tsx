@@ -21,7 +21,8 @@ import {
   PenSquare,
   Settings,
 } from "lucide-react";
-import { DASHBOARD_NAVIGATION, APP_NAME, APP_TAGLINE } from "@/lib/constants";
+import { DASHBOARD_NAVIGATION } from "@/config/navigation";
+import { APP_CONFIG } from "@/config/app";
 import { cn } from "@/lib/utils";
 import type { NavigationIconKey } from "@/types/navigation";
 import { SidebarGroup } from "@/components/dashboard/sidebar-group";
@@ -99,8 +100,8 @@ export function DashboardShell({
               <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[var(--primary)] text-sm font-semibold text-white">PM</div>
               {!collapsed ? (
                 <>
-                  <p className="mt-2 text-sm font-semibold">{APP_NAME}</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">{APP_TAGLINE}</p>
+                  <p className="mt-2 text-sm font-semibold">{APP_CONFIG.name}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{APP_CONFIG.tagline}</p>
                 </>
               ) : null}
             </Link>
