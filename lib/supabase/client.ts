@@ -1,8 +1,9 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { publicEnv } from "@/lib/env";
 
 export function createBrowserSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const { NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey } =
+    publicEnv;
 
   if (!url || !publishableKey) {
     throw new Error(
