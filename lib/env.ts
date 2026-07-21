@@ -26,3 +26,9 @@ const isValidUrl = (value: string) => urlSchema.safeParse(value).success;
 export const isDatabaseConfigured = env.DATABASE_URL.length > 0;
 export const isSupabaseConfigured =
   env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.length > 0 && isValidUrl(env.NEXT_PUBLIC_SUPABASE_URL);
+
+if (process.env.NODE_ENV !== "production" && env.NEXT_PUBLIC_SUPABASE_URL && !isSupabaseConfigured) {
+  console.warn(
+    "[bite-me-ai-os] Supabase environment variables are incomplete or invalid. Falling back to local demo mode.",
+  );
+}

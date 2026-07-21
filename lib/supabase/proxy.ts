@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { env, isSupabaseConfigured } from "@/lib/env";
-import { AUTH_ROUTES, DASHBOARD_ROUTES } from "@/lib/constants";
+import { DASHBOARD_ROUTES, REDIRECT_AUTH_ROUTES } from "@/lib/constants";
 
 function matchesRoute(pathname: string, routes: readonly string[]) {
   return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
@@ -61,7 +61,7 @@ export async function handleSupabaseProxy(request: NextRequest) {
     return applyCookies(response, NextResponse.redirect(loginUrl));
   }
 
-  if (user && matchesRoute(pathname, AUTH_ROUTES.filter((route) => route !== "/forgot-password"))) {
+  if (user && matchesRoute(pathname, REDIRECT_AUTH_ROUTES)) {
     return applyCookies(response, NextResponse.redirect(new URL("/dashboard", request.url)));
   }
 

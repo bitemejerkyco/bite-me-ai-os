@@ -6,6 +6,15 @@ import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
+function getUserLabel(user: {
+  email?: string | null;
+  user_metadata?: {
+    full_name?: string | null;
+  };
+}) {
+  return user.user_metadata?.full_name ?? user.email ?? "Authenticated user";
+}
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -23,7 +32,7 @@ export default async function DashboardLayout({
       redirect("/login");
     }
 
-    userLabel = user.email ?? user.user_metadata.full_name ?? "Authenticated user";
+    userLabel = getUserLabel(user);
   }
 
   return (

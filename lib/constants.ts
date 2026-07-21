@@ -17,6 +17,7 @@ export const APP_NAME = "Bite Me AI OS";
 export const APP_DESCRIPTION = "Sprint 1A platform foundation for auth, routing, and data services.";
 
 export const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"] as const;
+export const REDIRECT_AUTH_ROUTES = ["/login", "/signup"] as const;
 export const DASHBOARD_ROUTES = [
   "/dashboard",
   "/campaigns",
