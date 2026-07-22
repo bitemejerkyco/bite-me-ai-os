@@ -28,6 +28,7 @@ Domain logic should be isolated in service modules within features or lib module
 - Prisma is configured for PostgreSQL.
 - A singleton client pattern avoids client duplication during Next.js development reloads.
 - Workspace, membership, and brand models provide the base for authorization-aware data access.
+- Knowledge Engine persistence extends the schema with sources, collections, documents, chunks, citations, and jobs.
 
 ## Workspace Authorization
 - Authentication is resolved through Supabase SSR helpers.
@@ -52,6 +53,14 @@ Domain logic should be isolated in service modules within features or lib module
 ## Evidence-First AI
 - Deterministic extraction and validation should happen before AI reasoning.
 - Final AI conclusions should include evidence references where possible.
+
+## Knowledge Engine Foundation
+- Upload ingestion is synchronous and request-bound in Sprint 3A.
+- Binary files are stored privately on the local filesystem behind a storage abstraction.
+- Processor resolution prefers MIME type and falls back to file extension when needed.
+- Normalization, chunking, stable keys, and citation generation are deterministic.
+- Search is lexical and workspace-scoped in Sprint 3A.
+- External connectors exist only as explicit placeholders and are not production-ready.
 
 ## Logging and Error Handling
 - Structured logger with recursive sensitive field redaction.

@@ -1,7 +1,7 @@
 # Master Build Plan
 
 ## Current Branch
-foundation/platform-v1
+feature/knowledge-engine-foundation
 
 ## Program Scope
 Convert the current Mission Control prototype into a production-oriented PostMotive AI foundation while preserving existing Mission Control appearance and behavior.
@@ -9,9 +9,10 @@ Convert the current Mission Control prototype into a production-oriented PostMot
 ## Repository State and Delivery Status
 - Mission Control dashboard shell: Implemented
 - Platform foundation: Current sprint
+- Knowledge Engine foundation: Implemented in Sprint 3A
 - Brand Brain foundation: Planned
 - Brand Brain intelligence: Planned
-- Knowledge Hub: Planned
+- Knowledge Hub advanced sync and retrieval: Planned
 - AI Employees: Planned
 - Content Studio: Planned
 - Publishing: Planned
@@ -43,3 +44,6 @@ Required commands:
 - npx prisma format
 - npx prisma validate
 - npx prisma generate
+
+Knowledge Engine migration generation additionally requires:
+- npm run db:migrate -- --name 20260721_knowledge_engine_foundation

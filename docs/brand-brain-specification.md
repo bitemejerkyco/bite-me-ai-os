@@ -39,6 +39,6 @@ Brand Brain is the structured source of truth for brand identity, voice, audienc
 
 ## Future Extensions
 - BrandBrainVersion model with immutable snapshots
-- Evidence graph linking extracted facts to source documents
+- Evidence graph linking extracted facts to Knowledge Engine source documents and citations
 - Provenance metadata for AI-generated inferences
 - Confidence scoring and approval-required transitions

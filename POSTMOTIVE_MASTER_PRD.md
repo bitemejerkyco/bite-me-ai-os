@@ -33,9 +33,22 @@ Status: Planned
 Brand Brain foundation, versioning, and ingestion lifecycle are defined but not fully implemented in this sprint.
 
 ### Knowledge Hub
-Status: Planned
+Status: Implemented foundation, Planned expansion
 
-Knowledge ingestion, source management, and retrieval pipelines are planned.
+Implemented in Sprint 3A:
+- uploaded-file ingestion
+- workspace-scoped collections and document persistence
+- deterministic normalization, chunking, and citation generation
+- lexical chunk search
+- Knowledge Hub inspection UI
+
+Still planned:
+- background workers
+- cloud storage
+- website and SaaS source sync
+- OCR
+- vector and hybrid retrieval
+- AI Employee retrieval integration
 
 ### AI Employees
 Status: Planned
@@ -100,11 +113,12 @@ MVP includes:
 - Workspace/member/domain schema foundation
 - Supabase authentication setup mode and core user abstraction
 - Feature scaffolding for Brand Brain, Knowledge Hub, AI Employees, Content Studio, Campaigns, Calendar, and Analytics
+- Knowledge Engine Sprint 3A uploaded-file ingestion foundation
 - CI, baseline tests, and security workflow
 
 MVP does not yet include:
 - Full Brand Brain intelligence workflows
-- Full Knowledge Hub ingestion/retrieval
+- Full external Knowledge Hub synchronization and advanced retrieval
 - Publishing integrations
 - Advanced billing and approvals
 

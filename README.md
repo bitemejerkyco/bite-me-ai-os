@@ -8,8 +8,9 @@ PostMotive AI is a production-oriented marketing operations platform foundation 
 - Implemented: Mission Control dashboard shell and responsive navigation
 - Implemented: setup-safe auth and environment posture checks
 - Implemented: foundational Prisma schema for users, workspaces, memberships, and brands
+- Implemented: Knowledge Engine Sprint 3A foundation for uploaded-file ingestion, chunking, citation generation, lexical search, and Knowledge Hub inspection
 - Planned: Brand Brain intelligence workflows
-- Planned: Knowledge Hub ingestion/retrieval
+- Planned: background queues, cloud storage, OCR, vector retrieval, hybrid retrieval, and external knowledge-source synchronization
 - Planned: AI Employees, Content Studio, Campaign execution, publishing, analytics, and billing depth
 
 ## Local Setup
@@ -51,6 +52,14 @@ npm run db:push
 npm run db:studio
 ```
 
+Sprint 3A migration target:
+
+```bash
+npm run db:migrate -- --name 20260721_knowledge_engine_foundation
+```
+
+Knowledge Engine migration status checks require a reachable PostgreSQL database. Local private file storage does not.
+
 ## Validation Commands
 ```bash
 npm run lint
@@ -68,6 +77,17 @@ npx prisma generate
 - Architecture: ARCHITECTURE.md
 - Decisions: DECISIONS.md
 - Brand Brain spec: docs/brand-brain-specification.md
+- Knowledge Engine spec: docs/knowledge-engine.md
+
+## Knowledge Engine Summary
+- Supported file types: txt, md, csv, pdf, docx, pptx, xlsx, png, jpg, jpeg, webp
+- Local private development storage root: `.knowledge-storage`
+- Default upload limit: 20 MB
+- Default extraction limit: 300000 characters
+- Spreadsheet safety limits: 20 sheets, 2000 rows per sheet, 60 cells per row
+- PDF safety limit: 300 pages
+
+Local private storage is for development only and is not suitable for distributed production deployments.
 
 ## Security Reporting
 Security contact and vulnerability disclosure policy placeholder:

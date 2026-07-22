@@ -71,3 +71,15 @@
 - Context: Brand context evolves and requires recoverable snapshots and auditability.
 - Decision: Store Brand Brain data with explicit versioning semantics.
 - Consequences: Update workflows include migration/version transitions rather than in-place opaque mutation.
+
+## ADR-013: Request-Bound Knowledge Ingestion for Sprint 3A
+- Status: Accepted
+- Context: The first Knowledge Engine delivery needs deterministic ingestion without introducing queue infrastructure prematurely.
+- Decision: Keep Sprint 3A ingestion synchronous inside authenticated route boundaries.
+- Consequences: Upload throughput is bounded by request time and parser cost until queue-backed workers are introduced.
+
+## ADR-014: Private Local Knowledge Storage in Development
+- Status: Accepted
+- Context: Sprint 3A needs binary storage before cloud object storage is selected.
+- Decision: Store uploaded knowledge files in a private local filesystem root behind a storage abstraction.
+- Consequences: Development is unblocked, but this storage mode is not suitable for distributed production deployments.
