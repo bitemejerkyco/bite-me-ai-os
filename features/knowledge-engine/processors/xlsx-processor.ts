@@ -1,7 +1,26 @@
-import { read, utils } from "xlsx";
+import ExcelJS from "exceljs";
 import { KNOWLEDGE_ENGINE_CONFIG } from "@/config/knowledge-engine";
 import type { DocumentProcessor, ProcessorInput } from "@/features/knowledge-engine/processors/interface";
 import { makeSection, normalizeText, warning } from "@/features/knowledge-engine/processors/helpers";
+
+function cellToString(value: ExcelJS.CellValue): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    if ("richText" in value) {
+      return (value as ExcelJS.CellRichTextValue).richText.map((r) => r.text).join("");
+    }
+    if ("result" in value) {
+      const result = (value as ExcelJS.CellFormulaValue).result;
+      return result !== undefined ? cellToString(result as ExcelJS.CellValue) : "";
+    }
+    if ("error" in value) return "";
+    if ("hyperlink" in value) return String((value as ExcelJS.CellHyperlinkValue).text ?? "");
+  }
+  return String(value);
+}
 
 export class XlsxProcessor implements DocumentProcessor {
   readonly id = "xlsx";
@@ -16,19 +35,35 @@ export class XlsxProcessor implements DocumentProcessor {
   }
 
   async extract(input: ProcessorInput) {
-    const workbook = read(Buffer.from(input.bytes), { type: "buffer" });
+    const workbook = new ExcelJS.Workbook();
+    const arrayBuffer = input.bytes.buffer.slice(
+      input.bytes.byteOffset,
+      input.bytes.byteOffset + input.bytes.byteLength
+    ) as ArrayBuffer;
+    await workbook.xlsx.load(arrayBuffer);
+
     const sections: ReturnType<typeof makeSection>[] = [];
     const warnings: ReturnType<typeof warning>[] = [];
     let order = 0;
 
-    const sheetNames = workbook.SheetNames.slice(0, KNOWLEDGE_ENGINE_CONFIG.spreadsheet.maxSheets);
-    if (workbook.SheetNames.length > sheetNames.length) {
-      warnings.push(warning("XLSX_SHEET_LIMIT", `Only first ${sheetNames.length} sheets were processed.`));
+    const allSheets = workbook.worksheets;
+    const sheets = allSheets.slice(0, KNOWLEDGE_ENGINE_CONFIG.spreadsheet.maxSheets);
+    if (allSheets.length > sheets.length) {
+      warnings.push(warning("XLSX_SHEET_LIMIT", `Only first ${sheets.length} sheets were processed.`));
     }
 
-    for (const sheetName of sheetNames) {
-      const worksheet = workbook.Sheets[sheetName];
-      const rows = utils.sheet_to_json<(string | number | boolean | null)[]>(worksheet, { header: 1, raw: false });
+    for (const worksheet of sheets) {
+      const sheetName = worksheet.name;
+      const rows: (string | null)[][] = [];
+
+      worksheet.eachRow({ includeEmpty: false }, (row) => {
+        const cells = (row.values as ExcelJS.CellValue[]).slice(1).map((cell) => {
+          const str = cellToString(cell);
+          return str === "" ? null : str;
+        });
+        rows.push(cells);
+      });
+
       const limitedRows = rows.slice(0, KNOWLEDGE_ENGINE_CONFIG.spreadsheet.maxRowsPerSheet);
 
       if (rows.length > limitedRows.length) {
@@ -64,7 +99,7 @@ export class XlsxProcessor implements DocumentProcessor {
       pages: [{ pageNumber: 1, text: fullText, sections }],
       sections,
       warnings,
-      metadata: { sheetCount: sheetNames.length },
+      metadata: { sheetCount: sheets.length },
     };
   }
 }
