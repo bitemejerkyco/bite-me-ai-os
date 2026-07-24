@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
@@ -197,6 +197,7 @@ function Step2Form({ defaultValues, onNext, onBack }: Step2Props) {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<Step2Data>({
     resolver: zodResolver(step2Schema),
@@ -218,24 +219,33 @@ function Step2Form({ defaultValues, onNext, onBack }: Step2Props) {
             <label htmlFor="primaryColor" className={labelClass}>
               Primary color <span className="text-red-400">*</span>
             </label>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="primaryColorPicker"
-                type="color"
-                className="h-9 w-12 cursor-pointer rounded border border-[#2a2a2a] bg-[#1a1a1a]"
-                aria-label="Primary color picker"
-                {...register("primaryColor")}
-              />
-              <input
-                id="primaryColor"
-                type="text"
-                placeholder="#e53e3e"
-                className={`${inputClass} mt-0 flex-1`}
-                aria-invalid={!!errors.primaryColor}
-                aria-describedby={errors.primaryColor ? "primaryColor-error" : undefined}
-                {...register("primaryColor")}
-              />
-            </div>
+            <Controller
+              name="primaryColor"
+              control={control}
+              render={({ field }) => (
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    id="primaryColorPicker"
+                    type="color"
+                    className="h-9 w-12 cursor-pointer rounded border border-[#2a2a2a] bg-[#1a1a1a]"
+                    aria-label="Primary color picker"
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                  />
+                  <input
+                    id="primaryColor"
+                    type="text"
+                    placeholder="#e53e3e"
+                    className={`${inputClass} mt-0 flex-1`}
+                    aria-invalid={!!errors.primaryColor}
+                    aria-describedby={errors.primaryColor ? "primaryColor-error" : undefined}
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    onBlur={field.onBlur}
+                  />
+                </div>
+              )}
+            />
             {errors.primaryColor && (
               <p id="primaryColor-error" className={errorClass} role="alert">
                 {errors.primaryColor.message}
@@ -247,24 +257,33 @@ function Step2Form({ defaultValues, onNext, onBack }: Step2Props) {
             <label htmlFor="secondaryColor" className={labelClass}>
               Secondary color <span className="text-red-400">*</span>
             </label>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="secondaryColorPicker"
-                type="color"
-                className="h-9 w-12 cursor-pointer rounded border border-[#2a2a2a] bg-[#1a1a1a]"
-                aria-label="Secondary color picker"
-                {...register("secondaryColor")}
-              />
-              <input
-                id="secondaryColor"
-                type="text"
-                placeholder="#1a1a1a"
-                className={`${inputClass} mt-0 flex-1`}
-                aria-invalid={!!errors.secondaryColor}
-                aria-describedby={errors.secondaryColor ? "secondaryColor-error" : undefined}
-                {...register("secondaryColor")}
-              />
-            </div>
+            <Controller
+              name="secondaryColor"
+              control={control}
+              render={({ field }) => (
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    id="secondaryColorPicker"
+                    type="color"
+                    className="h-9 w-12 cursor-pointer rounded border border-[#2a2a2a] bg-[#1a1a1a]"
+                    aria-label="Secondary color picker"
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                  />
+                  <input
+                    id="secondaryColor"
+                    type="text"
+                    placeholder="#1a1a1a"
+                    className={`${inputClass} mt-0 flex-1`}
+                    aria-invalid={!!errors.secondaryColor}
+                    aria-describedby={errors.secondaryColor ? "secondaryColor-error" : undefined}
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    onBlur={field.onBlur}
+                  />
+                </div>
+              )}
+            />
             {errors.secondaryColor && (
               <p id="secondaryColor-error" className={errorClass} role="alert">
                 {errors.secondaryColor.message}
@@ -438,7 +457,7 @@ function ReviewStep({ data, onBack, onFinish }: Step3Props) {
         </div>
 
         <p className="text-xs text-zinc-600">
-          Persistence will be implemented in a future sprint. Your data will be saved when you click Finish.
+          This setup is a preview. Saving brand data will be implemented in a future sprint.
         </p>
       </div>
 

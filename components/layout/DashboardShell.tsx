@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 
@@ -16,6 +16,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const handleMobileClose = useCallback(() => setMobileOpen(false), []);
+  const handleMobileOpen = useCallback(() => setMobileOpen(true), []);
 
   // ⌘K / Ctrl+K shortcut
   useEffect(() => {
@@ -33,8 +36,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
     <div className="flex h-screen overflow-hidden bg-[#0d0d0d]">
       <Sidebar
         mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-        onMobileOpen={() => setMobileOpen(true)}
+        onMobileClose={handleMobileClose}
+        onMobileOpen={handleMobileOpen}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
       />
@@ -46,7 +49,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         }`}
       >
         <TopBar
-          onMenuClick={() => setMobileOpen(true)}
+          onMenuClick={handleMobileOpen}
           onSearchOpen={() => setSearchOpen(true)}
         />
 
