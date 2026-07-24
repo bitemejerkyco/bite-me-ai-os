@@ -1,4 +1,9 @@
-export type ConnectorConnectionStatus = "CONNECTED" | "DISCONNECTED" | "ERROR";
+export type ConnectorConnectionStatus =
+  | "CONNECTED"
+  | "CONNECTING"
+  | "DISCONNECTED"
+  | "EXPIRED"
+  | "ERROR";
 export type ConnectorSyncStatus = "RUNNING" | "COMPLETED" | "PARTIAL_SUCCESS" | "FAILED";
 
 export interface ConnectorProviderRecord {
