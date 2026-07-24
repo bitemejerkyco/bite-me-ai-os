@@ -3,7 +3,7 @@ import StatCard from "../components/StatCard";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen bg-gray-900 text-white">
+    <div className="flex min-h-screen flex-col bg-gray-900 text-white md:flex-row">
       <Sidebar />
 
       <div className="flex-1">
