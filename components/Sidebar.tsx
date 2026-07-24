@@ -1,38 +1,44 @@
+import Link from "next/link";
+
 export default function Sidebar() {
   return (
-    <aside className="w-64 bg-gray-800 text-white min-h-screen p-6">
+    <aside className="w-full bg-gray-800 text-white p-6 md:min-h-screen md:w-64">
       <h2 className="text-2xl font-bold text-red-500 mb-8">
         Bite Me AI OS
       </h2>
 
-      <nav className="space-y-4">
-        <button className="block w-full text-left hover:text-red-400">
+      <nav className="grid grid-cols-2 gap-3 md:block md:space-y-4">
+        <Link href="/" className="block w-full text-left hover:text-red-400">
           📊 Dashboard
-        </button>
+        </Link>
 
-        <button className="block w-full text-left hover:text-red-400">
+        <span className="block w-full text-left text-zinc-400">
           📢 Marketing
-        </button>
+        </span>
 
-        <button className="block w-full text-left hover:text-red-400">
+        <span className="block w-full text-left text-zinc-400">
           👥 CRM
-        </button>
+        </span>
 
-        <button className="block w-full text-left hover:text-red-400">
+        <span className="block w-full text-left text-zinc-400">
           📦 Inventory
-        </button>
+        </span>
 
-        <button className="block w-full text-left hover:text-red-400">
+        <span className="block w-full text-left text-zinc-400">
           🤖 AI Studio
-        </button>
+        </span>
 
-        <button className="block w-full text-left hover:text-red-400">
+        <Link href="/analytics" className="block w-full text-left hover:text-red-400">
           📈 Analytics
-        </button>
+        </Link>
 
-        <button className="block w-full text-left hover:text-red-400">
+        <Link href="/analytics/amazon-ads" className="block w-full text-left hover:text-red-400">
+          🛒 Amazon Ads Insights
+        </Link>
+
+        <span className="block w-full text-left text-zinc-400">
           ⚙️ Settings
-        </button>
+        </span>
       </nav>
     </aside>
   );
