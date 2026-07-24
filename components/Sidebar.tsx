@@ -28,9 +28,9 @@ export default function Sidebar() {
           🛒 Amazon Ads Insights
         </Link>
 
-        <span className="block w-full text-left text-zinc-400">
-          ⚙️ Settings
-        </span>
+        <Link href="/settings/integrations/amazon-ads" className="block w-full text-left hover:text-red-400">
+          ⚙️ Amazon Ads Integration
+        </Link>
       </nav>
     </aside>
   );
