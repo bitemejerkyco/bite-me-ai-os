@@ -215,65 +215,201 @@ describe("Amazon Ads live connection service", () => {
     }
   });
 
-  it("rejects in-memory token storage in production mode", () => {
+  it("reports remote revocation success when Amazon revoke succeeds", async () => {
+    const previous = process.env.AMAZON_ADS_LIVE_READ_ENABLED;
+    process.env.AMAZON_ADS_LIVE_READ_ENABLED = "true";
+    try {
+      const sharedTokenStore = createAmazonAdsTokenStoreForTests();
+      const { service } = buildService({ tokenStore: sharedTokenStore });
+      const start = await service.beginAuthorization(actor);
+      const state = new URL(start.authorizeUrl).searchParams.get("state")!;
+      await service.completeAuthorization({ actor, state, code: "disconnect-success-code" });
+      const view = await service.getConnectionView(actor);
+      const result = await service.disconnect({
+        actor,
+        connectionId: view.connectionId!,
+        confirmed: true,
+      });
+      expect(result.localCredentialsDeleted).toBe(true);
+      expect(result.remoteRevocationAttempted).toBe(true);
+      expect(result.remoteRevocationSucceeded).toBe(true);
+      expect(result.connectionStatus).toBe("disconnected");
+    } finally {
+      process.env.AMAZON_ADS_LIVE_READ_ENABLED = previous;
+    }
+  });
+
+  it("reports local-only deletion when no token exists", async () => {
+    const previous = process.env.AMAZON_ADS_LIVE_READ_ENABLED;
+    process.env.AMAZON_ADS_LIVE_READ_ENABLED = "true";
+    try {
+      const { service } = buildService();
+      const start = await service.beginAuthorization(actor);
+      const state = new URL(start.authorizeUrl).searchParams.get("state")!;
+      await service.completeAuthorization({ actor, state, code: "disconnect-local-only-code" });
+      const view = await service.getConnectionView(actor);
+      await service.disconnect({ actor, connectionId: view.connectionId!, confirmed: true });
+      const result = await service.disconnect({ actor, connectionId: view.connectionId!, confirmed: true });
+      expect(result.localCredentialsDeleted).toBe(true);
+      expect(result.remoteRevocationAttempted).toBe(false);
+      expect(result.remoteRevocationSucceeded).toBe(false);
+      expect(result.connectionStatus).toBe("disconnected");
+    } finally {
+      process.env.AMAZON_ADS_LIVE_READ_ENABLED = previous;
+    }
+  });
+
+  it("rejects in-memory token storage in production mode", async () => {
     const previousEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
     try {
-      expect(
-        () =>
-          new AmazonAdsLiveConnectionService({
-            config,
-            oauthClient: {
-              buildAuthorizeUrl: () => "https://example.com",
-              exchangeAuthorizationCode: async () => ({
-                accessToken: "token",
-                refreshToken: "refresh",
-                expiresInSeconds: 1,
-              }),
-              discoverProfiles: async () => [],
-              refreshAccessToken: async () => ({ accessToken: "token", expiresInSeconds: 1 }),
-              revokeRefreshToken: async () => undefined,
-            } as never,
-            stateStore: createAmazonAdsOAuthStateStoreForTests(),
-            tokenStore: createAmazonAdsTokenStoreForTests(),
+      const service = new AmazonAdsLiveConnectionService({
+        config,
+        oauthClient: {
+          buildAuthorizeUrl: () => "https://example.com",
+          exchangeAuthorizationCode: async () => ({
+            accessToken: "token",
+            refreshToken: "refresh",
+            expiresInSeconds: 1,
           }),
-      ).toThrow("SECURITY_POLICY_VIOLATION");
+          discoverProfiles: async () => [],
+          refreshAccessToken: async () => ({ accessToken: "token", expiresInSeconds: 1 }),
+          revokeRefreshToken: async () => undefined,
+        } as never,
+        stateStore: createAmazonAdsOAuthStateStoreForTests(),
+        tokenStore: createAmazonAdsTokenStoreForTests(),
+      });
+      expect(() => service.getConnectAvailability()).not.toThrow();
+      expect(service.getConnectAvailability().enabled).toBe(false);
+      await expect(service.beginAuthorization(actor)).rejects.toThrow(
+        "SECURITY_POLICY_VIOLATION:Production token storage prerequisite is not met.",
+      );
     } finally {
       process.env.NODE_ENV = previousEnv;
     }
   });
 
-  it("rejects in-memory OAuth state storage in production mode", () => {
+  it("rejects file-backed token storage in production mode", async () => {
     const previousEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
     try {
-      const persistentTokenStore = {
-        kind: "persistent" as const,
+      const fileTokenStore = {
+        kind: "file" as const,
         get: async () => null,
         save: async () => {
           throw new Error("not expected");
         },
         delete: async () => undefined,
       };
-      expect(
-        () =>
-          new AmazonAdsLiveConnectionService({
-            config,
-            oauthClient: {
-              buildAuthorizeUrl: () => "https://example.com",
-              exchangeAuthorizationCode: async () => ({
-                accessToken: "token",
-                refreshToken: "refresh",
-                expiresInSeconds: 1,
-              }),
-              discoverProfiles: async () => [],
-              refreshAccessToken: async () => ({ accessToken: "token", expiresInSeconds: 1 }),
-              revokeRefreshToken: async () => undefined,
-            } as never,
-            stateStore: createAmazonAdsOAuthStateStoreForTests(),
-            tokenStore: persistentTokenStore,
+      const externalStateStore = {
+        kind: "external" as const,
+        create: async () => {
+          throw new Error("not expected");
+        },
+        consume: async () => {
+          throw new Error("not expected");
+        },
+      };
+      const service = new AmazonAdsLiveConnectionService({
+        config,
+        oauthClient: {
+          buildAuthorizeUrl: () => "https://example.com",
+          exchangeAuthorizationCode: async () => ({
+            accessToken: "token",
+            refreshToken: "refresh",
+            expiresInSeconds: 1,
           }),
-      ).toThrow("SECURITY_POLICY_VIOLATION:In-memory OAuth state storage is not allowed in production.");
+          discoverProfiles: async () => [],
+          refreshAccessToken: async () => ({ accessToken: "token", expiresInSeconds: 1 }),
+          revokeRefreshToken: async () => undefined,
+        } as never,
+        stateStore: externalStateStore,
+        tokenStore: fileTokenStore,
+      });
+      await expect(service.beginAuthorization(actor)).rejects.toThrow(
+        "SECURITY_POLICY_VIOLATION:Production token storage prerequisite is not met.",
+      );
+    } finally {
+      process.env.NODE_ENV = previousEnv;
+    }
+  });
+
+  it("rejects in-memory OAuth state storage in production mode", async () => {
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const externalTokenStore = {
+        kind: "external" as const,
+        get: async () => null,
+        save: async () => {
+          throw new Error("not expected");
+        },
+        delete: async () => undefined,
+      };
+      const service = new AmazonAdsLiveConnectionService({
+        config,
+        oauthClient: {
+          buildAuthorizeUrl: () => "https://example.com",
+          exchangeAuthorizationCode: async () => ({
+            accessToken: "token",
+            refreshToken: "refresh",
+            expiresInSeconds: 1,
+          }),
+          discoverProfiles: async () => [],
+          refreshAccessToken: async () => ({ accessToken: "token", expiresInSeconds: 1 }),
+          revokeRefreshToken: async () => undefined,
+        } as never,
+        stateStore: createAmazonAdsOAuthStateStoreForTests(),
+        tokenStore: externalTokenStore,
+      });
+      await expect(service.beginAuthorization(actor)).rejects.toThrow(
+        "SECURITY_POLICY_VIOLATION:Production OAuth state storage prerequisite is not met.",
+      );
+    } finally {
+      process.env.NODE_ENV = previousEnv;
+    }
+  });
+
+  it("rejects file-backed OAuth state storage in production mode", async () => {
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const fileStateStore = {
+        kind: "file" as const,
+        create: async () => {
+          throw new Error("not expected");
+        },
+        consume: async () => {
+          throw new Error("not expected");
+        },
+      };
+      const externalTokenStore = {
+        kind: "external" as const,
+        get: async () => null,
+        save: async () => {
+          throw new Error("not expected");
+        },
+        delete: async () => undefined,
+      };
+      const service = new AmazonAdsLiveConnectionService({
+        config,
+        oauthClient: {
+          buildAuthorizeUrl: () => "https://example.com",
+          exchangeAuthorizationCode: async () => ({
+            accessToken: "token",
+            refreshToken: "refresh",
+            expiresInSeconds: 1,
+          }),
+          discoverProfiles: async () => [],
+          refreshAccessToken: async () => ({ accessToken: "token", expiresInSeconds: 1 }),
+          revokeRefreshToken: async () => undefined,
+        } as never,
+        stateStore: fileStateStore,
+        tokenStore: externalTokenStore,
+      });
+      await expect(service.beginAuthorization(actor)).rejects.toThrow(
+        "SECURITY_POLICY_VIOLATION:Production OAuth state storage prerequisite is not met.",
+      );
     } finally {
       process.env.NODE_ENV = previousEnv;
     }

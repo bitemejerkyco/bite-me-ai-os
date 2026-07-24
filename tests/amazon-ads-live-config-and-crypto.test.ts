@@ -37,6 +37,10 @@ describe("Amazon Ads live config and crypto guards", () => {
     expect(encrypted.startsWith("v1.")).toBe(true);
     const decrypted = decryptRefreshToken(encrypted, key);
     expect(decrypted).toBe("refresh-token-value");
+    const unversioned = encrypted.split(".").slice(1).join(".");
+    expect(() => decryptRefreshToken(unversioned, key)).toThrow(
+      "TOKEN_INVALID:Encrypted token payload must include a version prefix.",
+    );
 
     const redacted = redactSecrets(
       "access_token=abc123 refresh_token=xyz789 client_secret=secret authorization_code=code",

@@ -36,11 +36,11 @@ export function encryptRefreshToken(plaintext: string, encryptionKey: string): s
 
 export function decryptRefreshToken(payload: string, encryptionKey: string): string {
   const parts = payload.split(".");
-  const legacy = parts.length === 3;
-  const [version, ivPart, authTagPart, encryptedPart] = legacy
-    ? [ENCRYPTION_FORMAT_VERSION, parts[0], parts[1], parts[2]]
-    : parts;
-  if (!legacy && version !== ENCRYPTION_FORMAT_VERSION) {
+  if (parts.length !== 4) {
+    throw new Error("TOKEN_INVALID:Encrypted token payload must include a version prefix.");
+  }
+  const [version, ivPart, authTagPart, encryptedPart] = parts;
+  if (version !== ENCRYPTION_FORMAT_VERSION) {
     throw new Error(`TOKEN_INVALID:Unsupported encrypted token format version (${version || "unknown"}).`);
   }
   if (!ivPart || !authTagPart || !encryptedPart) {

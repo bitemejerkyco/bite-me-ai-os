@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import {
   assertCsrfToken,
   assertTrustedPostRequest,
+  getAuthenticatedActorResolver,
   resolveAuthenticatedSession,
 } from "@/app/api/integrations/amazon-ads/_lib";
 
@@ -39,13 +40,27 @@ describe("Amazon Ads live auth and request security guards", () => {
     withEnv(
       {
         NODE_ENV: "production",
-        BITEME_AUTH_SESSION_SIGNING_KEY: "test-session-signing-key",
       },
       () => {
         const request = new NextRequest("https://example.com/api/integrations/amazon-ads/status");
-        expect(() => resolveAuthenticatedSession(request)).toThrow("AUTH_REQUIRED");
+        expect(() => resolveAuthenticatedSession(request)).toThrow("AUTH_SETUP_REQUIRED");
       },
     );
+  });
+
+  it("uses the expected resolver mode by environment", () => {
+    withEnv({ NODE_ENV: "production" }, () => {
+      expect(getAuthenticatedActorResolver().mode).toBe("unconfigured");
+      expect(getAuthenticatedActorResolver().productionReady).toBe(false);
+    });
+    withEnv({ NODE_ENV: "development" }, () => {
+      expect(getAuthenticatedActorResolver().mode).toBe("development-session");
+      expect(getAuthenticatedActorResolver().productionReady).toBe(false);
+    });
+    withEnv({ NODE_ENV: "test" }, () => {
+      expect(getAuthenticatedActorResolver().mode).toBe("test");
+      expect(getAuthenticatedActorResolver().productionReady).toBe(false);
+    });
   });
 
   it("allows test actor injection only in test mode", () => {
@@ -82,6 +97,21 @@ describe("Amazon Ads live auth and request security guards", () => {
         expect(session.actor.workspaceId).toBe("ws_dev");
         expect(session.actor.userId).toBe("user_dev");
         expect(session.setCookieValue).toBeTruthy();
+      },
+    );
+  });
+
+  it("rejects development resolver when actor variables are not configured", () => {
+    withEnv(
+      {
+        NODE_ENV: "development",
+        BITEME_AUTH_SESSION_SIGNING_KEY: "test-session-signing-key",
+        AMAZON_ADS_DEV_WORKSPACE_ID: undefined,
+        AMAZON_ADS_DEV_USER_ID: undefined,
+      },
+      () => {
+        const request = new NextRequest("http://localhost:3000/api/integrations/amazon-ads/status");
+        expect(() => resolveAuthenticatedSession(request)).toThrow("AUTH_SETUP_REQUIRED");
       },
     );
   });

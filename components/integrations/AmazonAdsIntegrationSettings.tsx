@@ -94,7 +94,7 @@ export default function AmazonAdsIntegrationSettings({
   const selectedProfile: AmazonAdsAdvertiserProfile | null =
     view?.profiles.find((row) => row.profileId === selectedProfileId) || null;
 
-  const canConnect = Boolean(view?.featureEnabled) && !busy;
+  const canConnect = Boolean(view?.featureEnabled) && Boolean(view?.connectEnabled ?? true) && !busy;
   const canSelectProfile =
     view?.status === "connected" && Boolean(view.connectionId) && Boolean(selectedProfileId) && Boolean(selectedMarketplaceId);
   const canDisconnect = view?.status === "connected" && Boolean(view.connectionId) && !busy;
@@ -197,9 +197,11 @@ export default function AmazonAdsIntegrationSettings({
                 {labelMap[view.status]}
               </span>
               <p className="text-sm text-zinc-300">
-                {view.featureEnabled
-                  ? "Live read-only access can be connected for advertiser profile discovery."
-                  : "Live read-only mode is currently disabled by AMAZON_ADS_LIVE_READ_ENABLED=false."}
+                {!view.featureEnabled
+                  ? "Live read-only mode is currently disabled by AMAZON_ADS_LIVE_READ_ENABLED=false."
+                  : view.connectEnabled === false
+                    ? "Authentication setup required."
+                    : "Live read-only access can be connected for advertiser profile discovery."}
               </p>
               {view.expiresAt ? (
                 <p className="text-xs text-zinc-400">

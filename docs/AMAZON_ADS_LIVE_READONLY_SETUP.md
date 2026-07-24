@@ -22,10 +22,8 @@ Set all values server-side (never in client bundles):
 - `AMAZON_ADS_REDIRECT_URI`
 - `AMAZON_ADS_LIVE_READ_ENABLED=false` (default disabled)
 - `AMAZON_ADS_TOKEN_ENCRYPTION_KEY`
-- `BITEME_AUTH_SESSION_SIGNING_KEY`
 
 `AMAZON_ADS_TOKEN_ENCRYPTION_KEY` must resolve to exactly 32 bytes (base64 or raw 32-byte value).
-`BITEME_AUTH_SESSION_SIGNING_KEY` is required to validate authenticated session cookies.
 
 ## Redirect URI configuration
 
@@ -53,13 +51,14 @@ If disabled or misconfigured, connection fails closed.
 ## Security controls in this phase
 
 - OAuth authorization-code flow is server-side only.
-- Authenticated actor/workspace are derived from server-side session cookie, not browser query/body parameters.
+- Authenticated actor/workspace are derived from a server-side resolver, never from browser query/body parameters.
 - OAuth `state` is random, single-use, short-lived, and actor-bound.
 - Callback rejects missing, expired, reused, or mismatched state.
 - Callback rejects malformed/oversized code or state inputs and unexpected scopes.
 - POST mutation routes enforce Origin/Host/content-type checks and CSRF token verification.
 - Refresh tokens are stored encrypted at rest using AES-256-GCM with random IVs and auth tags.
-- Production rejects in-memory OAuth state and token stores.
+- Encrypted token payloads require explicit format versioning (`v1`); unknown/unversioned payloads are rejected.
+- Production rejects in-memory **and file-backed** OAuth state/token stores.
 - Token values and client secrets are redacted from error surfaces.
 - Read-only operation allowlist is centralized.
 - Mutation operations are not exposed.
@@ -78,12 +77,38 @@ Current phase does **not** support:
 - Campaign changes (bid, budget, keyword, targeting, status, product ad)
 - Generic API proxying
 
-## Production notes
+## Development demonstration setup (non-production only)
 
-- If authenticated session data is unavailable, production requests fail closed.
-- In non-production only, a development actor fallback can be provided with:
-  - `AMAZON_ADS_DEV_WORKSPACE_ID`
-  - `AMAZON_ADS_DEV_USER_ID`
+Development-only local demo auth can be enabled with:
+
+- `BITEME_AUTH_SESSION_SIGNING_KEY`
+- `AMAZON_ADS_DEV_WORKSPACE_ID`
+- `AMAZON_ADS_DEV_USER_ID`
+
+This local signed-session resolver is **development-only** and is rejected for production use.
+
+## Production prerequisites (must be completed before enabling live mode)
+
+1. **Real authenticated session provider**
+   - Wire an `AuthenticatedActorResolver` implementation that resolves actor/workspace from your trusted login/session issuer.
+   - The built-in development signed-session resolver is not production-capable.
+2. **Shared atomic OAuth state store**
+   - Implement a production `AmazonAdsStateStore` adapter backed by a shared datastore (for example Redis or database) with atomic create/consume semantics.
+   - In-memory and local file state stores are development/test only.
+3. **Durable encrypted token store**
+   - Implement a production `AmazonAdsTokenStore` adapter backed by durable storage (for example database) with encryption key management through managed KMS/HSM.
+   - In-memory and local file token stores are development/test only.
+4. **Complete Amazon configuration**
+   - All required Amazon OAuth configuration values must be set and valid.
+
+If any prerequisite is missing, production stays fail-closed and live connect remains unavailable.
+
+## Remaining Phase 2 work
+
+- Production auth resolver integration with the platform identity/session system.
+- Production state store adapter (shared atomic store).
+- Production token store adapter (durable datastore + managed key lifecycle).
+- Live performance report ingestion (still out of scope for this phase).
 
 ## Credential handling rules
 

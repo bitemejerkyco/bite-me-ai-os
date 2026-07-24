@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { connectorRepository, type ConnectorTelemetry } from "@/features/platform/connectors/runtime/runtime";
 import type { ConnectorConnectionRecord, ConnectorCredentialReferenceRecord } from "@/features/platform/connectors/domain/models";
-import { getAmazonAdsLiveFeatureEnabled, loadAmazonAdsLiveConfig } from "@/features/marketing/providers/amazon-ads/live/config";
+import {
+  getAmazonAdsLiveFeatureEnabled,
+  getMissingAmazonAdsConfigKeys,
+  loadAmazonAdsLiveConfig,
+} from "@/features/marketing/providers/amazon-ads/live/config";
 import { AmazonAdsOAuthClient } from "@/features/marketing/providers/amazon-ads/live/oauth-client";
 import {
   decryptRefreshToken,
@@ -128,13 +132,43 @@ export class AmazonAdsLiveConnectionService {
     this.tokenStore = deps.tokenStore ?? getAmazonAdsTokenStore();
     this.now = deps.now ?? (() => new Date());
     this.telemetry = deps.telemetry;
+  }
 
-    if (process.env.NODE_ENV === "production" && this.tokenStore.kind === "memory") {
-      throw new Error("SECURITY_POLICY_VIOLATION:In-memory Amazon Ads token storage is not allowed in production.");
+  getConnectAvailability(): { enabled: boolean; message: string | null } {
+    if (!this.config.liveReadEnabled) {
+      return {
+        enabled: false,
+        message: "Live read-only mode is disabled by AMAZON_ADS_LIVE_READ_ENABLED=false.",
+      };
     }
-    if (process.env.NODE_ENV === "production" && this.stateStore.kind === "memory") {
-      throw new Error("SECURITY_POLICY_VIOLATION:In-memory OAuth state storage is not allowed in production.");
+
+    const missing = getMissingAmazonAdsConfigKeys({
+      AMAZON_ADS_CLIENT_ID: this.config.clientId,
+      AMAZON_ADS_CLIENT_SECRET: this.config.clientSecret,
+      AMAZON_ADS_REDIRECT_URI: this.config.redirectUri,
+      AMAZON_ADS_LIVE_READ_ENABLED: "true",
+      AMAZON_ADS_TOKEN_ENCRYPTION_KEY: this.config.tokenEncryptionKey,
+    });
+    if (missing.length > 0) {
+      return {
+        enabled: false,
+        message: `Missing required Amazon Ads configuration: ${missing.join(", ")}`,
+      };
     }
+
+    if (process.env.NODE_ENV === "production" && this.tokenStore.kind !== "external") {
+      return {
+        enabled: false,
+        message: "Production token storage prerequisite is not met.",
+      };
+    }
+    if (process.env.NODE_ENV === "production" && this.stateStore.kind !== "external") {
+      return {
+        enabled: false,
+        message: "Production OAuth state storage prerequisite is not met.",
+      };
+    }
+    return { enabled: true, message: null };
   }
 
   async beginAuthorization(actor: AmazonAdsIntegrationActor): Promise<OAuthResult> {
@@ -227,6 +261,9 @@ export class AmazonAdsLiveConnectionService {
     assertActor(actor);
     const connection = await findLiveConnection(actor);
     const featureEnabled = getAmazonAdsLiveFeatureEnabled();
+    const availability = this.getConnectAvailability();
+    const connectEnabled = availability.enabled;
+    const disconnectedMessage = availability.message || "Connect Amazon Ads to discover advertiser profiles.";
     if (!connection) {
       return {
         connectionId: null,
@@ -238,9 +275,8 @@ export class AmazonAdsLiveConnectionService {
         selectedProfileId: null,
         selectedMarketplaceId: null,
         expiresAt: null,
-        message: featureEnabled
-          ? "Connect Amazon Ads to discover advertiser profiles."
-          : "Live read-only mode is disabled by configuration.",
+        message: disconnectedMessage,
+        connectEnabled,
       };
     }
     const metadata = connection.metadata || {};
@@ -257,6 +293,7 @@ export class AmazonAdsLiveConnectionService {
         typeof metadata.selectedMarketplaceId === "string" ? metadata.selectedMarketplaceId : null,
       expiresAt: typeof metadata.expiresAt === "string" ? metadata.expiresAt : null,
       message: typeof metadata.lastError === "string" ? metadata.lastError : null,
+      connectEnabled,
     };
   }
 
@@ -408,16 +445,17 @@ export class AmazonAdsLiveConnectionService {
   }
 
   private assertLiveConnectionEnabled(): void {
-    if (!this.config.liveReadEnabled) {
-      throw new Error("FEATURE_DISABLED:Amazon Ads live read-only mode is disabled.");
-    }
-    const missing: string[] = [];
-    if (!this.config.clientId.trim()) missing.push("AMAZON_ADS_CLIENT_ID");
-    if (!this.config.clientSecret.trim()) missing.push("AMAZON_ADS_CLIENT_SECRET");
-    if (!this.config.redirectUri.trim()) missing.push("AMAZON_ADS_REDIRECT_URI");
-    if (!this.config.tokenEncryptionKey.trim()) missing.push("AMAZON_ADS_TOKEN_ENCRYPTION_KEY");
-    if (missing.length > 0) {
-      throw new Error(`CONFIG_MISSING:Missing required Amazon Ads configuration: ${missing.join(", ")}`);
+    const availability = this.getConnectAvailability();
+    if (!availability.enabled) {
+      if (!this.config.liveReadEnabled) {
+        throw new Error("FEATURE_DISABLED:Amazon Ads live read-only mode is disabled.");
+      }
+      if (availability.message?.startsWith("Missing required Amazon Ads configuration:")) {
+        throw new Error(`CONFIG_MISSING:${availability.message}`);
+      }
+      throw new Error(
+        `SECURITY_POLICY_VIOLATION:${availability.message || "Live connection prerequisites are not met."}`,
+      );
     }
   }
 

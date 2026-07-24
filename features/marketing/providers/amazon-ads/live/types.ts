@@ -29,6 +29,7 @@ export type AmazonAdsConnectionView = {
   selectedMarketplaceId: string | null;
   expiresAt: string | null;
   message: string | null;
+  connectEnabled?: boolean;
   csrfToken?: string;
 };
 
@@ -43,7 +44,7 @@ export type AmazonAdsStatePayload = {
 };
 
 export type AmazonAdsStateStore = {
-  kind: "memory" | "persistent";
+  kind: "memory" | "file" | "external";
   create(input: {
     actor: AmazonAdsIntegrationActor;
     connectionId: string;
@@ -68,7 +69,7 @@ export type AmazonAdsTokenRecord = {
 };
 
 export type AmazonAdsTokenStore = {
-  kind: "memory" | "persistent";
+  kind: "memory" | "file" | "external";
   get(workspaceId: string, connectionId: string): Promise<AmazonAdsTokenRecord | null>;
   save(record: AmazonAdsTokenRecord): Promise<AmazonAdsTokenRecord>;
   delete(workspaceId: string, connectionId: string): Promise<void>;

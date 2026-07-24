@@ -26,7 +26,7 @@ type TokenStoreFileSchema = {
 };
 
 class FileAmazonAdsTokenStore implements AmazonAdsTokenStore {
-  readonly kind = "persistent" as const;
+  readonly kind = "file" as const;
 
   constructor(private readonly filePath: string) {}
 

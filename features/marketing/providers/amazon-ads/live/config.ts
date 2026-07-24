@@ -1,6 +1,7 @@
 import type { AmazonAdsLiveConfig } from "@/features/marketing/providers/amazon-ads/live/types";
 
 type EnvValue = string | undefined;
+type AmazonAdsEnvSource = Record<string, string | undefined>;
 
 type AmazonAdsEnv = {
   AMAZON_ADS_CLIENT_ID: EnvValue;
@@ -27,7 +28,7 @@ function parseEnabledFlag(value: EnvValue): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
-export function readAmazonAdsEnv(source: NodeJS.ProcessEnv = process.env): AmazonAdsEnv {
+export function readAmazonAdsEnv(source: AmazonAdsEnvSource = process.env): AmazonAdsEnv {
   return {
     AMAZON_ADS_CLIENT_ID: source.AMAZON_ADS_CLIENT_ID,
     AMAZON_ADS_CLIENT_SECRET: source.AMAZON_ADS_CLIENT_SECRET,
@@ -37,16 +38,16 @@ export function readAmazonAdsEnv(source: NodeJS.ProcessEnv = process.env): Amazo
   };
 }
 
-export function getAmazonAdsLiveFeatureEnabled(source: NodeJS.ProcessEnv = process.env): boolean {
+export function getAmazonAdsLiveFeatureEnabled(source: AmazonAdsEnvSource = process.env): boolean {
   return parseEnabledFlag(source.AMAZON_ADS_LIVE_READ_ENABLED);
 }
 
-export function getMissingAmazonAdsConfigKeys(source: NodeJS.ProcessEnv = process.env): string[] {
+export function getMissingAmazonAdsConfigKeys(source: AmazonAdsEnvSource = process.env): string[] {
   const env = readAmazonAdsEnv(source);
   return AMAZON_ADS_REQUIRED_ENV_KEYS.filter((key) => !sanitize(env[key]));
 }
 
-export function loadAmazonAdsLiveConfig(source: NodeJS.ProcessEnv = process.env): AmazonAdsLiveConfig {
+export function loadAmazonAdsLiveConfig(source: AmazonAdsEnvSource = process.env): AmazonAdsLiveConfig {
   const env = readAmazonAdsEnv(source);
   const config: AmazonAdsLiveConfig = {
     clientId: sanitize(env.AMAZON_ADS_CLIENT_ID),
@@ -58,7 +59,7 @@ export function loadAmazonAdsLiveConfig(source: NodeJS.ProcessEnv = process.env)
   return config;
 }
 
-export function assertAmazonAdsLiveConnectionEnabled(source: NodeJS.ProcessEnv = process.env): AmazonAdsLiveConfig {
+export function assertAmazonAdsLiveConnectionEnabled(source: AmazonAdsEnvSource = process.env): AmazonAdsLiveConfig {
   const config = loadAmazonAdsLiveConfig(source);
   if (!config.liveReadEnabled) {
     throw new Error("FEATURE_DISABLED:Amazon Ads live read-only mode is disabled.");

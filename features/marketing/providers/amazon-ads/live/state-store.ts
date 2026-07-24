@@ -91,7 +91,7 @@ class InMemoryAmazonAdsOAuthStateStore implements AmazonAdsStateStore {
 }
 
 class FileAmazonAdsOAuthStateStore implements AmazonAdsStateStore {
-  readonly kind = "persistent" as const;
+  readonly kind = "file" as const;
   private queue: Promise<void> = Promise.resolve();
 
   constructor(private readonly filePath: string) {}

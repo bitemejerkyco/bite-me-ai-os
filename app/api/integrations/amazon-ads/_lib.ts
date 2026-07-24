@@ -24,6 +24,20 @@ export type ResolvedAuthSession = {
   setCookieValue?: string;
 };
 
+export type AuthenticatedActorResolverResult = {
+  session: ResolvedAuthSession | null;
+  reason: string | null;
+};
+
+export type AuthenticatedActorResolver = {
+  id: string;
+  mode: "test" | "development-session" | "external" | "unconfigured";
+  productionReady: boolean;
+  resolve(request: NextRequest): AuthenticatedActorResolverResult;
+};
+
+let runtimeResolver: AuthenticatedActorResolver | null = null;
+
 function normalizeEnvValue(value: string | undefined | null): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -32,14 +46,6 @@ function assertSafeActor(actor: AmazonAdsIntegrationActor): void {
   if (!SAFE_ID.test(actor.workspaceId) || !SAFE_ID.test(actor.userId)) {
     throw new Error("AUTH_INVALID:workspaceId and userId must be safe identifiers.");
   }
-}
-
-function getSessionSigningKey(): string {
-  const key = normalizeEnvValue(process.env.BITEME_AUTH_SESSION_SIGNING_KEY);
-  if (!key) {
-    throw new Error("AUTH_CONFIG_MISSING:BITEME_AUTH_SESSION_SIGNING_KEY is required.");
-  }
-  return key;
 }
 
 function signPayload(payloadBase64Url: string, key: string): string {
@@ -78,19 +84,7 @@ function decodeSessionCookie(value: string, key: string): AuthSessionPayload {
   return payload;
 }
 
-function getDevActor(): AmazonAdsIntegrationActor {
-  const actor = {
-    workspaceId: normalizeEnvValue(process.env.AMAZON_ADS_DEV_WORKSPACE_ID) || "workspace-sandbox-01",
-    userId: normalizeEnvValue(process.env.AMAZON_ADS_DEV_USER_ID) || "user-demo",
-  };
-  assertSafeActor(actor);
-  return actor;
-}
-
 function parseTestActor(request: NextRequest): ResolvedAuthSession {
-  if (process.env.NODE_ENV !== "test") {
-    throw new Error("AUTH_REQUIRED:Test actor headers are allowed only in tests.");
-  }
   const raw = request.headers.get(TEST_ACTOR_HEADER);
   if (!raw) {
     throw new Error("AUTH_REQUIRED:Missing test actor header.");
@@ -108,38 +102,118 @@ function parseTestActor(request: NextRequest): ResolvedAuthSession {
   return { actor, csrfToken };
 }
 
-export function resolveAuthenticatedSession(request: NextRequest): ResolvedAuthSession {
-  if (process.env.NODE_ENV === "test" && request.headers.has(TEST_ACTOR_HEADER)) {
-    return parseTestActor(request);
-  }
-
-  const sessionKey = getSessionSigningKey();
-  const cookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (cookie) {
-    const payload = decodeSessionCookie(cookie, sessionKey);
+function createDefaultResolver(): AuthenticatedActorResolver {
+  if (process.env.NODE_ENV === "test") {
     return {
-      actor: { workspaceId: payload.workspaceId, userId: payload.userId },
-      csrfToken: payload.csrfToken,
+      id: "test-header-resolver",
+      mode: "test",
+      productionReady: false,
+      resolve(request) {
+        if (!request.headers.has(TEST_ACTOR_HEADER)) {
+          return {
+            session: null,
+            reason: "AUTH_REQUIRED:Test actor headers are required in test mode.",
+          };
+        }
+        return {
+          session: parseTestActor(request),
+          reason: null,
+        };
+      },
     };
   }
 
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("AUTH_REQUIRED:Authenticated server-side session is required.");
+  if (process.env.NODE_ENV === "development") {
+    return {
+      id: "development-signed-session-resolver",
+      mode: "development-session",
+      productionReady: false,
+      resolve(request) {
+        const signingKey = normalizeEnvValue(process.env.BITEME_AUTH_SESSION_SIGNING_KEY);
+        if (!signingKey) {
+          return {
+            session: null,
+            reason: "AUTH_SETUP_REQUIRED:Authentication setup required.",
+          };
+        }
+
+        const cookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+        if (cookie) {
+          const payload = decodeSessionCookie(cookie, signingKey);
+          return {
+            session: {
+              actor: { workspaceId: payload.workspaceId, userId: payload.userId },
+              csrfToken: payload.csrfToken,
+            },
+            reason: null,
+          };
+        }
+
+        const workspaceId = normalizeEnvValue(process.env.AMAZON_ADS_DEV_WORKSPACE_ID);
+        const userId = normalizeEnvValue(process.env.AMAZON_ADS_DEV_USER_ID);
+        if (!workspaceId || !userId) {
+          return {
+            session: null,
+            reason: "AUTH_SETUP_REQUIRED:Authentication setup required.",
+          };
+        }
+        const actor = { workspaceId, userId };
+        assertSafeActor(actor);
+        const csrfToken = randomBytes(24).toString("base64url");
+        const payload: AuthSessionPayload = {
+          workspaceId: actor.workspaceId,
+          userId: actor.userId,
+          csrfToken,
+          expiresAt: new Date(Date.now() + AUTH_SESSION_TTL_SECONDS * 1000).toISOString(),
+        };
+        return {
+          session: {
+            actor,
+            csrfToken,
+            setCookieValue: encodeSessionCookie(payload, signingKey),
+          },
+          reason: null,
+        };
+      },
+    };
   }
 
-  const actor = getDevActor();
-  const csrfToken = randomBytes(24).toString("base64url");
-  const payload: AuthSessionPayload = {
-    workspaceId: actor.workspaceId,
-    userId: actor.userId,
-    csrfToken,
-    expiresAt: new Date(Date.now() + AUTH_SESSION_TTL_SECONDS * 1000).toISOString(),
-  };
   return {
-    actor,
-    csrfToken,
-    setCookieValue: encodeSessionCookie(payload, sessionKey),
+    id: "production-unconfigured-auth-resolver",
+    mode: "unconfigured",
+    productionReady: false,
+    resolve() {
+      return {
+        session: null,
+        reason: "AUTH_SETUP_REQUIRED:Authentication setup required.",
+      };
+    },
   };
+}
+
+export function getAuthenticatedActorResolver(): AuthenticatedActorResolver {
+  return runtimeResolver ?? createDefaultResolver();
+}
+
+export function setAuthenticatedActorResolverForRuntime(resolver: AuthenticatedActorResolver | null): void {
+  runtimeResolver = resolver;
+}
+
+export function resolveAuthenticationSessionOrNull(request: NextRequest): AuthenticatedActorResolverResult {
+  const resolver = getAuthenticatedActorResolver();
+  try {
+    return resolver.resolve(request);
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export function resolveAuthenticatedSession(request: NextRequest): ResolvedAuthSession {
+  const resolved = resolveAuthenticationSessionOrNull(request);
+  if (!resolved.session) {
+    throw new Error(resolved.reason || "AUTH_REQUIRED:Authenticated server-side session is required.");
+  }
+  return resolved.session;
 }
 
 export function attachSessionCookie(response: NextResponse, session: ResolvedAuthSession): void {
