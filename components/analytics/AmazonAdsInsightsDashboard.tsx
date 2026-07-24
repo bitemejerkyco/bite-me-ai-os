@@ -16,6 +16,14 @@ import {
   buildTrendPoints,
   computeOverviewMetrics,
 } from "@/features/marketing/providers/amazon-ads/insights/view-model";
+import {
+  filterAmazonAdsRecommendations,
+  generateAmazonAdsRecommendations,
+} from "@/features/marketing/providers/amazon-ads/recommendations/engine";
+import type {
+  AmazonAdsRecommendationFilters,
+  RecommendationPriority,
+} from "@/features/marketing/providers/amazon-ads/recommendations/types";
 
 type AmazonAdsInsightsDashboardProps = {
   model: AmazonAdsDashboardViewModel;
@@ -28,8 +36,30 @@ const currency = (value: number) =>
 
 const percent = (value: number) => `${value.toFixed(2)}%`;
 
+const priorityClassMap: Record<RecommendationPriority, string> = {
+  critical: "border-red-500/70 bg-red-500/10 text-red-200",
+  high: "border-orange-500/70 bg-orange-500/10 text-orange-200",
+  medium: "border-amber-500/70 bg-amber-500/10 text-amber-200",
+  low: "border-zinc-500/70 bg-zinc-500/10 text-zinc-200",
+};
+
+const priorityLabel = (priority: RecommendationPriority) =>
+  priority.charAt(0).toUpperCase() + priority.slice(1);
+
+const recommendationTypeLabel = (type: string) =>
+  type
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsDashboardProps) {
   const [filters, setFilters] = useState<AmazonAdsInsightsFilter>(model.filters.defaults);
+  const [recommendationFilters, setRecommendationFilters] = useState<AmazonAdsRecommendationFilters>({
+    priority: "ALL",
+    type: "ALL",
+    campaignId: "ALL",
+    marketplaceId: "ALL",
+  });
 
   const filtered = useMemo(() => {
     const records = applyDashboardFilters(model.sourceRecords, filters);
@@ -42,6 +72,16 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
       searchTerms: buildSearchTermRows(records),
     };
   }, [filters, model]);
+
+  const recommendationModel = useMemo(
+    () => generateAmazonAdsRecommendations(applyDashboardFilters(model.sourceRecords, filters), model.generatedAt),
+    [filters, model.generatedAt, model.sourceRecords],
+  );
+
+  const filteredRecommendations = useMemo(
+    () => filterAmazonAdsRecommendations(recommendationModel.recommendations, recommendationFilters),
+    [recommendationFilters, recommendationModel.recommendations],
+  );
 
   const filterHint =
     "Filters are applied against sandbox-only source records in this read-only dashboard.";
@@ -209,6 +249,184 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
           ])}
           emptyMessage="No search term rows for selected filters."
         />
+
+        <section className="rounded-2xl border border-red-500/25 bg-black/55 p-4 md:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-zinc-100">Recommendations</h2>
+              <p className="mt-1 text-sm text-zinc-300">
+                Deterministic, explainable guidance from sandbox performance data.
+              </p>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">
+              Read Only — No changes applied
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            {(["critical", "high", "medium", "low"] as RecommendationPriority[]).map((priority) => (
+              <div key={priority} className={`rounded-xl border p-3 ${priorityClassMap[priority]}`}>
+                <p className="text-xs uppercase tracking-wide">{priorityLabel(priority)}</p>
+                <p className="mt-1 text-2xl font-semibold">{recommendationModel.summary[priority]}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 md:grid-cols-4">
+            <label className="text-sm text-zinc-300">
+              Priority
+              <select
+                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                value={recommendationFilters.priority}
+                onChange={(event) =>
+                  setRecommendationFilters((prev) => ({
+                    ...prev,
+                    priority: event.target.value as AmazonAdsRecommendationFilters["priority"],
+                  }))
+                }
+              >
+                <option value="ALL">All</option>
+                {recommendationModel.filterOptions.priorities.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priorityLabel(priority)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-sm text-zinc-300">
+              Type
+              <select
+                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                value={recommendationFilters.type}
+                onChange={(event) =>
+                  setRecommendationFilters((prev) => ({
+                    ...prev,
+                    type: event.target.value as AmazonAdsRecommendationFilters["type"],
+                  }))
+                }
+              >
+                <option value="ALL">All</option>
+                {recommendationModel.filterOptions.types.map((type) => (
+                  <option key={type} value={type}>
+                    {recommendationTypeLabel(type)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-sm text-zinc-300">
+              Campaign
+              <select
+                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                value={recommendationFilters.campaignId}
+                onChange={(event) =>
+                  setRecommendationFilters((prev) => ({
+                    ...prev,
+                    campaignId: event.target.value,
+                  }))
+                }
+              >
+                <option value="ALL">All</option>
+                {recommendationModel.filterOptions.campaigns.map((campaign) => (
+                  <option key={campaign.campaignId} value={campaign.campaignId}>
+                    {campaign.campaignName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-sm text-zinc-300">
+              Marketplace
+              <select
+                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                value={recommendationFilters.marketplaceId}
+                onChange={(event) =>
+                  setRecommendationFilters((prev) => ({
+                    ...prev,
+                    marketplaceId: event.target.value,
+                  }))
+                }
+              >
+                <option value="ALL">All</option>
+                {recommendationModel.filterOptions.marketplaces.map((marketplace) => (
+                  <option key={marketplace} value={marketplace}>
+                    {marketplace}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {filteredRecommendations.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-sm text-zinc-300">
+              No recommendations for the selected filter combination.
+            </p>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              {filteredRecommendations.map((recommendation) => (
+                <article
+                  key={recommendation.id}
+                  className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4"
+                  aria-label={`${recommendationTypeLabel(recommendation.type)} recommendation`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-base font-semibold text-zinc-100">
+                        {recommendationTypeLabel(recommendation.type)}
+                      </h3>
+                      <p className="mt-1 text-sm text-zinc-300">{recommendation.explanation}</p>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${priorityClassMap[recommendation.priority]}`}
+                    >
+                      {priorityLabel(recommendation.priority)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-3 text-sm text-zinc-300 md:grid-cols-2 xl:grid-cols-4">
+                    <p>
+                      <span className="text-zinc-400">Campaign:</span>{" "}
+                      {recommendation.reference.campaignName}
+                    </p>
+                    <p>
+                      <span className="text-zinc-400">Marketplace:</span>{" "}
+                      {recommendation.marketplaceId}
+                    </p>
+                    <p>
+                      <span className="text-zinc-400">Confidence:</span>{" "}
+                      {Math.round(recommendation.confidenceScore * 100)}%
+                    </p>
+                    <p>
+                      <span className="text-zinc-400">Impact:</span>{" "}
+                      {recommendation.estimatedImpactRange.label} ({recommendation.estimatedImpactRange.low}–
+                      {recommendation.estimatedImpactRange.high} {recommendation.estimatedImpactRange.unit})
+                    </p>
+                  </div>
+
+                  <p className="mt-2 text-sm text-amber-200">
+                    Suggested action: {recommendation.suggestedAction}
+                  </p>
+
+                  <details className="mt-3 rounded-lg border border-zinc-800 bg-black/45 p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-zinc-200">
+                      View evidence
+                    </summary>
+                    <p className="mt-2 text-sm text-zinc-300">{recommendation.calculationEvidence}</p>
+                    <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-zinc-300 md:grid-cols-2">
+                      {Object.entries(recommendation.supportingMetrics).map(([key, value]) => (
+                        <li key={`${recommendation.id}-${key}`}>
+                          <span className="text-zinc-400">{recommendationTypeLabel(key)}:</span> {String(value)}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-xs text-zinc-400">{recommendation.status}</p>
+                  </details>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );
