@@ -10,7 +10,6 @@ import {
 } from "@/features/marketing/providers/amazon-ads/live/token-crypto";
 import {
   getAmazonAdsOAuthStateStore,
-  type AmazonAdsOAuthStateStore,
 } from "@/features/marketing/providers/amazon-ads/live/state-store";
 import {
   getAmazonAdsTokenStore,
@@ -19,15 +18,17 @@ import {
 import type {
   AmazonAdsAdvertiserProfile,
   AmazonAdsConnectionView,
+  AmazonAdsDisconnectResult,
   AmazonAdsIntegrationActor,
   AmazonAdsLiveConfig,
+  AmazonAdsStateStore,
   AmazonAdsTokenStore,
 } from "@/features/marketing/providers/amazon-ads/live/types";
 
 type Dependencies = {
   config?: AmazonAdsLiveConfig;
   oauthClient?: AmazonAdsOAuthClient;
-  stateStore?: AmazonAdsOAuthStateStore;
+  stateStore?: AmazonAdsStateStore;
   tokenStore?: AmazonAdsTokenStore;
   telemetry?: ConnectorTelemetry;
   now?: () => Date;
@@ -109,7 +110,7 @@ function assertActor(actor: AmazonAdsIntegrationActor): void {
 export class AmazonAdsLiveConnectionService {
   private readonly config: AmazonAdsLiveConfig;
   private readonly oauthClient: AmazonAdsOAuthClient;
-  private readonly stateStore: AmazonAdsOAuthStateStore;
+  private readonly stateStore: AmazonAdsStateStore;
   private readonly tokenStore: AmazonAdsTokenStore;
   private readonly now: () => Date;
   private readonly telemetry?: ConnectorTelemetry;
@@ -131,6 +132,9 @@ export class AmazonAdsLiveConnectionService {
     if (process.env.NODE_ENV === "production" && this.tokenStore.kind === "memory") {
       throw new Error("SECURITY_POLICY_VIOLATION:In-memory Amazon Ads token storage is not allowed in production.");
     }
+    if (process.env.NODE_ENV === "production" && this.stateStore.kind === "memory") {
+      throw new Error("SECURITY_POLICY_VIOLATION:In-memory OAuth state storage is not allowed in production.");
+    }
   }
 
   async beginAuthorization(actor: AmazonAdsIntegrationActor): Promise<OAuthResult> {
@@ -138,7 +142,7 @@ export class AmazonAdsLiveConnectionService {
     this.assertLiveConnectionEnabled();
     await this.ensureCredentialRecordReady(actor);
     const connection = await this.ensureConnection(actor);
-    const state = this.stateStore.create({
+    const state = await this.stateStore.create({
       actor,
       connectionId: connection.id,
     });
@@ -165,7 +169,7 @@ export class AmazonAdsLiveConnectionService {
   }): Promise<{ connectionId: string }> {
     assertActor(input.actor);
     this.assertLiveConnectionEnabled();
-    const consumedState = this.stateStore.consume({
+    const consumedState = await this.stateStore.consume({
       state: input.state,
       actor: input.actor,
     });
@@ -288,7 +292,7 @@ export class AmazonAdsLiveConnectionService {
     actor: AmazonAdsIntegrationActor;
     connectionId: string;
     confirmed: boolean;
-  }): Promise<void> {
+  }): Promise<AmazonAdsDisconnectResult> {
     assertActor(input.actor);
     if (!input.confirmed) {
       throw new Error("CONFIRMATION_REQUIRED:Disconnect must be explicitly confirmed.");
@@ -298,17 +302,55 @@ export class AmazonAdsLiveConnectionService {
       throw new Error("RESOURCE_NOT_FOUND:Amazon Ads live connection was not found.");
     }
     const token = await this.tokenStore.get(input.actor.workspaceId, input.connectionId);
+    let localCredentialsDeleted = false;
+    let remoteRevocationAttempted = false;
+    let remoteRevocationSucceeded = false;
+    let message: string | null = null;
     if (token) {
+      remoteRevocationAttempted = true;
       try {
         const refreshToken = decryptRefreshToken(token.encryptedRefreshToken, this.config.tokenEncryptionKey);
         await this.oauthClient.revokeRefreshToken(refreshToken);
+        remoteRevocationSucceeded = true;
       } catch (error) {
         this.telemetry?.failure?.(input.actor.workspaceId, PROVIDER_ID, "TOKEN_REVOKE_FAILED", "disconnect");
-        throw new Error(this.redactError(error));
+        remoteRevocationSucceeded = false;
+        message = `REMOTE_REVOCATION_FAILED:${this.redactError(error)}`;
       } finally {
         await this.tokenStore.delete(input.actor.workspaceId, input.connectionId);
+        localCredentialsDeleted = true;
       }
     }
+    if (!token) {
+      localCredentialsDeleted = true;
+    }
+
+    if (remoteRevocationAttempted && !remoteRevocationSucceeded) {
+      await connectorRepository.saveConnection({
+        ...connection,
+        status: "ERROR",
+        credentialReferenceId: null,
+        metadata: {
+          ...(connection.metadata || {}),
+          selectedProfileId: null,
+          selectedMarketplaceId: null,
+          profiles: [],
+          expiresAt: null,
+          disconnectedAt: nowIso(this.now),
+          lastError:
+            "Remote token revocation failed. Local credentials were removed and live access is disabled until reconnection.",
+        },
+      });
+      return {
+        localCredentialsDeleted,
+        remoteRevocationAttempted,
+        remoteRevocationSucceeded,
+        connectionStatus: "error",
+        message:
+          "Local credentials were removed. Amazon remote token revocation failed; reconnect to re-establish secure access.",
+      };
+    }
+
     await connectorRepository.saveConnection({
       ...connection,
       status: "DISCONNECTED",
@@ -322,6 +364,13 @@ export class AmazonAdsLiveConnectionService {
         disconnectedAt: nowIso(this.now),
       },
     });
+    return {
+      localCredentialsDeleted,
+      remoteRevocationAttempted,
+      remoteRevocationSucceeded,
+      connectionStatus: "disconnected",
+      message,
+    };
   }
 
   async refreshAccessToken(actor: AmazonAdsIntegrationActor, connectionId: string): Promise<{ expiresAt: string }> {

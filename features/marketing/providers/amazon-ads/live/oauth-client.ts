@@ -33,6 +33,7 @@ const AUTH_BASE = "https://www.amazon.com/ap/oa";
 const TOKEN_ENDPOINT = "https://api.amazon.com/auth/o2/token";
 const REVOKE_ENDPOINT = "https://api.amazon.com/auth/o2/token/revoke";
 const ADS_API_BASE = "https://advertising-api.amazon.com";
+const AMAZON_ADS_OAUTH_SCOPE = "advertising::campaign_management";
 
 function encodeForm(values: Record<string, string>): string {
   const body = new URLSearchParams();
@@ -55,7 +56,7 @@ export class AmazonAdsOAuthClient {
     assertAmazonAdsReadOnlyOperation("oauth_authorize");
     const url = new URL(AUTH_BASE);
     url.searchParams.set("client_id", this.input.clientId);
-    url.searchParams.set("scope", "advertising::campaign_management");
+    url.searchParams.set("scope", AMAZON_ADS_OAUTH_SCOPE);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("redirect_uri", this.input.redirectUri);
     url.searchParams.set("state", state);
@@ -159,3 +160,4 @@ export type {
   RefreshTokenResponse,
   ProfileResponseRow,
 };
+export { AMAZON_ADS_OAUTH_SCOPE };

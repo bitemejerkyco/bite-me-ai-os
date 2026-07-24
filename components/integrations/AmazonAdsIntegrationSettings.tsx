@@ -6,12 +6,9 @@ import type {
   AmazonAdsConnectionView,
 } from "@/features/marketing/providers/amazon-ads/live/types";
 
-const DEFAULT_WORKSPACE_ID = "workspace-sandbox-01";
-const DEFAULT_USER_ID = "user-demo";
-
 type StatusPayload = {
   ok: boolean;
-  data?: AmazonAdsConnectionView;
+  data?: AmazonAdsConnectionView | { message?: string };
   error?: string;
 };
 
@@ -65,24 +62,24 @@ export default function AmazonAdsIntegrationSettings({
   const [view, setView] = useState<AmazonAdsConnectionView | null>(initialView);
   const [error, setError] = useState<string | null>(initialError);
   const [busy, setBusy] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string>((initialView?.csrfToken || "").trim());
   const [selectedProfileId, setSelectedProfileId] = useState<string>(getInitialSelection(initialView).profileId);
   const [selectedMarketplaceId, setSelectedMarketplaceId] = useState<string>(getInitialSelection(initialView).marketplaceId);
-
-  const actorQuery = `workspaceId=${encodeURIComponent(DEFAULT_WORKSPACE_ID)}&userId=${encodeURIComponent(DEFAULT_USER_ID)}`;
 
   async function loadStatus() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`/api/integrations/amazon-ads/status?${actorQuery}`, {
+      const response = await fetch("/api/integrations/amazon-ads/status", {
         method: "GET",
         cache: "no-store",
       });
       const payload = await parseResponse(response);
-      if (!response.ok || !payload.data) {
+      if (!response.ok || !payload.data || !("status" in payload.data)) {
         throw new Error(payload.error || "Unable to load Amazon Ads integration status.");
       }
       setView(payload.data);
+      setCsrfToken((payload.data.csrfToken || "").trim());
       const selection = getInitialSelection(payload.data);
       setSelectedProfileId(selection.profileId);
       setSelectedMarketplaceId(selection.marketplaceId);
@@ -103,17 +100,21 @@ export default function AmazonAdsIntegrationSettings({
   const canDisconnect = view?.status === "connected" && Boolean(view.connectionId) && !busy;
 
   function handleConnect() {
-    window.location.href = `/api/integrations/amazon-ads/connect?${actorQuery}`;
+    window.location.href = "/api/integrations/amazon-ads/connect";
   }
 
   async function handleSaveSelection() {
     if (!view?.connectionId) return;
+    if (!csrfToken) {
+      setError("Session CSRF token is missing. Reload status and try again.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`/api/integrations/amazon-ads/select-profile?${actorQuery}`, {
+      const response = await fetch("/api/integrations/amazon-ads/select-profile", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify({
           connectionId: view.connectionId,
           profileId: selectedProfileId,
@@ -135,19 +136,28 @@ export default function AmazonAdsIntegrationSettings({
 
   async function handleDisconnect() {
     if (!view?.connectionId) return;
-    const confirmed = window.confirm("Disconnect Amazon Ads and revoke stored credentials?");
+    if (!csrfToken) {
+      setError("Session CSRF token is missing. Reload status and try again.");
+      return;
+    }
+    const confirmed = window.confirm(
+      "Disconnect Amazon Ads and remove local credentials? Remote Amazon token revocation will be attempted.",
+    );
     if (!confirmed) return;
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`/api/integrations/amazon-ads/disconnect?${actorQuery}`, {
+      const response = await fetch("/api/integrations/amazon-ads/disconnect", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify({ connectionId: view.connectionId, confirmed: true }),
       });
       const payload = await parseResponse(response);
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || "Unable to disconnect Amazon Ads.");
+      }
+      if (payload.data?.message) {
+        setError(payload.data.message);
       }
       await loadStatus();
     } catch (caughtError) {

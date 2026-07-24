@@ -29,6 +29,7 @@ export type AmazonAdsConnectionView = {
   selectedMarketplaceId: string | null;
   expiresAt: string | null;
   message: string | null;
+  csrfToken?: string;
 };
 
 export type AmazonAdsStatePayload = {
@@ -39,6 +40,21 @@ export type AmazonAdsStatePayload = {
   createdAt: string;
   expiresAt: string;
   consumedAt: string | null;
+};
+
+export type AmazonAdsStateStore = {
+  kind: "memory" | "persistent";
+  create(input: {
+    actor: AmazonAdsIntegrationActor;
+    connectionId: string;
+    now?: Date;
+    ttlMs?: number;
+  }): Promise<AmazonAdsStatePayload>;
+  consume(input: {
+    state: string;
+    actor: AmazonAdsIntegrationActor;
+    now?: Date;
+  }): Promise<AmazonAdsStatePayload>;
 };
 
 export type AmazonAdsTokenRecord = {
@@ -64,4 +80,12 @@ export type AmazonAdsLiveConfig = {
   redirectUri: string;
   tokenEncryptionKey: string;
   liveReadEnabled: boolean;
+};
+
+export type AmazonAdsDisconnectResult = {
+  localCredentialsDeleted: boolean;
+  remoteRevocationAttempted: boolean;
+  remoteRevocationSucceeded: boolean;
+  connectionStatus: "disconnected" | "error";
+  message: string | null;
 };
