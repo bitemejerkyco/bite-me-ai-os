@@ -31,7 +31,7 @@ export default function TrendMiniChart({ data }: TrendMiniChartProps) {
   return (
     <div className="rounded-xl border border-red-500/30 bg-zinc-900/80 p-4">
       <p className="mb-3 text-sm font-medium text-zinc-200">Spend vs Sales Trend</p>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full" role="img" aria-label="Spend vs Sales Trend">
         <path d={spendPath} fill="none" stroke="#f59e0b" strokeWidth="3" />
         <path d={salesPath} fill="none" stroke="#ef4444" strokeWidth="3" />
         {points.map((point) => (

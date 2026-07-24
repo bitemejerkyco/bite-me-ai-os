@@ -23,7 +23,7 @@ function enforceReadOnlySandbox(records: AmazonAdsInsightRecord[]): void {
   }
 
   for (const row of records) {
-    if (!row.providerId.includes("sandbox")) {
+    if (row.providerId !== "amazon-ads-sandbox") {
       throw new Error("Amazon Ads insights dashboard only supports sandbox data.");
     }
   }

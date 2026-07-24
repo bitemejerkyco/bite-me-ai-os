@@ -17,7 +17,7 @@ export default function DataTable({ title, columns, rows, emptyMessage }: DataTa
             <thead>
               <tr className="border-b border-zinc-700 text-xs uppercase tracking-wide text-zinc-400">
                 {columns.map((column) => (
-                  <th key={column} className="px-3 py-2 font-medium">
+                  <th key={column} scope="col" className="px-3 py-2 font-medium">
                     {column}
                   </th>
                 ))}

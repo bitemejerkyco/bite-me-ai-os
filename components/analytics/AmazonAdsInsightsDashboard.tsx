@@ -62,7 +62,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
           <p className="mt-2 text-sm text-zinc-300">
             Workspace-isolated analytics preview for campaign, keyword, and search-term performance.
           </p>
-          <p className="mt-1 text-xs text-zinc-400">Generated: {new Date(model.generatedAt).toLocaleString()}</p>
+          <p className="mt-1 text-xs text-zinc-400">Generated: {new Date(model.generatedAt).toISOString()}</p>
         </header>
 
         <section className="grid grid-cols-1 gap-3 rounded-2xl border border-red-500/25 bg-black/50 p-4 md:grid-cols-5">
