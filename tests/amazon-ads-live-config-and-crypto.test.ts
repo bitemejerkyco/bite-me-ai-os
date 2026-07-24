@@ -34,6 +34,7 @@ describe("Amazon Ads live config and crypto guards", () => {
   it("supports token encryption/decryption and redacts sensitive fields", () => {
     const key = Buffer.from("12345678901234567890123456789012", "utf8").toString("base64");
     const encrypted = encryptRefreshToken("refresh-token-value", key);
+    expect(encrypted.startsWith("v1.")).toBe(true);
     const decrypted = decryptRefreshToken(encrypted, key);
     expect(decrypted).toBe("refresh-token-value");
 

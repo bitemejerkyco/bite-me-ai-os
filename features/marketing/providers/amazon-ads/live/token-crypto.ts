@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const ALGORITHM = "aes-256-gcm";
+const ENCRYPTION_FORMAT_VERSION = "v1";
 
 function parseEncryptionKey(raw: string): Buffer {
   const trimmed = raw.trim();
@@ -30,11 +31,18 @@ export function encryptRefreshToken(plaintext: string, encryptionKey: string): s
   const cipher = createCipheriv(ALGORITHM, key, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
-  return [iv.toString("base64"), authTag.toString("base64"), encrypted.toString("base64")].join(".");
+  return [ENCRYPTION_FORMAT_VERSION, iv.toString("base64"), authTag.toString("base64"), encrypted.toString("base64")].join(".");
 }
 
 export function decryptRefreshToken(payload: string, encryptionKey: string): string {
-  const [ivPart, authTagPart, encryptedPart] = payload.split(".");
+  const parts = payload.split(".");
+  const legacy = parts.length === 3;
+  const [version, ivPart, authTagPart, encryptedPart] = legacy
+    ? [ENCRYPTION_FORMAT_VERSION, parts[0], parts[1], parts[2]]
+    : parts;
+  if (!legacy && version !== ENCRYPTION_FORMAT_VERSION) {
+    throw new Error(`TOKEN_INVALID:Unsupported encrypted token format version (${version || "unknown"}).`);
+  }
   if (!ivPart || !authTagPart || !encryptedPart) {
     throw new Error("TOKEN_INVALID:Encrypted token payload is malformed.");
   }
