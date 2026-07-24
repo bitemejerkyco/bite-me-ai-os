@@ -17,14 +17,6 @@ export default function Sidebar() {
         </span>
 
         <span className="block w-full text-left text-zinc-400">
-          👥 CRM
-        </span>
-
-        <span className="block w-full text-left text-zinc-400">
-          📦 Inventory
-        </span>
-
-        <span className="block w-full text-left text-zinc-400">
           🤖 AI Studio
         </span>
 
