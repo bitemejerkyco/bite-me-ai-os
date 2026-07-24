@@ -1,39 +1,5 @@
-export default function Sidebar() {
-  return (
-    <aside className="w-64 bg-gray-800 text-white min-h-screen p-6">
-      <h2 className="text-2xl font-bold text-red-500 mb-8">
-        Bite Me AI OS
-      </h2>
-
-      <nav className="space-y-4">
-        <button className="block w-full text-left hover:text-red-400">
-          📊 Dashboard
-        </button>
-
-        <button className="block w-full text-left hover:text-red-400">
-          📢 Marketing
-        </button>
-
-        <button className="block w-full text-left hover:text-red-400">
-          👥 CRM
-        </button>
-
-        <button className="block w-full text-left hover:text-red-400">
-          📦 Inventory
-        </button>
-
-        <button className="block w-full text-left hover:text-red-400">
-          🤖 AI Studio
-        </button>
-
-        <button className="block w-full text-left hover:text-red-400">
-          📈 Analytics
-        </button>
-
-        <button className="block w-full text-left hover:text-red-400">
-          ⚙️ Settings
-        </button>
-      </nav>
-    </aside>
-  );
-}
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+const navigation=[["Campaign Studio","CS","/"],["Campaigns","CA","/campaigns"],["Brand Brain","BB","/brand-brain"],["Asset Library","AL","/assets"],["AI Employees","AI","/agents"]];
+export default function Sidebar(){const pathname=usePathname();return <aside className="hidden min-h-screen w-72 shrink-0 border-r border-white/10 bg-[#07080a] p-5 text-white lg:flex lg:flex-col"><div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-xl bg-red-600 text-sm font-black shadow-lg shadow-red-950/50">LA</div><div><p className="text-lg font-bold tracking-tight">LaunchAI</p><p className="text-xs text-zinc-500">Marketing operating system</p></div></div></div><nav className="mt-8 space-y-1.5">{navigation.map(([label,icon,href])=>{const active=href==='/'?pathname==='/':pathname.startsWith(href);return <Link key={label} href={href} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${active?'bg-white text-black shadow-lg shadow-black/20':'text-zinc-400 hover:bg-white/[0.05] hover:text-white'}`}><span className={`grid size-8 place-items-center rounded-lg text-[10px] font-bold ${active?'bg-black text-white':'bg-white/[0.05] text-zinc-400'}`}>{icon}</span><span className="font-medium">{label}</span></Link>})}</nav><div className="mt-auto rounded-2xl border border-red-500/20 bg-red-500/[0.06] p-4"><div className="flex items-center justify-between"><p className="text-sm font-semibold">LaunchAI v0.4</p><span className="size-2 rounded-full bg-emerald-400"/></div><p className="mt-2 text-xs leading-5 text-zinc-500">AI Team, Campaign History, and Asset Library foundations are active.</p></div></aside>}

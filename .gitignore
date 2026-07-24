@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# knowledge engine local file storage
+.knowledge-storage/
+
+# optional Prisma generated output path if configured locally
+app/generated/

@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PostMotive AI
 
-## Getting Started
+Every Post Has a Motive.
 
-First, run the development server:
+PostMotive AI is a production-oriented marketing operations platform foundation built on Next.js App Router, TypeScript, Tailwind, Prisma, and Supabase SSR auth patterns.
+
+## Current Implementation Status
+- Implemented: Mission Control dashboard shell and responsive navigation
+- Implemented: setup-safe auth and environment posture checks
+- Implemented: foundational Prisma schema for users, workspaces, memberships, and brands
+- Implemented: Knowledge Engine Sprint 3A foundation for uploaded-file ingestion, chunking, citation generation, lexical search, and Knowledge Hub inspection
+- Planned: Brand Brain intelligence workflows
+- Planned: background queues, cloud storage, OCR, vector retrieval, hybrid retrieval, and external knowledge-source synchronization
+- Planned: AI Employees, Content Studio, Campaign execution, publishing, analytics, and billing depth
+
+## Local Setup
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy environment placeholders:
+
+```bash
+cp .env.example .env.local
+```
+
+3. Start development:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment Setup
+Set values in .env.local as needed:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- DATABASE_URL
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- OPENAI_API_KEY
+- ANTHROPIC_API_KEY
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The app builds without Supabase and database values, but it runs in setup mode for auth and persistence workflows.
 
-## Learn More
+## Database Commands
+```bash
+npm run db:generate
+npm run db:migrate
+npm run db:push
+npm run db:studio
+```
 
-To learn more about Next.js, take a look at the following resources:
+Sprint 3A migration target:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run db:migrate -- --name 20260721_knowledge_engine_foundation
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Knowledge Engine migration status checks require a reachable PostgreSQL database. Local private file storage does not.
 
-## Deploy on Vercel
+## Validation Commands
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npx prisma format
+npx prisma validate
+npx prisma generate
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Product and Architecture Docs
+- PRD: POSTMOTIVE_MASTER_PRD.md
+- Build Plan: MASTER_BUILD_PLAN.md
+- Architecture: ARCHITECTURE.md
+- Decisions: DECISIONS.md
+- Brand Brain spec: docs/brand-brain-specification.md
+- Knowledge Engine spec: docs/knowledge-engine.md
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Knowledge Engine Summary
+- Supported file types: txt, md, csv, pdf, docx, pptx, xlsx, png, jpg, jpeg, webp
+- Local private development storage root: `.knowledge-storage`
+- Default upload limit: 20 MB
+- Default extraction limit: 300000 characters
+- Spreadsheet safety limits: 20 sheets, 2000 rows per sheet, 60 cells per row
+- PDF safety limit: 300 pages
+
+Local private storage is for development only and is not suitable for distributed production deployments.
+
+## Security Reporting
+Security contact and vulnerability disclosure policy placeholder:
+security@postmotive.example

@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum BrandStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum KnowledgeSourceType {
+  UPLOAD
+  WEBSITE
+  GOOGLE_DRIVE
+  DROPBOX
+  ONEDRIVE
+  NOTION
+  CONFLUENCE
+  GITHUB
+  RSS
+  API
+  MANUAL
+}
+
+enum KnowledgeSyncStatus {
+  IDLE
+  QUEUED
+  SYNCING
+  READY
+  FAILED
+}
+
+enum KnowledgeDocumentStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  ARCHIVED
+}
+
+enum KnowledgeJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum KnowledgeJobStage {
+  UPLOAD
+  VALIDATE
+  EXTRACT
+  NORMALIZE
+  CHUNK
+  INDEX
+  COMPLETE
+  FAILED
+}
+
+enum KnowledgeEmbeddingStatus {
+  NOT_STARTED
+  PENDING
+  READY
+  FAILED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       WorkspaceMember[]
+  uploadedDocuments KnowledgeDocument[] @relation("KnowledgeDocumentUploadedBy")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members              WorkspaceMember[]
+  brands               Brand[]
+  knowledgeSources     KnowledgeSource[]
+  knowledgeCollections KnowledgeCollection[]
+  knowledgeDocuments   KnowledgeDocument[]
+
+  @@index([slug])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+model Brand {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+  websiteUrl  String?
+  status      BrandStatus @default(DRAFT)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model KnowledgeSource {
+  id          String              @id @default(cuid())
+  workspaceId String
+  type        KnowledgeSourceType
+  provider    String
+  externalId  String?
+  displayName String
+  syncStatus  KnowledgeSyncStatus @default(IDLE)
+  lastSyncAt  DateTime?
+  metadata    Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  documents KnowledgeDocument[]
+
+  @@unique([workspaceId, provider, externalId])
+  @@index([workspaceId])
+  @@index([type])
+  @@index([provider])
+  @@index([externalId])
+}
+
+model KnowledgeCollection {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+  description String?
+  color       String?
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  documents KnowledgeDocument[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+model KnowledgeDocument {
+  id               String                  @id @default(cuid())
+  workspaceId      String
+  sourceId         String?
+  collectionId     String?
+  filename         String
+  originalFilename String
+  mimeType         String
+  checksum         String
+  sizeBytes        Int
+  language         String?
+  title            String?
+  author           String?
+  company          String?
+  status           KnowledgeDocumentStatus @default(QUEUED)
+  storageKey       String?
+  uploadedById     String?
+  uploadedAt       DateTime                @default(now())
+  processedAt      DateTime?
+  failureReason    String?
+  metadata         Json?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  workspace  Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source     KnowledgeSource?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  collection KnowledgeCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  uploadedBy User?                @relation("KnowledgeDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  chunks     KnowledgeChunk[]
+  jobs       KnowledgeJob[]
+
+  @@index([checksum])
+  @@index([workspaceId])
+  @@index([sourceId])
+  @@index([collectionId])
+  @@index([status])
+}
+
+model KnowledgeChunk {
+  id              String                   @id @default(cuid())
+  documentId      String
+  chunkIndex      Int
+  stableKey       String                   @unique
+  text            String
+  tokenCount      Int
+  heading         String?
+  pageNumber      Int?
+  confidence      Float
+  metadata        Json?
+  embeddingStatus KnowledgeEmbeddingStatus @default(NOT_STARTED)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  document  KnowledgeDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  citations KnowledgeCitation[]
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
+  @@index([embeddingStatus])
+}
+
+model KnowledgeCitation {
+  id          String   @id @default(cuid())
+  chunkId     String
+  citationKey String   @unique
+  pageNumber  Int?
+  section     String?
+  sourceText  String
+  confidence  Float
+  createdAt   DateTime @default(now())
+
+  chunk KnowledgeChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([chunkId])
+}
+
+model KnowledgeJob {
+  id           String             @id @default(cuid())
+  documentId   String
+  status       KnowledgeJobStatus @default(QUEUED)
+  stage        KnowledgeJobStage  @default(UPLOAD)
+  progress     Int                @default(0)
+  attempt      Int                @default(1)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([status])
+  @@index([stage])
+}
