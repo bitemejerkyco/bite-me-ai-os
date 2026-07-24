@@ -1,5 +1,6 @@
 import Sidebar from "../components/Sidebar";
 import StatCard from "../components/StatCard";
+
 export default function Home() {
   return (
     <div className="flex min-h-screen bg-gray-900 text-white">
@@ -15,17 +16,15 @@ export default function Home() {
 
         <main className="max-w-7xl mx-auto p-8">
           <div className="bg-gray-800 rounded-xl p-8 shadow-lg">
-            <h2 className="text-3xl font-bold">
-              Welcome, Keith!
-            </h2>
+            <h2 className="text-3xl font-bold">Welcome, Keith!</h2>
 
             <p className="mt-4 text-gray-300">
               Congratulations! You just created your first reusable React component.
             </p>
 
-            <StatCard
-  title="Revenue Today"
-  value="$0.00"/>
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <StatCard title="Revenue Today" value="$0.00" />
+
               <div className="bg-gray-700 rounded-lg p-6">
                 <h3 className="text-sm text-gray-400">Wholesale Leads</h3>
                 <p className="text-3xl font-bold mt-2">0</p>
