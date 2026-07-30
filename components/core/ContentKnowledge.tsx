@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { loadCloudKnowledge } from "@/features/core/cloud-store";
 import type { ContentKnowledgeItem } from "@/features/core/local-os";
 
@@ -32,11 +33,19 @@ export default function ContentKnowledge() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-emerald-500/25 bg-emerald-500/5 p-5">
-        <h2 className="text-xl font-bold">Proven content knowledge</h2>
-        <p className="mt-2 text-sm text-slate-700">
-          High-performing posts and ads saved here provide verified continuity for future AI creation. Low-confidence results are excluded from automatic learning.
-        </p>
+      <section className="flex flex-col gap-4 rounded-3xl border border-emerald-500/25 bg-emerald-500/5 p-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Proven content knowledge</h2>
+          <p className="mt-2 text-sm text-slate-700">
+            High-performing posts and ads saved here automatically guide future AI creation. Low-confidence results are excluded.
+          </p>
+        </div>
+        <Link
+          href="/studio"
+          className="shrink-0 rounded-xl bg-violet-600 px-4 py-2.5 text-center font-semibold text-white hover:bg-violet-500"
+        >
+          Create using winners →
+        </Link>
       </section>
 
       {message ? <p className="rounded-xl border border-violet-200 bg-rose-50 p-3 text-rose-700">{message}</p> : null}

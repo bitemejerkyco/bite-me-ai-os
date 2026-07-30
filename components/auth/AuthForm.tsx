@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AuthForm() {
@@ -45,7 +46,20 @@ export default function AuthForm() {
 
   return (
     <div className="pm-glass relative z-10 w-full max-w-md rounded-[2rem] p-7 md:p-9">
-      <p className="pm-brand text-xs font-black uppercase tracking-[0.22em]">PostMotive</p>
+      <div className="flex items-center gap-3">
+        <Image
+          src="/postmotive-mark.png"
+          alt="PostMotive"
+          width={64}
+          height={64}
+          priority
+          className="h-16 w-16 rounded-[1.35rem] shadow-[0_14px_34px_rgba(104,87,245,0.2)]"
+        />
+        <div>
+          <p className="pm-brand text-xl font-black tracking-tight">PostMotive</p>
+          <p className="text-xs text-slate-500">AI marketing command center</p>
+        </div>
+      </div>
       <h1 className="mt-3 text-4xl font-black tracking-[-0.04em] text-slate-900">{mode === "SIGN_IN" ? "Welcome back" : "Create account"}</h1>
       <p className="mt-2 text-sm text-slate-500">Your marketing workspace is ready when you are.</p>
 

@@ -30,7 +30,7 @@ export default function MarketingWorkspace() {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const add = async () => {
+  const add = async (continueToStudio = true) => {
     if (!name.trim()) return;
     setWorking(true);
     setMessage("");
@@ -45,6 +45,14 @@ export default function MarketingWorkspace() {
       saveLocal(STORAGE_KEYS.campaigns, next);
       setName("");
       setMessage("Campaign saved securely.");
+      if (continueToStudio) {
+        const params = new URLSearchParams({
+          campaign: campaign.name,
+          objective: campaign.objective,
+          channel: campaign.channel,
+        });
+        window.location.assign(`/studio?${params.toString()}`);
+      }
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to save campaign.");
     } finally {
@@ -78,8 +86,11 @@ export default function MarketingWorkspace() {
             <label className="block text-sm text-slate-700">Start date<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" /></label>
             <label className="block text-sm text-slate-700">Budget<input type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" /></label>
           </div>
-          <button disabled={working} onClick={() => void add()} className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold hover:bg-violet-500 disabled:opacity-60">
-            {working ? "Saving…" : "Add campaign"}
+          <button disabled={working} onClick={() => void add()} className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold text-white hover:bg-violet-500 disabled:opacity-60">
+            {working ? "Saving…" : "Save & create campaign content →"}
+          </button>
+          <button disabled={working} onClick={() => void add(false)} className="w-full rounded-xl border border-slate-200 px-5 py-2.5 text-sm text-slate-600 hover:bg-violet-50 disabled:opacity-60">
+            Save plan only
           </button>
           {message ? <p className="text-sm text-slate-700">{message}</p> : null}
         </div>
@@ -91,7 +102,22 @@ export default function MarketingWorkspace() {
             {campaigns.map((campaign) => (
               <article key={campaign.id} className="grid gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 md:grid-cols-[1fr_auto] md:items-center">
                 <div><h3 className="font-semibold">{campaign.name}</h3><p className="mt-1 text-sm text-slate-500">{campaign.channel} · {campaign.objective} · Starts {campaign.startDate} · ${campaign.budget.toLocaleString()}</p></div>
-                <select value={campaign.status} onChange={(e) => void changeStatus(campaign.id, e.target.value as CampaignPlan["status"])} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="PLANNED">Planned</option><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option></select>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const params = new URLSearchParams({
+                        campaign: campaign.name,
+                        objective: campaign.objective,
+                        channel: campaign.channel,
+                      });
+                      window.location.assign(`/studio?${params.toString()}`);
+                    }}
+                    className="rounded-xl border border-violet-200 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50"
+                  >
+                    Create content
+                  </button>
+                  <select value={campaign.status} onChange={(e) => void changeStatus(campaign.id, e.target.value as CampaignPlan["status"])} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="PLANNED">Planned</option><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option></select>
+                </div>
               </article>
             ))}
           </div>

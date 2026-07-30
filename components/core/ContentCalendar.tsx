@@ -224,10 +224,22 @@ export default function ContentCalendar() {
       setMessage("Add a title and post content first.");
       return;
     }
+    if (
+      postNow &&
+      entryType === "POST" &&
+      channel === "TikTok" &&
+      !mediaStoragePath
+    ) {
+      setMessage("Select an AI Studio draft with a completed video first.");
+      return;
+    }
     const scheduledFor = postNow
       ? new Date().toISOString()
       : new Date(`${date}T${time}:00`).toISOString();
-    if (!postNow && new Date(scheduledFor).getTime() <= Date.now()) {
+    if (
+      !postNow &&
+      new Date(scheduledFor).getTime() <= new Date().getTime()
+    ) {
       setMessage("Choose a future date and time.");
       return;
     }
@@ -256,13 +268,22 @@ export default function ContentCalendar() {
       setContentDraftId(undefined);
       setVideoProjectId(undefined);
       setMediaStoragePath(undefined);
-      setMessage(
-        entryType === "AD"
-          ? "Ad submitted for approval. No spend was authorized."
-          : postNow
-            ? "Post queued for immediate publishing."
-            : "Post scheduled.",
-      );
+      if (
+        postNow &&
+        entryType === "POST" &&
+        channel === "TikTok" &&
+        post.mediaStoragePath
+      ) {
+        await sendToTikTok(post);
+      } else {
+        setMessage(
+          entryType === "AD"
+            ? "Ad submitted for approval. No spend was authorized."
+            : postNow
+              ? "Post queued for immediate publishing."
+              : "Post scheduled.",
+        );
+      }
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to schedule.");
     } finally {
@@ -350,13 +371,6 @@ export default function ContentCalendar() {
   };
 
   const sendToTikTok = async (post: ScheduledPost) => {
-    if (
-      !window.confirm(
-        "Send this video to the connected TikTok account as an editable draft?",
-      )
-    ) {
-      return;
-    }
     setWorking(true);
     setMessage("");
     try {
@@ -384,7 +398,7 @@ export default function ContentCalendar() {
       );
       setSelectedPost(updated);
       setMessage(
-        "TikTok is retrieving the video. Check status until it reaches the TikTok inbox.",
+        "Video sent to TikTok. PostMotive will update the delivery status automatically.",
       );
     } catch (caught) {
       setMessage(
@@ -445,6 +459,92 @@ export default function ContentCalendar() {
       setWorking(false);
     }
   };
+
+  const activeTikTokDeliveryIds = posts
+    .filter(
+      (post) =>
+        post.channel === "TikTok" &&
+        post.status === "PUBLISHING" &&
+        Boolean(post.providerJobId),
+    )
+    .map((post) => post.id)
+    .sort()
+    .join(",");
+
+  useEffect(() => {
+    if (!activeTikTokDeliveryIds) return;
+    const scheduledPostIds = activeTikTokDeliveryIds.split(",");
+    let disposed = false;
+    const poll = async () => {
+      await Promise.all(
+        scheduledPostIds.map(async (scheduledPostId) => {
+          try {
+            const response = await fetch(
+              "/api/integrations/tiktok/upload/status",
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ scheduledPostId }),
+              },
+            );
+            const payload = (await response.json()) as {
+              ok?: boolean;
+              data?: {
+                status?: ScheduledPost["status"];
+                failureReason?: string | null;
+              };
+            };
+            if (
+              disposed ||
+              !response.ok ||
+              !payload.ok ||
+              !payload.data?.status
+            ) {
+              return;
+            }
+            setPosts((current) =>
+              current.map((item) =>
+                item.id === scheduledPostId
+                  ? {
+                      ...item,
+                      status: payload.data!.status!,
+                      failureReason:
+                        payload.data!.failureReason || undefined,
+                    }
+                  : item,
+              ),
+            );
+            setSelectedPost((current) =>
+              current?.id === scheduledPostId
+                ? {
+                    ...current,
+                    status: payload.data!.status!,
+                    failureReason: payload.data!.failureReason || undefined,
+                  }
+                : current,
+            );
+            if (payload.data.status === "DELIVERED_TO_INBOX") {
+              setMessage(
+                "Delivered to TikTok. Open the TikTok inbox notification to edit and post.",
+              );
+            } else if (payload.data.status === "FAILED") {
+              setMessage(
+                `TikTok delivery failed: ${payload.data.failureReason || "Unknown error"}`,
+              );
+            }
+          } catch {
+            // Keep the item queued and try again on the next polling interval.
+          }
+        }),
+      );
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 6_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [activeTikTokDeliveryIds]);
 
   return (
     <div className="space-y-6">
@@ -556,7 +656,11 @@ export default function ContentCalendar() {
                 Schedule
               </button>
               <button disabled={working} onClick={() => void submit(true)} className="rounded-xl bg-violet-600 px-4 py-3 font-semibold hover:bg-violet-500 disabled:opacity-60">
-                Post now
+                {entryType === "POST" &&
+                channel === "TikTok" &&
+                mediaStoragePath
+                  ? "Send to TikTok"
+                  : "Post now"}
               </button>
             </div>
             {message ? <p className="text-sm text-slate-700">{message}</p> : null}
@@ -775,12 +879,12 @@ export default function ContentCalendar() {
                 <button onClick={() => setSelectedPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View details</button>
                 {post.channel === "TikTok" && Boolean(post.mediaStoragePath) && ["SCHEDULED", "FAILED"].includes(post.status) ? (
                   <button disabled={working} onClick={() => void sendToTikTok(post)} className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                    Send to TikTok
+                    Send now
                   </button>
                 ) : null}
                 {post.channel === "TikTok" && Boolean(post.providerJobId) && ["PUBLISHING", "DELIVERED_TO_INBOX"].includes(post.status) ? (
                   <button disabled={working} onClick={() => void refreshTikTokDelivery(post)} className="rounded-xl border border-cyan-500/40 px-3 py-2 text-sm text-cyan-700 disabled:opacity-50">
-                    Check TikTok status
+                    Refresh
                   </button>
                 ) : null}
                 {post.status === "PENDING_APPROVAL" ? <button onClick={() => void approve(post)} className="rounded-xl border border-emerald-500/40 px-3 py-2 text-sm text-emerald-700">Approve & schedule</button> : null}

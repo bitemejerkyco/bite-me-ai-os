@@ -46,7 +46,10 @@ export default function OnboardingWorkspace() {
     setProfile((previous) => ({ ...previous, [field]: value }));
   };
 
-  const save = async (nextProfile: WorkspaceProfile = profile) => {
+  const save = async (
+    nextProfile: WorkspaceProfile = profile,
+    continueToStudio = true,
+  ) => {
     setSaving(true);
     setError("");
     try {
@@ -58,6 +61,9 @@ export default function OnboardingWorkspace() {
       setProfile(cloud);
       saveLocal(STORAGE_KEYS.workspace, cloud);
       setSaved(true);
+      if (continueToStudio) {
+        window.location.assign("/studio");
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to save setup.");
     } finally {
@@ -107,8 +113,8 @@ export default function OnboardingWorkspace() {
           </label>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button disabled={saving} onClick={() => void save()} className="rounded-xl bg-violet-600 px-5 py-2.5 font-semibold hover:bg-violet-500 disabled:opacity-60">
-            {saving ? "Saving securely…" : saved ? "Saved ✓" : "Save business setup"}
+          <button disabled={saving} onClick={() => void save()} className="rounded-xl bg-violet-600 px-5 py-2.5 font-semibold text-white hover:bg-violet-500 disabled:opacity-60">
+            {saving ? "Saving securely…" : "Save & create content →"}
           </button>
           <button
             disabled={saving}
@@ -119,7 +125,7 @@ export default function OnboardingWorkspace() {
             }}
             className="rounded-xl border border-slate-200 px-5 py-2.5 text-slate-700 hover:bg-violet-50"
           >
-            Load Bite Me Jerky demo
+            Use demo & continue
           </button>
         </div>
         {saved ? <p className="mt-3 text-sm text-emerald-400">Business setup saved.</p> : null}

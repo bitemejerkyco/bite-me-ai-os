@@ -39,6 +39,13 @@ export default function AIStudio() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
+      const params = new URLSearchParams(window.location.search);
+      const campaign = params.get("campaign");
+      const campaignObjective = params.get("objective");
+      const campaignChannel = params.get("channel");
+      if (campaign) setOffer(`Create content for the ${campaign} campaign.`);
+      if (campaignObjective) setObjective(campaignObjective);
+      if (campaignChannel) setChannel(campaignChannel.toLowerCase());
       void Promise.all([loadCloudWorkspace(), loadCloudDrafts()])
         .then(([cloudWorkspace, cloudDrafts]) => {
           setWorkspace(
@@ -302,11 +309,11 @@ export default function AIStudio() {
             }} className="mt-3 min-h-44 w-full rounded-xl border border-slate-200 bg-white p-4 leading-7" />
             <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-800">{result.complianceNote}</p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button disabled={saved} onClick={() => void save()} className="rounded-xl border border-emerald-500/40 px-4 py-2 text-emerald-700 hover:bg-emerald-500/10 disabled:cursor-default disabled:bg-emerald-500/10">
-                {saved ? "Saved ✓" : drafts.some((draft) => draft.id === result.id) ? "Save changes" : "Save draft"}
+              <button onClick={() => void openCalendar()} className="rounded-xl bg-violet-600 px-5 py-2.5 font-semibold text-white hover:bg-violet-500">
+                Save & continue to publishing →
               </button>
-              <button onClick={() => void openCalendar()} className="rounded-xl bg-violet-600 px-4 py-2 font-semibold hover:bg-violet-500">
-                Schedule / Post now
+              <button disabled={saved} onClick={() => void save()} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-violet-50 disabled:cursor-default disabled:bg-emerald-50 disabled:text-emerald-700">
+                {saved ? "Saved ✓" : drafts.some((draft) => draft.id === result.id) ? "Save changes only" : "Save for later"}
               </button>
             </div>
             <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/70 p-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -33,8 +34,20 @@ export default function Sidebar() {
 
   return (
     <aside className="w-full border-r border-white/80 bg-white/70 p-5 text-slate-800 shadow-[16px_0_50px_rgba(76,61,139,0.07)] backdrop-blur-2xl md:sticky md:top-0 md:min-h-screen md:w-72 md:self-start">
-      <Link href="/" className="pm-brand block text-2xl font-black tracking-tight">PostMotive</Link>
-      <p className="mt-1 text-xs font-medium text-slate-500">AI marketing command center</p>
+      <Link href="/" className="flex items-center gap-3">
+        <Image
+          src="/postmotive-mark.png"
+          alt=""
+          width={48}
+          height={48}
+          priority
+          className="h-12 w-12 rounded-2xl shadow-[0_12px_30px_rgba(104,87,245,0.22)]"
+        />
+        <span>
+          <span className="pm-brand block text-2xl font-black tracking-tight">PostMotive</span>
+          <span className="mt-0.5 block text-[11px] font-medium text-slate-500">AI marketing command center</span>
+        </span>
+      </Link>
 
       <nav className="mt-7 grid grid-cols-2 gap-2 md:block md:space-y-1">
         {[

@@ -116,14 +116,6 @@ export default function ContentLibrary() {
     ).catch(() => undefined);
   };
 
-  const approve = async () => {
-    if (!selected) return;
-    await persist(
-      { ...selected, status: "APPROVED" },
-      "Draft approved and ready to schedule.",
-    ).catch(() => undefined);
-  };
-
   const openCalendar = async () => {
     if (!selected) return;
     if (!selected.title.trim() || !selected.copy.trim()) {
@@ -134,9 +126,10 @@ export default function ContentLibrary() {
       ...selected,
       title: selected.title.trim(),
       copy: selected.copy.trim(),
+      status: "APPROVED" as const,
     };
     try {
-      await persist(prepared, "Content saved.");
+      await persist(prepared, "Saved and ready to publish.");
       saveLocal(STORAGE_KEYS.calendarPrefill, prepared);
       window.location.assign("/calendar");
     } catch {
@@ -260,30 +253,21 @@ export default function ContentLibrary() {
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 disabled={working}
-                onClick={() => void saveChanges()}
-                className="rounded-xl border border-emerald-500/40 px-4 py-2 text-emerald-700 hover:bg-emerald-500/10 disabled:opacity-60"
+                onClick={() => void openCalendar()}
+                className="rounded-xl bg-violet-600 px-5 py-2.5 font-semibold text-white hover:bg-violet-500 disabled:opacity-60"
               >
-                {working ? "Saving…" : "Save changes"}
+                {working
+                  ? "Saving…"
+                  : selected.status === "APPROVED"
+                    ? "Save & continue to publishing →"
+                    : "Approve & continue to publishing →"}
               </button>
-              {selected.status !== "APPROVED" ? (
-                <button
-                  disabled={working}
-                  onClick={() => void approve()}
-                  className="rounded-xl border border-blue-500/40 px-4 py-2 text-blue-700 hover:bg-blue-500/10 disabled:opacity-60"
-                >
-                  Approve draft
-                </button>
-              ) : (
-                <span className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-blue-700">
-                  Approved ✓
-                </span>
-              )}
               <button
                 disabled={working}
-                onClick={() => void openCalendar()}
-                className="rounded-xl bg-violet-600 px-4 py-2 font-semibold hover:bg-violet-500 disabled:opacity-60"
+                onClick={() => void saveChanges()}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-violet-50 disabled:opacity-60"
               >
-                Schedule / Post now
+                Save changes only
               </button>
             </div>
             {selected.entryType === "AD" ? (

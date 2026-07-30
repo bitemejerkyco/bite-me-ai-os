@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { ReactNode } from "react";
 
 type LegalPageProps = {
@@ -16,11 +17,17 @@ export default function LegalPage({
     <main className="min-h-screen px-5 py-12 text-slate-700">
       <article className="pm-glass mx-auto max-w-4xl overflow-hidden rounded-[2rem]">
         <header className="border-b border-white/80 bg-gradient-to-r from-violet-100 via-fuchsia-50 to-cyan-100 px-6 py-10 sm:px-10">
-          <Link
-            className="pm-brand text-sm font-black uppercase tracking-[0.24em]"
-            href="/"
-          >
-            PostMotive
+          <Link className="inline-flex items-center gap-3" href="/">
+            <Image
+              src="/postmotive-mark.png"
+              alt=""
+              width={44}
+              height={44}
+              className="h-11 w-11 rounded-2xl shadow-lg"
+            />
+            <span className="pm-brand text-lg font-black tracking-tight">
+              PostMotive
+            </span>
           </Link>
           <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
             {title}

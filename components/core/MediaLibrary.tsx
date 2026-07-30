@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { loadLocal, saveLocal, STORAGE_KEYS, type MediaAsset } from "@/features/core/local-os";
 import {
   loadCloudMedia,
@@ -91,7 +92,15 @@ export default function MediaLibrary() {
             className="hidden"
           />
         </label>
-        {message ? <p className="mt-3 text-sm text-emerald-400">{message}</p> : null}
+        {message ? <p className="mt-3 text-sm text-emerald-700">{message}</p> : null}
+        {assets.length ? (
+          <Link
+            href="/studio"
+            className="mt-4 inline-block rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50"
+          >
+            Create content with these assets →
+          </Link>
+        ) : null}
       </section>
 
       <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
