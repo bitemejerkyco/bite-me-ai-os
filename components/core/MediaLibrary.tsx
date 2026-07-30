@@ -56,10 +56,9 @@ export default function MediaLibrary() {
           .toLowerCase()
           .includes(query.toLowerCase());
         const matchesFolder =
-          folderFilter === "ALL" ||
-          (folderFilter === "UNFILED"
+          folderFilter === "ALL"
             ? !asset.folderId
-            : asset.folderId === folderFilter);
+            : asset.folderId === folderFilter;
         return matchesSearch && matchesFolder;
       }),
     [assets, query, folderFilter],
@@ -130,9 +129,7 @@ export default function MediaLibrary() {
           await uploadCloudMedia(
             file,
             tagsFor(file),
-            !["ALL", "UNFILED"].includes(folderFilter)
-              ? folderFilter
-              : undefined,
+            folderFilter !== "ALL" ? folderFilter : undefined,
           ),
         );
       }
@@ -212,10 +209,9 @@ export default function MediaLibrary() {
           </div>
           <div className="flex flex-wrap content-start gap-2">
             {[
-              { id: "ALL", name: "All assets", count: assets.length },
               {
-                id: "UNFILED",
-                name: "Unfiled",
+                id: "ALL",
+                name: "All assets",
                 count: assets.filter((asset) => !asset.folderId).length,
               },
             ].map((folder) => (
