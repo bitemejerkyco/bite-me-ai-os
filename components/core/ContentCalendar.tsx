@@ -48,6 +48,7 @@ const statusStyle: Record<ScheduledPost["status"], string> = {
   PENDING_APPROVAL: "bg-amber-500/20 text-amber-800",
   SCHEDULED: "bg-blue-500/20 text-blue-700",
   PUBLISHING: "bg-purple-500/20 text-purple-700",
+  DELIVERED_TO_INBOX: "bg-cyan-500/20 text-cyan-700",
   PUBLISHED: "bg-emerald-500/20 text-emerald-700",
   FAILED: "bg-rose-100 text-rose-700",
   CANCELED: "bg-slate-100 text-slate-500",
@@ -348,6 +349,103 @@ export default function ContentCalendar() {
     }
   };
 
+  const sendToTikTok = async (post: ScheduledPost) => {
+    if (
+      !window.confirm(
+        "Send this video to the connected TikTok account as an editable draft?",
+      )
+    ) {
+      return;
+    }
+    setWorking(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/integrations/tiktok/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ scheduledPostId: post.id }),
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        data?: { publishId?: string };
+        error?: string;
+      };
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Unable to send video to TikTok.");
+      }
+      const updated = {
+        ...post,
+        status: "PUBLISHING" as const,
+        providerJobId: payload.data?.publishId,
+        failureReason: undefined,
+      };
+      setPosts((current) =>
+        current.map((item) => (item.id === post.id ? updated : item)),
+      );
+      setSelectedPost(updated);
+      setMessage(
+        "TikTok is retrieving the video. Check status until it reaches the TikTok inbox.",
+      );
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : "Unable to send video to TikTok.",
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const refreshTikTokDelivery = async (post: ScheduledPost) => {
+    setWorking(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/integrations/tiktok/upload/status", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ scheduledPostId: post.id }),
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        data?: {
+          status?: ScheduledPost["status"];
+          failureReason?: string | null;
+        };
+        error?: string;
+      };
+      if (!response.ok || !payload.ok || !payload.data?.status) {
+        throw new Error(payload.error || "Unable to refresh TikTok status.");
+      }
+      const updated = {
+        ...post,
+        status: payload.data.status,
+        failureReason: payload.data.failureReason || undefined,
+        publishedAt:
+          payload.data.status === "PUBLISHED"
+            ? new Date().toISOString()
+            : post.publishedAt,
+      };
+      setPosts((current) =>
+        current.map((item) => (item.id === post.id ? updated : item)),
+      );
+      setSelectedPost(updated);
+      setMessage(
+        payload.data.status === "DELIVERED_TO_INBOX"
+          ? "Video delivered. Open TikTok and tap the inbox notification to edit and post it."
+          : payload.data.status === "PUBLISHED"
+            ? "TikTok confirms the video was posted."
+            : payload.data.status === "FAILED"
+              ? `TikTok delivery failed: ${payload.data.failureReason || "Unknown error"}`
+              : "TikTok is still processing the video.",
+      );
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : "Unable to refresh TikTok status.",
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-800">
@@ -359,7 +457,7 @@ export default function ContentCalendar() {
           ["AI drafts", drafts.length, "text-slate-700"],
           ["Approval needed", posts.filter((post) => post.status === "PENDING_APPROVAL").length, "text-amber-800"],
           ["Scheduled", posts.filter((post) => post.status === "SCHEDULED").length, "text-blue-700"],
-          ["Publishing", posts.filter((post) => post.status === "PUBLISHING").length, "text-purple-700"],
+          ["Publishing", posts.filter((post) => ["PUBLISHING", "DELIVERED_TO_INBOX"].includes(post.status)).length, "text-purple-700"],
           ["Published", posts.filter((post) => post.status === "PUBLISHED").length, "text-emerald-700"],
           ["Failed", posts.filter((post) => post.status === "FAILED").length, "text-rose-700"],
         ].map(([label, value, color]) => (
@@ -563,12 +661,13 @@ export default function ContentCalendar() {
                   ],
                   [
                     "Scheduled",
-                    ["SCHEDULED", "PUBLISHING", "PUBLISHED", "FAILED"].includes(selectedPost.status),
+                    ["SCHEDULED", "PUBLISHING", "DELIVERED_TO_INBOX", "PUBLISHED", "FAILED"].includes(selectedPost.status),
                   ],
                   [
                     "Publishing started",
-                    ["PUBLISHING", "PUBLISHED", "FAILED"].includes(selectedPost.status),
+                    ["PUBLISHING", "DELIVERED_TO_INBOX", "PUBLISHED", "FAILED"].includes(selectedPost.status),
                   ],
+                  ["Delivered to TikTok inbox", ["DELIVERED_TO_INBOX", "PUBLISHED"].includes(selectedPost.status)],
                   ["Published", selectedPost.status === "PUBLISHED"],
                 ].map(([label, complete]) => (
                   <div key={String(label)} className={`flex items-center gap-3 rounded-xl border p-3 text-sm ${complete ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-700" : "border-slate-200/80 text-slate-400"}`}>
@@ -674,6 +773,16 @@ export default function ContentCalendar() {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setSelectedPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View details</button>
+                {post.channel === "TikTok" && Boolean(post.mediaStoragePath) && ["SCHEDULED", "FAILED"].includes(post.status) ? (
+                  <button disabled={working} onClick={() => void sendToTikTok(post)} className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    Send to TikTok
+                  </button>
+                ) : null}
+                {post.channel === "TikTok" && Boolean(post.providerJobId) && ["PUBLISHING", "DELIVERED_TO_INBOX"].includes(post.status) ? (
+                  <button disabled={working} onClick={() => void refreshTikTokDelivery(post)} className="rounded-xl border border-cyan-500/40 px-3 py-2 text-sm text-cyan-700 disabled:opacity-50">
+                    Check TikTok status
+                  </button>
+                ) : null}
                 {post.status === "PENDING_APPROVAL" ? <button onClick={() => void approve(post)} className="rounded-xl border border-emerald-500/40 px-3 py-2 text-sm text-emerald-700">Approve & schedule</button> : null}
                 {!["PUBLISHED", "CANCELED"].includes(post.status) ? <button onClick={() => void cancel(post)} className="rounded-xl border border-violet-200 px-3 py-2 text-sm text-rose-600">Cancel</button> : null}
               </div>

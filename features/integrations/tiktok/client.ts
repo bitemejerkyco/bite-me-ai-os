@@ -8,6 +8,10 @@ const AUTHORIZE_ENDPOINT = "https://www.tiktok.com/v2/auth/authorize/";
 const TOKEN_ENDPOINT = "https://open.tiktokapis.com/v2/oauth/token/";
 const REVOKE_ENDPOINT = "https://open.tiktokapis.com/v2/oauth/revoke/";
 const USER_INFO_ENDPOINT = "https://open.tiktokapis.com/v2/user/info/";
+const INBOX_VIDEO_INIT_ENDPOINT =
+  "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
+const PUBLISH_STATUS_ENDPOINT =
+  "https://open.tiktokapis.com/v2/post/publish/status/fetch/";
 const CREATOR_INFO_ENDPOINT =
   "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
 
@@ -210,6 +214,66 @@ export class TikTokApiClient {
       duetDisabled: false,
       stitchDisabled: false,
       maxVideoDurationSeconds: null,
+    };
+  }
+
+  async initializeInboxVideoFromUrl(
+    accessToken: string,
+    videoUrl: string,
+  ): Promise<string> {
+    const response = await this.fetchImpl(INBOX_VIDEO_INIT_ENDPOINT, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        source_info: {
+          source: "PULL_FROM_URL",
+          video_url: videoUrl,
+        },
+      }),
+    });
+    const payload = (await response.json()) as {
+      data?: { publish_id?: string };
+      error?: { code?: string; message?: string };
+    };
+    if (
+      !response.ok ||
+      payload.error?.code !== "ok" ||
+      !payload.data?.publish_id
+    ) {
+      throw new Error(
+        `TIKTOK_UPLOAD_INIT_FAILED:${payload.error?.code || response.status}.`,
+      );
+    }
+    return payload.data.publish_id;
+  }
+
+  async fetchPublishStatus(
+    accessToken: string,
+    publishId: string,
+  ): Promise<{ status: string; failureReason: string | null }> {
+    const response = await this.fetchImpl(PUBLISH_STATUS_ENDPOINT, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({ publish_id: publishId }),
+    });
+    const payload = (await response.json()) as {
+      data?: { status?: string; fail_reason?: string };
+      error?: { code?: string };
+    };
+    if (!response.ok || payload.error?.code !== "ok" || !payload.data?.status) {
+      throw new Error(
+        `TIKTOK_UPLOAD_STATUS_FAILED:${payload.error?.code || response.status}.`,
+      );
+    }
+    return {
+      status: payload.data.status,
+      failureReason: payload.data.fail_reason || null,
     };
   }
 }

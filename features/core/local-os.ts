@@ -118,6 +118,7 @@ export type ScheduledPost = {
     | "PENDING_APPROVAL"
     | "SCHEDULED"
     | "PUBLISHING"
+    | "DELIVERED_TO_INBOX"
     | "PUBLISHED"
     | "FAILED"
     | "CANCELED";

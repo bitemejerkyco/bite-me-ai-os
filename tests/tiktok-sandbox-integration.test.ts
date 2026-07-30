@@ -120,6 +120,60 @@ describe("TikTok sandbox integration", () => {
     expect(creator.avatarUrl).toBe("https://example.com/avatar.jpg");
   });
 
+  it("initializes an editable TikTok inbox draft from a protected URL", async () => {
+    let capturedUrl = "";
+    let capturedBody = "";
+    const fetchImpl = vi.fn(
+      async (input: URL | RequestInfo, init?: RequestInit) => {
+        capturedUrl = String(input);
+        capturedBody = String(init?.body || "");
+        return new Response(
+          JSON.stringify({
+            data: { publish_id: "publish-123" },
+            error: { code: "ok", message: "", log_id: "log" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    );
+    const publishId = await new TikTokApiClient(config, {
+      fetchImpl: fetchImpl as typeof fetch,
+    }).initializeInboxVideoFromUrl(
+      "access",
+      "https://postmotive.example/api/integrations/tiktok/media?token=protected",
+    );
+    expect(publishId).toBe("publish-123");
+    expect(capturedUrl).toBe(
+      "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
+    );
+    expect(JSON.parse(capturedBody)).toEqual({
+      source_info: {
+        source: "PULL_FROM_URL",
+        video_url:
+          "https://postmotive.example/api/integrations/tiktok/media?token=protected",
+      },
+    });
+  });
+
+  it("reads TikTok inbox delivery status without treating delivery as publication", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: { status: "SEND_TO_USER_INBOX" },
+          error: { code: "ok", message: "", log_id: "log" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const status = await new TikTokApiClient(config, {
+      fetchImpl: fetchImpl as typeof fetch,
+    }).fetchPublishStatus("access", "publish-123");
+    expect(status).toEqual({
+      status: "SEND_TO_USER_INBOX",
+      failureReason: null,
+    });
+  });
+
   it("validates callback values and returned scopes", () => {
     const parsed = parseTikTokCallback(
       new URL(
