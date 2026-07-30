@@ -1,0 +1,81 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
+
+const ALGORITHM = "aes-256-gcm";
+const VERSION = "v1";
+
+function parseKey(raw: string): Buffer {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error("TIKTOK_SETUP_REQUIRED:Token encryption key is missing.");
+  }
+  const base64 = Buffer.from(trimmed, "base64");
+  if (
+    base64.length === 32 &&
+    base64.toString("base64").replace(/=+$/u, "") ===
+      trimmed.replace(/=+$/u, "")
+  ) {
+    return base64;
+  }
+  const utf8 = Buffer.from(trimmed, "utf8");
+  if (utf8.length === 32) return utf8;
+  throw new Error(
+    "TIKTOK_SETUP_REQUIRED:TIKTOK_TOKEN_ENCRYPTION_KEY must resolve to exactly 32 bytes.",
+  );
+}
+
+export function encryptTikTokToken(token: string, rawKey: string): string {
+  if (!token) throw new Error("TIKTOK_TOKEN_INVALID:Token is missing.");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv(ALGORITHM, parseKey(rawKey), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(token, "utf8"),
+    cipher.final(),
+  ]);
+  return [
+    VERSION,
+    iv.toString("base64"),
+    cipher.getAuthTag().toString("base64"),
+    encrypted.toString("base64"),
+  ].join(".");
+}
+
+export function decryptTikTokToken(payload: string, rawKey: string): string {
+  const [version, iv, authTag, ciphertext, ...extra] = payload.split(".");
+  if (
+    version !== VERSION ||
+    !iv ||
+    !authTag ||
+    !ciphertext ||
+    extra.length > 0
+  ) {
+    throw new Error("TIKTOK_TOKEN_INVALID:Encrypted token is malformed.");
+  }
+  const decipher = createDecipheriv(
+    ALGORITHM,
+    parseKey(rawKey),
+    Buffer.from(iv, "base64"),
+  );
+  decipher.setAuthTag(Buffer.from(authTag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "base64")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
+export function hashOAuthState(state: string): string {
+  return createHash("sha256").update(state).digest("hex");
+}
+
+export function redactTikTokSecrets(input: string): string {
+  return input
+    .replace(
+      /(access_token|refresh_token|client_secret|code)=([^&\s]+)/giu,
+      "$1=[REDACTED]",
+    )
+    .replace(/(bearer\s+)[a-z0-9\-._~+/]+=*/giu, "$1[REDACTED]");
+}

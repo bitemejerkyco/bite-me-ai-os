@@ -45,7 +45,7 @@ export default function Sidebar() {
           ["/knowledge", "Knowledge Base", "★"],
           ["/media", "Media Library", "▧"],
           ["/analytics", "Analytics", "↗"],
-          ["/settings/integrations/amazon-ads", "Integrations", "⚙"],
+          ["/settings/integrations/tiktok", "Integrations", "⚙"],
         ].map(([href, label, icon]) => (
           <Link
             key={href}
