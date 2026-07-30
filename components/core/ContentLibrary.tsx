@@ -5,8 +5,14 @@ import Link from "next/link";
 import {
   loadCloudDrafts,
   resolveCloudMediaUrl,
+  saveCloudDraft,
 } from "@/features/core/cloud-store";
-import type { ContentDraft } from "@/features/core/local-os";
+import {
+  loadLocal,
+  saveLocal,
+  STORAGE_KEYS,
+  type ContentDraft,
+} from "@/features/core/local-os";
 
 export default function ContentLibrary() {
   const [drafts, setDrafts] = useState<ContentDraft[]>([]);
@@ -15,6 +21,7 @@ export default function ContentLibrary() {
   const [selected, setSelected] = useState<ContentDraft | null>(null);
   const [mediaUrl, setMediaUrl] = useState("");
   const [message, setMessage] = useState("");
+  const [working, setWorking] = useState(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -62,6 +69,80 @@ export default function ContentLibrary() {
         : drafts.filter((draft) => draft.status === filter),
     [drafts, filter],
   );
+
+  const persist = async (
+    draft: ContentDraft,
+    successMessage: string,
+  ): Promise<void> => {
+    setWorking(true);
+    setMessage("");
+    try {
+      await saveCloudDraft(draft);
+      setDrafts((current) =>
+        current.map((item) => (item.id === draft.id ? draft : item)),
+      );
+      setSelected(draft);
+      const localDrafts = loadLocal<ContentDraft[]>(STORAGE_KEYS.drafts, []);
+      saveLocal(
+        STORAGE_KEYS.drafts,
+        localDrafts.some((item) => item.id === draft.id)
+          ? localDrafts.map((item) => (item.id === draft.id ? draft : item))
+          : [draft, ...localDrafts],
+      );
+      setMessage(successMessage);
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : "Unable to save content.",
+      );
+      throw caught;
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const saveChanges = async () => {
+    if (!selected) return;
+    if (!selected.title.trim() || !selected.copy.trim()) {
+      setMessage("Add a title and content before saving.");
+      return;
+    }
+    await persist(
+      {
+        ...selected,
+        title: selected.title.trim(),
+        copy: selected.copy.trim(),
+      },
+      "Changes saved.",
+    ).catch(() => undefined);
+  };
+
+  const approve = async () => {
+    if (!selected) return;
+    await persist(
+      { ...selected, status: "APPROVED" },
+      "Draft approved and ready to schedule.",
+    ).catch(() => undefined);
+  };
+
+  const openCalendar = async () => {
+    if (!selected) return;
+    if (!selected.title.trim() || !selected.copy.trim()) {
+      setMessage("Add a title and content before scheduling.");
+      return;
+    }
+    const prepared = {
+      ...selected,
+      title: selected.title.trim(),
+      copy: selected.copy.trim(),
+    };
+    try {
+      await persist(prepared, "Content saved.");
+      saveLocal(STORAGE_KEYS.calendarPrefill, prepared);
+      window.location.assign("/calendar");
+    } catch {
+      // persist displays the actionable error.
+    }
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
@@ -139,10 +220,10 @@ export default function ContentLibrary() {
                 <h2 className="mt-1 text-2xl font-bold">{selected.title}</h2>
               </div>
               <Link
-                href="/calendar"
-                className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-200"
+                href="/studio"
+                className="rounded-lg border border-white/15 px-4 py-2 text-sm text-zinc-200"
               >
-                Open Calendar
+                Create another
               </Link>
             </div>
             {mediaUrl ? (
@@ -153,16 +234,70 @@ export default function ContentLibrary() {
                 className="mx-auto mt-5 max-h-[560px] rounded-xl bg-black"
               />
             ) : null}
-            <div className="mt-5 whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-950 p-4 leading-7">
-              {selected.copy}
-            </div>
+            <label className="mt-5 block text-sm text-zinc-300">
+              Title
+              <input
+                value={selected.title}
+                onChange={(event) =>
+                  setSelected({ ...selected, title: event.target.value })
+                }
+                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-base font-semibold"
+              />
+            </label>
+            <label className="mt-4 block text-sm text-zinc-300">
+              Post or ad content
+              <textarea
+                value={selected.copy}
+                onChange={(event) =>
+                  setSelected({ ...selected, copy: event.target.value })
+                }
+                className="mt-1 min-h-52 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-4 leading-7"
+              />
+            </label>
             <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-100">
               {selected.complianceNote}
             </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                disabled={working}
+                onClick={() => void saveChanges()}
+                className="rounded-lg border border-emerald-500/40 px-4 py-2 text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-60"
+              >
+                {working ? "Saving…" : "Save changes"}
+              </button>
+              {selected.status !== "APPROVED" ? (
+                <button
+                  disabled={working}
+                  onClick={() => void approve()}
+                  className="rounded-lg border border-blue-500/40 px-4 py-2 text-blue-200 hover:bg-blue-500/10 disabled:opacity-60"
+                >
+                  Approve draft
+                </button>
+              ) : (
+                <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-blue-200">
+                  Approved ✓
+                </span>
+              )}
+              <button
+                disabled={working}
+                onClick={() => void openCalendar()}
+                className="rounded-lg bg-red-600 px-4 py-2 font-semibold hover:bg-red-500 disabled:opacity-60"
+              >
+                Schedule / Post now
+              </button>
+            </div>
+            {selected.entryType === "AD" ? (
+              <p className="mt-3 text-xs text-amber-200">
+                Paid ads will enter the approval queue before any launch or
+                spending.
+              </p>
+            ) : null}
+            {message ? (
+              <p className="mt-4 text-sm text-zinc-300">{message}</p>
+            ) : null}
           </div>
         )}
       </section>
     </div>
   );
 }
-
