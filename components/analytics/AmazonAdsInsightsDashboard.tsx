@@ -53,7 +53,10 @@ const recommendationTypeLabel = (type: string) =>
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
 export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsDashboardProps) {
+  const [activeModel, setActiveModel] = useState(model);
   const [filters, setFilters] = useState<AmazonAdsInsightsFilter>(model.filters.defaults);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [recommendationFilters, setRecommendationFilters] = useState<AmazonAdsRecommendationFilters>({
     priority: "ALL",
     type: "ALL",
@@ -62,7 +65,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
   });
 
   const filtered = useMemo(() => {
-    const records = applyDashboardFilters(model.sourceRecords, filters);
+    const records = applyDashboardFilters(activeModel.sourceRecords, filters);
 
     return {
       overview: computeOverviewMetrics(records),
@@ -71,11 +74,15 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
       keywords: buildKeywordRows(records),
       searchTerms: buildSearchTermRows(records),
     };
-  }, [filters, model]);
+  }, [activeModel, filters]);
 
   const recommendationModel = useMemo(
-    () => generateAmazonAdsRecommendations(applyDashboardFilters(model.sourceRecords, filters), model.generatedAt),
-    [filters, model.generatedAt, model.sourceRecords],
+    () =>
+      generateAmazonAdsRecommendations(
+        applyDashboardFilters(activeModel.sourceRecords, filters),
+        activeModel.generatedAt,
+      ),
+    [activeModel.generatedAt, activeModel.sourceRecords, filters],
   );
 
   const filteredRecommendations = useMemo(
@@ -83,8 +90,36 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
     [recommendationFilters, recommendationModel.recommendations],
   );
 
-  const filterHint =
-    "Filters are applied against sandbox-only source records in this read-only dashboard.";
+  const filterHint = `Filters are applied against ${activeModel.sourceMode.toLowerCase()} read-only source records.`;
+
+  const loadLiveData = async () => {
+    setLiveLoading(true);
+    setLiveError(null);
+    try {
+      const query = new URLSearchParams({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      });
+      const response = await fetch(`/api/integrations/amazon-ads/insights?${query}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        data?: AmazonAdsDashboardViewModel;
+        error?: string;
+      };
+      if (!response.ok || !payload.ok || !payload.data) {
+        throw new Error(payload.error || "Unable to load Amazon Ads live data.");
+      }
+      setActiveModel(payload.data);
+      setFilters(payload.data.filters.defaults);
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "Unable to load Amazon Ads live data.");
+    } finally {
+      setLiveLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-red-950 px-4 py-6 text-zinc-100 md:px-8">
@@ -92,7 +127,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
         <header className="rounded-2xl border border-red-500/30 bg-black/60 p-6 shadow-xl">
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">
-              Sandbox Data
+              {activeModel.sourceMode === "LIVE" ? "Live Amazon Data" : "Sandbox Data"}
             </span>
             <span className="rounded-full border border-red-500/60 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-200">
               Read Only
@@ -102,7 +137,27 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
           <p className="mt-2 text-sm text-zinc-300">
             Workspace-isolated analytics preview for campaign, keyword, and search-term performance.
           </p>
-          <p className="mt-1 text-xs text-zinc-400">Generated: {new Date(model.generatedAt).toISOString()}</p>
+          <p className="mt-1 text-xs text-zinc-400">
+            Generated: {new Date(activeModel.generatedAt).toISOString()}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={loadLiveData}
+              disabled={liveLoading}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {liveLoading ? "Loading Amazon report…" : "Load Live Amazon Ads"}
+            </button>
+            <span className="text-xs text-zinc-400">
+              Generates a read-only Sponsored Products search-term report. No account changes are made.
+            </span>
+          </div>
+          {liveError ? (
+            <p className="mt-3 rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-200">
+              {liveError}
+            </p>
+          ) : null}
         </header>
 
         <section className="grid grid-cols-1 gap-3 rounded-2xl border border-red-500/25 bg-black/50 p-4 md:grid-cols-5">
@@ -112,8 +167,8 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               type="date"
               className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
               value={filters.startDate}
-              min={model.filters.dateRange.min}
-              max={model.filters.dateRange.max}
+              min={activeModel.filters.dateRange.min}
+              max={activeModel.filters.dateRange.max}
               onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))}
             />
           </label>
@@ -124,8 +179,8 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               type="date"
               className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
               value={filters.endDate}
-              min={model.filters.dateRange.min}
-              max={model.filters.dateRange.max}
+              min={activeModel.filters.dateRange.min}
+              max={activeModel.filters.dateRange.max}
               onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))}
             />
           </label>
@@ -138,7 +193,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               onChange={(event) => setFilters((prev) => ({ ...prev, marketplaceId: event.target.value }))}
             >
               <option value="ALL">All</option>
-              {model.filters.marketplaces.map((marketplace) => (
+              {activeModel.filters.marketplaces.map((marketplace) => (
                 <option key={marketplace} value={marketplace}>
                   {marketplace}
                 </option>
@@ -154,7 +209,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               onChange={(event) => setFilters((prev) => ({ ...prev, profileId: event.target.value }))}
             >
               <option value="ALL">All</option>
-              {model.filters.profiles.map((profile) => (
+              {activeModel.filters.profiles.map((profile) => (
                 <option key={profile} value={profile}>
                   {profile}
                 </option>
@@ -170,7 +225,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               onChange={(event) => setFilters((prev) => ({ ...prev, campaignStatus: event.target.value }))}
             >
               <option value="ALL">All</option>
-              {model.filters.campaignStatuses.map((status) => (
+              {activeModel.filters.campaignStatuses.map((status) => (
                 <option key={status} value={status}>
                   {status}
                 </option>

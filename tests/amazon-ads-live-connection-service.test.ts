@@ -5,6 +5,8 @@ import { createAmazonAdsTokenStoreForTests } from "@/features/marketing/provider
 import { assertAmazonAdsReadOnlyOperation } from "@/features/marketing/providers/amazon-ads/live/read-only-allowlist";
 import type { AmazonAdsTokenStore } from "@/features/marketing/providers/amazon-ads/live/types";
 
+const mutableEnv = process.env as Record<string, string | undefined>;
+
 const config = {
   clientId: "client",
   clientSecret: "secret",
@@ -261,7 +263,7 @@ describe("Amazon Ads live connection service", () => {
 
   it("rejects in-memory token storage in production mode", async () => {
     const previousEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    mutableEnv.NODE_ENV = "production";
     try {
       const service = new AmazonAdsLiveConnectionService({
         config,
@@ -285,13 +287,13 @@ describe("Amazon Ads live connection service", () => {
         "SECURITY_POLICY_VIOLATION:Production token storage prerequisite is not met.",
       );
     } finally {
-      process.env.NODE_ENV = previousEnv;
+      mutableEnv.NODE_ENV = previousEnv;
     }
   });
 
   it("rejects file-backed token storage in production mode", async () => {
     const previousEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    mutableEnv.NODE_ENV = "production";
     try {
       const fileTokenStore = {
         kind: "file" as const,
@@ -330,13 +332,13 @@ describe("Amazon Ads live connection service", () => {
         "SECURITY_POLICY_VIOLATION:Production token storage prerequisite is not met.",
       );
     } finally {
-      process.env.NODE_ENV = previousEnv;
+      mutableEnv.NODE_ENV = previousEnv;
     }
   });
 
   it("rejects in-memory OAuth state storage in production mode", async () => {
     const previousEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    mutableEnv.NODE_ENV = "production";
     try {
       const externalTokenStore = {
         kind: "external" as const,
@@ -366,13 +368,13 @@ describe("Amazon Ads live connection service", () => {
         "SECURITY_POLICY_VIOLATION:Production OAuth state storage prerequisite is not met.",
       );
     } finally {
-      process.env.NODE_ENV = previousEnv;
+      mutableEnv.NODE_ENV = previousEnv;
     }
   });
 
   it("rejects file-backed OAuth state storage in production mode", async () => {
     const previousEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    mutableEnv.NODE_ENV = "production";
     try {
       const fileStateStore = {
         kind: "file" as const,
@@ -411,7 +413,7 @@ describe("Amazon Ads live connection service", () => {
         "SECURITY_POLICY_VIOLATION:Production OAuth state storage prerequisite is not met.",
       );
     } finally {
-      process.env.NODE_ENV = previousEnv;
+      mutableEnv.NODE_ENV = previousEnv;
     }
   });
 

@@ -2,9 +2,10 @@
 
 ## Purpose
 
-This guide configures Amazon Ads **live read-only** authorization for advertiser profile discovery and profile selection.
+This guide configures Amazon Ads **live read-only** authorization, advertiser profile
+discovery/selection, and Sponsored Products search-term performance reporting.
 
-This phase does **not** ingest live performance reports and does **not** allow campaign mutations.
+The analytics report path is read-only. It does not allow campaign mutations.
 
 ## Amazon prerequisites
 
@@ -70,10 +71,14 @@ Current phase supports:
 - OAuth connect/disconnect
 - Advertiser profile discovery
 - Profile and marketplace selection
+- Reporting v3 `spSearchTerm` report creation and status polling
+- HTTPS report download, optional gzip decompression, validation, and canonical normalization
+- Live dashboard metrics and deterministic recommendations
+- 1–31 day report windows
+- North America, Europe, and Far East regional endpoints
 
 Current phase does **not** support:
 
-- Live report ingestion
 - Campaign changes (bid, budget, keyword, targeting, status, product ad)
 - Generic API proxying
 
@@ -103,12 +108,27 @@ This local signed-session resolver is **development-only** and is rejected for p
 
 If any prerequisite is missing, production stays fail-closed and live connect remains unavailable.
 
-## Remaining Phase 2 work
+## Using live analytics
 
-- Production auth resolver integration with the platform identity/session system.
-- Production state store adapter (shared atomic store).
-- Production token store adapter (durable datastore + managed key lifecycle).
-- Live performance report ingestion (still out of scope for this phase).
+1. Enable and configure the integration.
+2. Connect Amazon Ads from `/settings/integrations/amazon-ads`.
+3. Select the advertiser profile and marketplace.
+4. Open `/analytics/amazon-ads`.
+5. Choose a date range of no more than 31 days.
+6. Select **Load Live Amazon Ads**.
+
+Amazon reporting is asynchronous. The request can return `REPORT_PENDING` if Amazon
+has not completed the report within the bounded polling window. Retrying the load
+starts a new report request; persistent report-job reuse is a future optimization.
+
+## Remaining production deployment work
+
+- Configure the production identity/session resolver.
+- Configure the shared atomic OAuth state adapter.
+- Configure the durable encrypted token adapter and managed key lifecycle.
+- Supply approved Amazon Ads API credentials and exact callback URL.
+- Run provider-account reconciliation against Seller Central totals before changing
+  certification from `PARTIAL`.
 
 ## Credential handling rules
 

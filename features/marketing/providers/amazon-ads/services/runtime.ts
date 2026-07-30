@@ -31,6 +31,8 @@ export async function buildAmazonAdsSandboxRuntime(input: {
     workspaceId: input.context.workspaceId,
     connectionId: input.connectorId,
     correlationId: input.context.correlationId,
+    clientId: "sandbox",
+    accessToken: "sandbox",
     profileId: input.profileId,
     region: inferRegionFromMarketplaces([input.marketplaceId]),
     telemetry,

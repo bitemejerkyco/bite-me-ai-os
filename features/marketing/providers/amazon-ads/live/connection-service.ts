@@ -28,6 +28,7 @@ import type {
   AmazonAdsStateStore,
   AmazonAdsTokenStore,
 } from "@/features/marketing/providers/amazon-ads/live/types";
+import { inferRegionFromMarketplaces } from "@/features/platform/connectors/providers/amazon/normalization/marketplaces";
 
 type Dependencies = {
   config?: AmazonAdsLiveConfig;
@@ -41,6 +42,16 @@ type Dependencies = {
 type OAuthResult = {
   authorizeUrl: string;
   connectionId: string;
+};
+
+export type AmazonAdsLiveReadAccess = {
+  workspaceId: string;
+  connectionId: string;
+  clientId: string;
+  accessToken: string;
+  profileId: string;
+  marketplaceId: string;
+  region: "na" | "eu" | "fe";
 };
 
 const PROVIDER_ID = "amazon-ads-live";
@@ -434,6 +445,57 @@ export class AmazonAdsLiveConnectionService {
         },
       });
       return { expiresAt };
+    } catch (error) {
+      throw new Error(this.redactError(error));
+    }
+  }
+
+  async getLiveReadAccess(actor: AmazonAdsIntegrationActor): Promise<AmazonAdsLiveReadAccess> {
+    assertActor(actor);
+    this.assertLiveConnectionEnabled();
+    const connection = await findLiveConnection(actor);
+    if (!connection || connection.status !== "CONNECTED") {
+      throw new Error("PROVIDER_NOT_CONFIGURED:Amazon Ads is not connected.");
+    }
+    const metadata = connection.metadata || {};
+    const profileId =
+      typeof metadata.selectedProfileId === "string" ? metadata.selectedProfileId : "";
+    const marketplaceId =
+      typeof metadata.selectedMarketplaceId === "string" ? metadata.selectedMarketplaceId : "";
+    if (!profileId || !marketplaceId) {
+      throw new Error("PROFILE_SELECTION_REQUIRED:Select an advertiser profile and marketplace first.");
+    }
+    const token = await this.tokenStore.get(actor.workspaceId, connection.id);
+    if (!token) {
+      throw new Error("PROVIDER_NOT_CONFIGURED:No refresh token is stored for this connection.");
+    }
+    try {
+      const refreshToken = decryptRefreshToken(
+        token.encryptedRefreshToken,
+        this.config.tokenEncryptionKey,
+      );
+      const refreshed = await this.oauthClient.refreshAccessToken(refreshToken);
+      const expiresAt = new Date(
+        this.now().getTime() + refreshed.expiresInSeconds * 1000,
+      ).toISOString();
+      await connectorRepository.saveConnection({
+        ...connection,
+        status: "CONNECTED",
+        metadata: {
+          ...metadata,
+          expiresAt,
+          lastError: null,
+        },
+      });
+      return {
+        workspaceId: actor.workspaceId,
+        connectionId: connection.id,
+        clientId: this.config.clientId,
+        accessToken: refreshed.accessToken,
+        profileId,
+        marketplaceId,
+        region: inferRegionFromMarketplaces([marketplaceId]),
+      };
     } catch (error) {
       throw new Error(this.redactError(error));
     }

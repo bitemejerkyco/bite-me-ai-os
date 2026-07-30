@@ -1,0 +1,137 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  demoWorkspace,
+  loadLocal,
+  saveLocal,
+  STORAGE_KEYS,
+  type Industry,
+  type WorkspaceProfile,
+} from "@/features/core/local-os";
+import {
+  loadCloudWorkspace,
+  saveCloudWorkspace,
+} from "@/features/core/cloud-store";
+
+const empty: WorkspaceProfile = {
+  businessName: "",
+  website: "",
+  industry: "GENERAL_RETAIL",
+  primaryGoal: "",
+  audience: "",
+  voice: "",
+  completedAt: "",
+};
+
+export default function OnboardingWorkspace() {
+  const [profile, setProfile] = useState(empty);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void loadCloudWorkspace()
+        .then((cloud) =>
+          setProfile(cloud || loadLocal(STORAGE_KEYS.workspace, empty)),
+        )
+        .catch(() => setProfile(loadLocal(STORAGE_KEYS.workspace, empty)));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const update = (field: keyof WorkspaceProfile, value: string) => {
+    setSaved(false);
+    setProfile((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const save = async (nextProfile: WorkspaceProfile = profile) => {
+    setSaving(true);
+    setError("");
+    try {
+      const completed = {
+        ...nextProfile,
+        completedAt: nextProfile.completedAt || new Date().toISOString(),
+      };
+      const cloud = await saveCloudWorkspace(completed);
+      setProfile(cloud);
+      saveLocal(STORAGE_KEYS.workspace, cloud);
+      setSaved(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to save setup.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
+        <h2 className="text-xl font-bold">Business profile</h2>
+        <p className="mt-1 text-sm text-zinc-400">This controls brand voice, recommendations, and compliance checks.</p>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {[
+            ["businessName", "Business name", "Bite Me Jerky"],
+            ["website", "Website", "https://welikejerky.com"],
+            ["primaryGoal", "Primary goal", "Increase online sales"],
+            ["audience", "Primary audience", "Adventure riders and snack buyers"],
+            ["voice", "Brand voice", "Bold, witty, confident"],
+          ].map(([field, label, placeholder]) => (
+            <label key={field} className={field === "primaryGoal" ? "md:col-span-2" : ""}>
+              <span className="text-sm text-zinc-300">{label}</span>
+              <input
+                value={profile[field as keyof WorkspaceProfile]}
+                onChange={(event) => update(field as keyof WorkspaceProfile, event.target.value)}
+                placeholder={placeholder}
+                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              />
+            </label>
+          ))}
+          <label className="md:col-span-2">
+            <span className="text-sm text-zinc-300">Industry / Compliance Mode</span>
+            <select
+              value={profile.industry}
+              onChange={(event) => update("industry", event.target.value as Industry)}
+              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+            >
+              <option value="GENERAL_RETAIL">General Retail</option>
+              <option value="FOOD_BEVERAGE">Food & Beverage</option>
+              <option value="CANNABIS">Cannabis</option>
+              <option value="CBD">CBD</option>
+              <option value="ALCOHOL">Alcohol</option>
+              <option value="HEALTHCARE">Healthcare</option>
+              <option value="FINANCIAL_SERVICES">Financial Services</option>
+              <option value="SUPPLEMENTS">Supplements</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button disabled={saving} onClick={() => void save()} className="rounded-lg bg-red-600 px-5 py-2.5 font-semibold hover:bg-red-500 disabled:opacity-60">
+            {saving ? "Saving securely…" : saved ? "Saved ✓" : "Save business setup"}
+          </button>
+          <button
+            disabled={saving}
+            onClick={() => {
+              const demo = demoWorkspace();
+              setProfile(demo);
+              void save(demo);
+            }}
+            className="rounded-lg border border-zinc-700 px-5 py-2.5 text-zinc-200 hover:bg-white/5"
+          >
+            Load Bite Me Jerky demo
+          </button>
+        </div>
+        {saved ? <p className="mt-3 text-sm text-emerald-400">Business setup saved.</p> : null}
+        {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+      </section>
+      <aside className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+        <h3 className="font-bold text-amber-200">Compliance Mode</h3>
+        <p className="mt-2 text-sm leading-6 text-zinc-300">
+          Content guidance changes by industry. Restricted industries receive safer channel recommendations,
+          claim warnings, and alternatives when direct promotion may violate platform policy.
+        </p>
+      </aside>
+    </div>
+  );
+}

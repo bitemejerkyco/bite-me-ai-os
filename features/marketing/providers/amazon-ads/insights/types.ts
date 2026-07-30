@@ -90,7 +90,8 @@ export type SearchTermRow = {
 
 export type AmazonAdsDashboardViewModel = {
   readOnly: true;
-  sandboxOnly: true;
+  sandboxOnly: boolean;
+  sourceMode: "SANDBOX" | "LIVE";
   generatedAt: string;
   sourceRecords: AmazonAdsInsightRecord[];
   filters: {

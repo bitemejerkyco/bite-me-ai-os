@@ -1,11 +1,13 @@
-type Region = "na" | "eu" | "fe";
+export type AmazonAdsRegion = "na" | "eu" | "fe";
 
 export type AmazonAdsClientOptions = {
   workspaceId: string;
   connectionId: string;
   correlationId: string;
+  clientId: string;
+  accessToken: string;
   profileId: string;
-  region: Region;
+  region: AmazonAdsRegion;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   maxRetries?: number;
@@ -23,13 +25,13 @@ export type AmazonClientResponse<T> = {
   headers: Headers;
 };
 
-const ADS_HOSTS: Record<Region, string> = {
+const ADS_HOSTS: Record<AmazonAdsRegion, string> = {
   na: "https://advertising-api.amazon.com",
   eu: "https://advertising-api-eu.amazon.com",
   fe: "https://advertising-api-fe.amazon.com",
 };
 
-const MUTATION_SHAPES = /(?:create|update|delete|archive|bid|budget|activate|pause|enable|disable|negative)/i;
+const REPORT_PATH = /^\/reporting\/reports(?:\/[A-Za-z0-9-]+)?$/;
 
 export class AmazonAdsClient {
   private readonly fetchImpl: typeof fetch;
@@ -53,8 +55,37 @@ export class AmazonAdsClient {
     return this.request<Record<string, unknown>>("GET", `/reporting/reports/${encodeURIComponent(reportId)}`);
   }
 
-  downloadReport(reportId: string): Promise<AmazonClientResponse<Record<string, unknown>>> {
-    return this.request<Record<string, unknown>>("GET", `/reporting/reports/${encodeURIComponent(reportId)}/download`);
+  async downloadReport(url: string): Promise<AmazonClientResponse<ArrayBuffer>> {
+    const parsed = new URL(url);
+    const trustedHost =
+      parsed.hostname === "amazonaws.com" ||
+      parsed.hostname.endsWith(".amazonaws.com") ||
+      parsed.hostname === "amazon.com" ||
+      parsed.hostname.endsWith(".amazon.com");
+    if (parsed.protocol !== "https:" || !trustedHost || parsed.username || parsed.password) {
+      throw new Error("READ_ONLY_VIOLATION:Amazon Ads report download URL is not trusted.");
+    }
+    const response = await this.fetchImpl(parsed, {
+      method: "GET",
+      signal: AbortSignal.timeout(this.options.timeoutMs ?? 30_000),
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        safeError: {
+          code: `HTTP_${response.status}`,
+          message: `Amazon Ads report download failed (${response.status})`,
+        },
+        headers: response.headers,
+      };
+    }
+    return {
+      ok: true,
+      status: response.status,
+      data: await response.arrayBuffer(),
+      headers: response.headers,
+    };
   }
 
   private async request<T>(
@@ -67,7 +98,8 @@ export class AmazonAdsClient {
     const url = new URL(path, this.host).toString();
     const headers = new Headers({
       "content-type": "application/json",
-      "amazon-advertising-api-clientId": "sandbox",
+      authorization: `Bearer ${this.options.accessToken}`,
+      "amazon-advertising-api-clientId": this.options.clientId,
       "amazon-advertising-api-scope": this.options.profileId,
       "x-correlation-id": this.options.correlationId,
     });
@@ -93,8 +125,9 @@ export class AmazonAdsClient {
         }
 
         const message = `Amazon Ads request failed (${response.status})`;
-        if (attempt <= maxRetries && response.status >= 500) {
+        if (attempt <= maxRetries && (response.status === 429 || response.status >= 500)) {
           this.options.telemetry?.retry?.(this.options.workspaceId, "amazon-ads", attempt, this.options.correlationId);
+          await waitForRetry(response.headers, attempt);
           continue;
         }
         this.options.telemetry?.failure?.(
@@ -133,11 +166,18 @@ export class AmazonAdsClient {
   }
 
   private assertReadOnlyShape(path: string): void {
-    const loweredPath = path.toLowerCase();
-    if (MUTATION_SHAPES.test(loweredPath)) {
-      throw new Error("READ_ONLY_VIOLATION:Amazon Ads client rejected mutation-shaped request path.");
+    if (!REPORT_PATH.test(path)) {
+      throw new Error("READ_ONLY_VIOLATION:Amazon Ads client only allows reporting endpoints.");
     }
   }
+}
+
+async function waitForRetry(headers: Headers, attempt: number): Promise<void> {
+  const retryAfter = Number(headers.get("retry-after"));
+  const delayMs = Number.isFinite(retryAfter)
+    ? Math.min(Math.max(retryAfter * 1_000, 0), 30_000)
+    : Math.min(250 * 2 ** (attempt - 1), 2_000);
+  if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function safeJson(response: Response): Promise<unknown> {

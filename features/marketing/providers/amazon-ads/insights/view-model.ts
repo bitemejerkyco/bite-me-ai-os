@@ -163,6 +163,7 @@ export function buildSearchTermRows(records: AmazonAdsInsightRecord[]): SearchTe
 export function buildDashboardViewModel(
   records: AmazonAdsInsightRecord[],
   generatedAt: string,
+  sourceMode: "SANDBOX" | "LIVE" = "SANDBOX",
 ): AmazonAdsDashboardViewModel {
   const dates = [...new Set(records.map((row) => row.date))].sort();
   const marketplaces = [...new Set(records.map((row) => row.marketplaceId))].sort();
@@ -184,7 +185,8 @@ export function buildDashboardViewModel(
 
   return {
     readOnly: true,
-    sandboxOnly: true,
+    sandboxOnly: sourceMode === "SANDBOX",
+    sourceMode,
     generatedAt,
     sourceRecords: records,
     filters: {

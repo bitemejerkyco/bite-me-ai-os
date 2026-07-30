@@ -8,28 +8,29 @@ import {
 } from "@/app/api/integrations/amazon-ads/_lib";
 
 function withEnv<T>(values: Record<string, string | undefined>, run: () => T): T {
+  const mutableEnv = process.env as Record<string, string | undefined>;
   const previous: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(values)) {
     previous[key] = process.env[key];
     if (value === undefined) {
       delete process.env[key];
     } else {
-      process.env[key] = value;
+      mutableEnv[key] = value;
     }
   }
   const previousNodeEnv = process.env.NODE_ENV;
   if (values.NODE_ENV !== undefined) {
-    process.env.NODE_ENV = values.NODE_ENV;
+    mutableEnv.NODE_ENV = values.NODE_ENV;
   }
   try {
     return run();
   } finally {
-    process.env.NODE_ENV = previousNodeEnv;
+    mutableEnv.NODE_ENV = previousNodeEnv;
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
         delete process.env[key];
       } else {
-        process.env[key] = value;
+        mutableEnv[key] = value;
       }
     }
   }
