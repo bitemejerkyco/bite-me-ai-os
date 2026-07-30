@@ -20,24 +20,41 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     prompt?: unknown;
     seconds?: unknown;
+    sourceVideoId?: unknown;
   } | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   const seconds = Number(body?.seconds);
+  const sourceVideoId =
+    typeof body?.sourceVideoId === "string" ? body.sourceVideoId : "";
   if (!prompt || prompt.length > 4_000 || ![8, 16, 20].includes(seconds)) {
     return NextResponse.json({ error: "Invalid video render request." }, { status: 400 });
   }
-  const upstream = await fetch("https://api.openai.com/v1/videos", {
+  if (sourceVideoId && !VIDEO_ID_PATTERN.test(sourceVideoId)) {
+    return NextResponse.json({ error: "Invalid source video ID." }, { status: 400 });
+  }
+  const upstream = await fetch(
+    sourceVideoId
+      ? "https://api.openai.com/v1/videos/edits"
+      : "https://api.openai.com/v1/videos",
+    {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: "sora-2-pro",
-      prompt,
-      size: "1080x1920",
-      seconds: String(seconds),
-    }),
+    body: JSON.stringify(
+      sourceVideoId
+        ? {
+            video: { id: sourceVideoId },
+            prompt,
+          }
+        : {
+            model: "sora-2-pro",
+            prompt,
+            size: "1080x1920",
+            seconds: String(seconds),
+          },
+    ),
     cache: "no-store",
   });
   const payload = await upstream.json().catch(() => null);
@@ -75,4 +92,3 @@ export async function GET(request: Request) {
     status: upstream.status,
   });
 }
-

@@ -54,6 +54,19 @@ export type VideoProject = {
   updatedAt: string;
 };
 
+export type CreativeVersion = {
+  id: string;
+  videoProjectId: string;
+  assetKind: "VIDEO" | "VOICEOVER";
+  versionNumber: number;
+  providerJobId?: string;
+  storagePath: string;
+  prompt: string;
+  voice?: VideoVoice;
+  voiceInstructions?: string;
+  createdAt: string;
+};
+
 export type VideoPlanInput = {
   workspace: WorkspaceProfile;
   channel: VideoProject["channel"];
@@ -171,4 +184,3 @@ export function parseVideoPlanResponse(value: string): {
     return null;
   }
 }
-

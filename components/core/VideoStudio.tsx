@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadCloudVideoProjects,
+  loadCloudCreativeVersions,
   resolveCloudMediaUrl,
+  saveCloudCreativeVersion,
   saveCloudDraft,
   saveCloudVideoProject,
   uploadCloudMedia,
@@ -18,6 +20,7 @@ import {
 } from "@/features/core/local-os";
 import {
   VIDEO_VOICES,
+  type CreativeVersion,
   type VideoMusicMode,
   type VideoProject,
   type VideoVoice,
@@ -33,12 +36,29 @@ type VideoPlanPayload = {
   error?: string;
 };
 
+function composeRenderPrompt(project: VideoProject): string {
+  const scenePlan = project.scenes
+    .map(
+      (scene) =>
+        `Scene ${scene.order} (${scene.seconds}s): ${scene.visual}. Narration: ${scene.narration || "none"}. On-screen text: ${scene.onScreenText || "none"}.`,
+    )
+    .join("\n");
+  return [
+    project.prompt,
+    "Follow this approved scene plan exactly:",
+    scenePlan,
+    `Spoken script: ${project.script}`,
+    `Post caption context: ${project.caption}`,
+  ].join("\n");
+}
+
 export default function VideoStudio({
   workspace,
 }: {
   workspace: WorkspaceProfile;
 }) {
   const [projects, setProjects] = useState<VideoProject[]>([]);
+  const [versions, setVersions] = useState<CreativeVersion[]>([]);
   const [channel, setChannel] =
     useState<VideoProject["channel"]>("TikTok");
   const [objective, setObjective] = useState("Drive engagement");
@@ -53,6 +73,10 @@ export default function VideoStudio({
   const [complianceNote, setComplianceNote] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [voiceoverUrl, setVoiceoverUrl] = useState("");
+  const [voiceInstructions, setVoiceInstructions] = useState(
+    "Natural, energetic, confident, and conversational. Moderate pace with a strong opening hook.",
+  );
+  const [revisionRequest, setRevisionRequest] = useState("");
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -69,6 +93,7 @@ export default function VideoStudio({
             items[0];
           if (resumed) {
             setProject(resumed);
+            setVoice(resumed.voice);
             if (resumed.status === "GENERATING") {
               setNotice(
                 `Resumed video render at ${resumed.providerProgress || 0}%. PostMotive will keep checking automatically.`,
@@ -94,6 +119,32 @@ export default function VideoStudio({
       .catch(() => undefined);
   }, [project?.videoStoragePath]);
 
+  useEffect(() => {
+    if (!project?.voiceoverStoragePath) return;
+    void resolveCloudMediaUrl(project.voiceoverStoragePath)
+      .then(setVoiceoverUrl)
+      .catch(() => undefined);
+  }, [project?.voiceoverStoragePath]);
+
+  useEffect(() => {
+    const projectId = project?.id;
+    if (!projectId) return;
+    const frame = requestAnimationFrame(() => {
+      void loadCloudCreativeVersions(projectId)
+        .then((items) => {
+          setVersions(items);
+          const latestVoice = items.find(
+            (item) => item.assetKind === "VOICEOVER",
+          );
+          if (latestVoice?.voiceInstructions) {
+            setVoiceInstructions(latestVoice.voiceInstructions);
+          }
+        })
+        .catch(() => setVersions([]));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [project?.id]);
+
   const totalSceneSeconds = useMemo(
     () =>
       project?.scenes.reduce((sum, scene) => sum + scene.seconds, 0) || 0,
@@ -109,6 +160,21 @@ export default function VideoStudio({
         : [next, ...current];
     });
     await saveCloudVideoProject(next);
+  };
+
+  const nextVersionNumber = (
+    assetKind: CreativeVersion["assetKind"],
+  ): number =>
+    Math.max(
+      0,
+      ...versions
+        .filter((item) => item.assetKind === assetKind)
+        .map((item) => item.versionNumber),
+    ) + 1;
+
+  const addVersion = async (version: CreativeVersion) => {
+    await saveCloudCreativeVersion(version);
+    setVersions((current) => [version, ...current]);
   };
 
   const generatePlan = async () => {
@@ -186,7 +252,7 @@ export default function VideoStudio({
         body: JSON.stringify({
           text: project.script,
           voice: project.voice,
-          instructions: `Use a ${workspace.voice || "clear, confident"} brand voice. Do not imitate a real person.`,
+          instructions: `${voiceInstructions} Use a ${workspace.voice || "clear, confident"} brand voice. Do not imitate a real person.`,
         }),
       });
       if (!response.ok) {
@@ -208,13 +274,25 @@ export default function VideoStudio({
       ]);
       if (voiceoverUrl.startsWith("blob:")) URL.revokeObjectURL(voiceoverUrl);
       setVoiceoverUrl(URL.createObjectURL(blob));
+      const voiceVersion: CreativeVersion = {
+        id: crypto.randomUUID(),
+        videoProjectId: project.id,
+        assetKind: "VOICEOVER",
+        versionNumber: nextVersionNumber("VOICEOVER"),
+        storagePath: asset.storagePath || "",
+        prompt: project.script,
+        voice: project.voice,
+        voiceInstructions,
+        createdAt: new Date().toISOString(),
+      };
+      await addVersion(voiceVersion);
       await updateProject({
         ...project,
         voiceoverStoragePath: asset.storagePath,
         updatedAt: new Date().toISOString(),
       });
       setNotice(
-        "Voiceover created and saved. The published video must disclose that the voice is AI-generated.",
+        `Voiceover version ${voiceVersion.versionNumber} created and saved. The published video must disclose that the voice is AI-generated.`,
       );
     } catch (caught) {
       setError(
@@ -234,7 +312,7 @@ export default function VideoStudio({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: project.prompt,
+          prompt: composeRenderPrompt(project),
           seconds: project.durationSeconds,
         }),
       });
@@ -256,13 +334,82 @@ export default function VideoStudio({
         updatedAt: new Date().toISOString(),
       });
       setNotice(
-        "Video generation started. It can take several minutes; use Check render status.",
+        "Video generation started. It may take 5–10 minutes. You can leave this page and return while it continues processing.",
       );
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
           : "Video generation could not start.",
+      );
+    } finally {
+      setWorking("");
+    }
+  };
+
+  const startRevision = async () => {
+    if (!project?.providerJobId || !project.videoStoragePath) return;
+    if (!revisionRequest.trim()) {
+      setError("Describe the video change you want first.");
+      return;
+    }
+    setWorking("revision");
+    setError("");
+    try {
+      if (
+        !versions.some(
+          (item) =>
+            item.assetKind === "VIDEO" &&
+            item.storagePath === project.videoStoragePath,
+        )
+      ) {
+        await addVersion({
+          id: crypto.randomUUID(),
+          videoProjectId: project.id,
+          assetKind: "VIDEO",
+          versionNumber: nextVersionNumber("VIDEO"),
+          providerJobId: project.providerJobId,
+          storagePath: project.videoStoragePath,
+          prompt: project.prompt,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      const response = await fetch("/api/ai/video-render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceVideoId: project.providerJobId,
+          prompt: [
+            `Requested revision: ${revisionRequest.trim()}`,
+            composeRenderPrompt(project),
+          ].join("\n"),
+          seconds: project.durationSeconds,
+        }),
+      });
+      const payload = (await response.json()) as {
+        id?: string;
+        progress?: number;
+        error?: string;
+      };
+      if (!response.ok || !payload.id) {
+        throw new Error(payload.error || "Video revision could not start.");
+      }
+      await updateProject({
+        ...project,
+        providerJobId: payload.id,
+        providerProgress: payload.progress || 0,
+        status: "GENERATING",
+        failureReason: undefined,
+        updatedAt: new Date().toISOString(),
+      });
+      setNotice(
+        "Video revision started. The current version remains saved while the new version renders.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Video revision could not start.",
       );
     } finally {
       setWorking("");
@@ -326,6 +473,17 @@ export default function VideoStudio({
       ]);
       if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(URL.createObjectURL(blob));
+      const videoVersion: CreativeVersion = {
+        id: crypto.randomUUID(),
+        videoProjectId: project.id,
+        assetKind: "VIDEO",
+        versionNumber: nextVersionNumber("VIDEO"),
+        providerJobId: project.providerJobId,
+        storagePath: asset.storagePath || "",
+        prompt: revisionRequest.trim() || project.prompt,
+        createdAt: new Date().toISOString(),
+      };
+      await addVersion(videoVersion);
       await updateProject({
         ...project,
         providerProgress: 100,
@@ -333,13 +491,75 @@ export default function VideoStudio({
         status: "READY",
         updatedAt: new Date().toISOString(),
       });
-      setNotice("Video is ready and saved in PostMotive.");
+      setRevisionRequest("");
+      setNotice(
+        `Video version ${videoVersion.versionNumber} is ready and saved in PostMotive.`,
+      );
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Unable to finish the video.",
       );
     } finally {
       if (!silent) setWorking("");
+    }
+  };
+
+  const savePlanEdits = async () => {
+    if (!project) return;
+    setWorking("save");
+    setError("");
+    try {
+      await updateProject({
+        ...project,
+        updatedAt: new Date().toISOString(),
+      });
+      setNotice("Script, caption, scenes, and voice settings saved.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to save edits.",
+      );
+    } finally {
+      setWorking("");
+    }
+  };
+
+  const restoreVersion = async (version: CreativeVersion) => {
+    if (!project) return;
+    setWorking("restore");
+    setError("");
+    try {
+      const url = await resolveCloudMediaUrl(version.storagePath);
+      if (version.assetKind === "VIDEO") {
+        setPreviewUrl(url);
+        await updateProject({
+          ...project,
+          providerJobId: version.providerJobId || project.providerJobId,
+          videoStoragePath: version.storagePath,
+          status: "READY",
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        setVoiceoverUrl(url);
+        setVoice(version.voice || project.voice);
+        setVoiceInstructions(
+          version.voiceInstructions || voiceInstructions,
+        );
+        await updateProject({
+          ...project,
+          voice: version.voice || project.voice,
+          voiceoverStoragePath: version.storagePath,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      setNotice(
+        `${version.assetKind === "VIDEO" ? "Video" : "Voiceover"} version ${version.versionNumber} restored.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to restore version.",
+      );
+    } finally {
+      setWorking("");
     }
   };
 
@@ -545,6 +765,10 @@ export default function VideoStudio({
 
       <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
         <h2 className="text-xl font-bold">Video production</h2>
+        <p className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm font-medium text-amber-100">
+          Video generation may take 5–10 minutes. You can leave this page and
+          return while it continues processing.
+        </p>
         {!project ? (
           <div className="mt-6">
             <p className="text-zinc-400">
@@ -560,7 +784,11 @@ export default function VideoStudio({
                     const saved = projects.find(
                       (item) => item.id === event.target.value,
                     );
-                    if (saved) setProject(saved);
+                    if (saved) {
+                      setProject(saved);
+                      setVoice(saved.voice);
+                      if (!saved.voiceoverStoragePath) setVoiceoverUrl("");
+                    }
                   }}
                   className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
                 >
@@ -593,30 +821,84 @@ export default function VideoStudio({
                 playsInline
                 className="mx-auto max-h-[520px] rounded-xl bg-black"
               />
-            ) : (
-              <div className="rounded-xl border border-dashed border-white/15 bg-black/20 p-5">
-                <p className="text-sm font-semibold">Scene plan</p>
-                <div className="mt-3 space-y-3">
-                  {project.scenes.map((scene) => (
-                    <div
-                      key={scene.order}
-                      className="rounded-lg border border-white/10 p-3 text-sm"
-                    >
-                      <p className="font-medium">
-                        Scene {scene.order} · {scene.seconds}s
-                      </p>
-                      <p className="mt-1 text-zinc-300">{scene.visual}</p>
-                      <p className="mt-1 text-zinc-400">
-                        On screen: {scene.onScreenText || "None"}
-                      </p>
-                    </div>
-                  ))}
+            ) : null}
+            <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold">Editable scene plan</p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Adjust what viewers see, hear, and read in every scene.
+                  </p>
                 </div>
-                <p className="mt-3 text-xs text-zinc-500">
-                  Planned time: {totalSceneSeconds}s
+                <p className="text-xs text-zinc-400">
+                  Planned time: {totalSceneSeconds}s /{" "}
+                  {project.durationSeconds}s
                 </p>
               </div>
-            )}
+              <div className="mt-4 space-y-4">
+                {project.scenes.map((scene, sceneIndex) => (
+                  <div
+                    key={scene.order}
+                    className="rounded-lg border border-white/10 p-4"
+                  >
+                    <p className="text-sm font-semibold">
+                      Scene {scene.order} · {scene.seconds}s
+                    </p>
+                    <label className="mt-3 block text-xs text-zinc-300">
+                      Visual direction
+                      <textarea
+                        value={scene.visual}
+                        onChange={(event) =>
+                          setProject({
+                            ...project,
+                            scenes: project.scenes.map((item, index) =>
+                              index === sceneIndex
+                                ? { ...item, visual: event.target.value }
+                                : item,
+                            ),
+                          })
+                        }
+                        className="mt-1 min-h-20 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+                      />
+                    </label>
+                    <label className="mt-3 block text-xs text-zinc-300">
+                      Narration for this scene
+                      <textarea
+                        value={scene.narration}
+                        onChange={(event) =>
+                          setProject({
+                            ...project,
+                            scenes: project.scenes.map((item, index) =>
+                              index === sceneIndex
+                                ? { ...item, narration: event.target.value }
+                                : item,
+                            ),
+                          })
+                        }
+                        className="mt-1 min-h-16 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+                      />
+                    </label>
+                    <label className="mt-3 block text-xs text-zinc-300">
+                      On-screen text
+                      <input
+                        value={scene.onScreenText}
+                        onChange={(event) =>
+                          setProject({
+                            ...project,
+                            scenes: project.scenes.map((item, index) =>
+                              index === sceneIndex
+                                ? { ...item, onScreenText: event.target.value }
+                                : item,
+                            ),
+                          })
+                        }
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
             <label className="block text-sm text-zinc-300">
               Voiceover script
               <textarea
@@ -627,10 +909,58 @@ export default function VideoStudio({
                 className="mt-1 min-h-28 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
               />
             </label>
+            <label className="block text-sm text-zinc-300">
+              Post caption
+              <textarea
+                value={project.caption}
+                onChange={(event) =>
+                  setProject({ ...project, caption: event.target.value })
+                }
+                className="mt-1 min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm text-zinc-300">
+                Production voice
+                <select
+                  value={project.voice}
+                  onChange={(event) => {
+                    const nextVoice = event.target.value as VideoVoice;
+                    setVoice(nextVoice);
+                    setProject({ ...project, voice: nextVoice });
+                  }}
+                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                >
+                  {VIDEO_VOICES.map((item) => (
+                    <option key={item} value={item}>
+                      {item[0].toUpperCase() + item.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm text-zinc-300">
+                Voice direction
+                <textarea
+                  value={voiceInstructions}
+                  onChange={(event) =>
+                    setVoiceInstructions(event.target.value)
+                  }
+                  placeholder="Example: Warm and trustworthy, medium pace, pause after the opening hook"
+                  className="mt-1 min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                />
+              </label>
+            </div>
             {voiceoverUrl ? (
               <audio src={voiceoverUrl} controls className="w-full" />
             ) : null}
             <div className="flex flex-wrap gap-3">
+              <button
+                disabled={Boolean(working)}
+                onClick={() => void savePlanEdits()}
+                className="rounded-lg border border-emerald-500/40 px-4 py-2 text-emerald-200 disabled:opacity-60"
+              >
+                {working === "save" ? "Saving edits…" : "Save plan edits"}
+              </button>
               <button
                 disabled={Boolean(working)}
                 onClick={() => void generateVoiceover()}
@@ -670,6 +1000,76 @@ export default function VideoStudio({
                 </button>
               )}
             </div>
+            {project.videoStoragePath &&
+            project.status !== "GENERATING" ? (
+              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                <p className="text-sm font-semibold">Revise this video</p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Describe the exact change you want. The current version will
+                  stay saved for comparison.
+                </p>
+                <textarea
+                  value={revisionRequest}
+                  onChange={(event) =>
+                    setRevisionRequest(event.target.value)
+                  }
+                  placeholder="Example: Show the product in the first two seconds, brighten the trail scene, and make the final logo shot longer"
+                  className="mt-3 min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                />
+                <button
+                  disabled={Boolean(working) || !revisionRequest.trim()}
+                  onClick={() => void startRevision()}
+                  className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:opacity-60"
+                >
+                  {working === "revision"
+                    ? "Starting revision…"
+                    : "Generate revised video"}
+                </button>
+              </div>
+            ) : null}
+            {versions.length ? (
+              <div className="rounded-xl border border-white/10 p-4">
+                <div>
+                  <p className="text-sm font-semibold">Version history</p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Compare earlier video and voiceover versions, then restore
+                    the one the client approves.
+                  </p>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {versions.map((version) => (
+                    <div
+                      key={version.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">
+                          {version.assetKind === "VIDEO"
+                            ? "Video"
+                            : "Voiceover"}{" "}
+                          version {version.versionNumber}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {new Date(version.createdAt).toLocaleString()}
+                          {version.voice
+                            ? ` · ${version.voice[0].toUpperCase() + version.voice.slice(1)}`
+                            : ""}
+                        </p>
+                      </div>
+                      <button
+                        disabled={Boolean(working)}
+                        onClick={() => void restoreVersion(version)}
+                        className="rounded-lg border border-white/15 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-60"
+                      >
+                        {working === "restore"
+                          ? "Restoring…"
+                          : "Preview and restore"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-100">
               AI-generated voice disclosure is required. Copyrighted music,
               celebrities, real-person likenesses, and third-party watermarks

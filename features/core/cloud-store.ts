@@ -15,7 +15,10 @@ import {
   type ScheduledPost,
   type WorkspaceProfile,
 } from "@/features/core/local-os";
-import type { VideoProject } from "@/features/core/video-project";
+import type {
+  CreativeVersion,
+  VideoProject,
+} from "@/features/core/video-project";
 
 type WorkspaceRow = {
   id: string;
@@ -574,6 +577,57 @@ export async function saveCloudVideoProject(
     status: project.status,
     failure_reason: project.failureReason || null,
   });
+  if (error) throw new Error(error.message);
+}
+
+export async function loadCloudCreativeVersions(
+  videoProjectId: string,
+): Promise<CreativeVersion[]> {
+  if (isDemoMode()) return [];
+  const workspace = await getWorkspaceRow();
+  if (!workspace) return [];
+  const { data, error } = await createClient()
+    .from("video_project_versions")
+    .select("id,video_project_id,asset_kind,version_number,provider_job_id,storage_path,prompt,voice,voice_instructions,created_at")
+    .eq("workspace_id", workspace.id)
+    .eq("video_project_id", videoProjectId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map((row) => ({
+    id: row.id,
+    videoProjectId: row.video_project_id,
+    assetKind: row.asset_kind === "VOICEOVER" ? "VOICEOVER" : "VIDEO",
+    versionNumber: Number(row.version_number),
+    providerJobId: row.provider_job_id || undefined,
+    storagePath: row.storage_path,
+    prompt: row.prompt,
+    voice: row.voice || undefined,
+    voiceInstructions: row.voice_instructions || undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function saveCloudCreativeVersion(
+  version: CreativeVersion,
+): Promise<void> {
+  if (isDemoMode()) return;
+  const workspace = await requireWorkspace();
+  const userId = await currentUserId();
+  const { error } = await createClient()
+    .from("video_project_versions")
+    .insert({
+      id: version.id,
+      workspace_id: workspace.id,
+      video_project_id: version.videoProjectId,
+      created_by: userId,
+      asset_kind: version.assetKind,
+      version_number: version.versionNumber,
+      provider_job_id: version.providerJobId || null,
+      storage_path: version.storagePath,
+      prompt: version.prompt,
+      voice: version.voice || null,
+      voice_instructions: version.voiceInstructions || null,
+    });
   if (error) throw new Error(error.message);
 }
 
