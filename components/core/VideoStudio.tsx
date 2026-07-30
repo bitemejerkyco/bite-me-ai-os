@@ -77,10 +77,12 @@ export default function VideoStudio({
     "Natural, energetic, confident, and conversational. Moderate pace with a strong opening hook.",
   );
   const [revisionRequest, setRevisionRequest] = useState("");
+  const [providerStatus, setProviderStatus] = useState("");
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const checkRenderRef = useRef<() => Promise<void>>(async () => undefined);
+  const renderCheckInFlightRef = useRef(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -333,6 +335,7 @@ export default function VideoStudio({
         failureReason: undefined,
         updatedAt: new Date().toISOString(),
       });
+      setProviderStatus(payload.status || "queued");
       setNotice(
         "Video generation started. It may take 5–10 minutes. You can leave this page and return while it continues processing.",
       );
@@ -347,10 +350,22 @@ export default function VideoStudio({
     }
   };
 
-  const startRevision = async () => {
-    if (!project?.providerJobId || !project.videoStoragePath) return;
+  const startRevision = async (mode: "edit" | "fresh" = "edit") => {
+    if (!project?.videoStoragePath) return;
     if (!revisionRequest.trim()) {
       setError("Describe the video change you want first.");
+      return;
+    }
+    const sourceVersion = versions.find(
+      (item) =>
+        item.assetKind === "VIDEO" &&
+        item.storagePath === project.videoStoragePath,
+    );
+    const sourceVideoId = sourceVersion?.providerJobId || project.providerJobId;
+    if (mode === "edit" && !sourceVideoId) {
+      setError(
+        "The source video ID is unavailable. Use Generate fresh revision instead.",
+      );
       return;
     }
     setWorking("revision");
@@ -378,7 +393,7 @@ export default function VideoStudio({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceVideoId: project.providerJobId,
+          sourceVideoId: mode === "edit" ? sourceVideoId : undefined,
           prompt: [
             `Requested revision: ${revisionRequest.trim()}`,
             composeRenderPrompt(project),
@@ -388,6 +403,7 @@ export default function VideoStudio({
       });
       const payload = (await response.json()) as {
         id?: string;
+        status?: string;
         progress?: number;
         error?: string;
       };
@@ -402,8 +418,11 @@ export default function VideoStudio({
         failureReason: undefined,
         updatedAt: new Date().toISOString(),
       });
+      setProviderStatus(payload.status || "queued");
       setNotice(
-        "Video revision started. The current version remains saved while the new version renders.",
+        mode === "edit"
+          ? "Targeted video revision is queued at the provider. The current version remains saved."
+          : "Fresh revised video is queued at the provider. The current version remains saved.",
       );
     } catch (caught) {
       setError(
@@ -418,6 +437,13 @@ export default function VideoStudio({
 
   const checkRender = async (silent = false) => {
     if (!project?.providerJobId) return;
+    if (renderCheckInFlightRef.current) {
+      if (!silent) {
+        setNotice("A render status check is already in progress.");
+      }
+      return;
+    }
+    renderCheckInFlightRef.current = true;
     if (!silent) setWorking("status");
     setError("");
     try {
@@ -431,6 +457,18 @@ export default function VideoStudio({
         error?: { message?: string } | string;
       };
       if (!response.ok) throw new Error("Unable to check video status.");
+      const reportedProgress = Number(payload.progress);
+      const confirmedProgress = Number.isFinite(reportedProgress)
+        ? Math.max(
+            project.providerProgress || 0,
+            Math.min(100, Math.max(0, reportedProgress)),
+          )
+        : project.providerProgress || 0;
+      setProviderStatus(
+        confirmedProgress > 0 && payload.status === "queued"
+          ? "in_progress"
+          : payload.status || providerStatus || "queued",
+      );
       if (payload.status === "failed") {
         const failure =
           typeof payload.error === "string"
@@ -447,11 +485,15 @@ export default function VideoStudio({
       if (payload.status !== "completed") {
         await updateProject({
           ...project,
-          providerProgress: payload.progress || 0,
+          providerProgress: confirmedProgress,
           status: "GENERATING",
           updatedAt: new Date().toISOString(),
         });
-        setNotice(`Video is ${payload.progress || 0}% complete.`);
+        setNotice(
+          payload.status === "queued" && confirmedProgress === 0
+            ? "Queued at OpenAI. 0% is normal while the job waits for rendering capacity."
+            : `Video is processing at ${confirmedProgress}% complete.`,
+        );
         return;
       }
       const mediaResponse = await fetch(
@@ -492,6 +534,7 @@ export default function VideoStudio({
         updatedAt: new Date().toISOString(),
       });
       setRevisionRequest("");
+      setProviderStatus("completed");
       setNotice(
         `Video version ${videoVersion.versionNumber} is ready and saved in PostMotive.`,
       );
@@ -500,7 +543,49 @@ export default function VideoStudio({
         caught instanceof Error ? caught.message : "Unable to finish the video.",
       );
     } finally {
+      renderCheckInFlightRef.current = false;
       if (!silent) setWorking("");
+    }
+  };
+
+  const cancelRender = async () => {
+    if (!project?.providerJobId) return;
+    setWorking("cancel");
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/ai/video-render?id=${encodeURIComponent(project.providerJobId)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(payload?.error || "Unable to cancel this render.");
+      }
+      const sourceVersion = versions.find(
+        (item) =>
+          item.assetKind === "VIDEO" &&
+          item.storagePath === project.videoStoragePath,
+      );
+      await updateProject({
+        ...project,
+        providerJobId: sourceVersion?.providerJobId,
+        providerProgress: undefined,
+        status: project.videoStoragePath ? "READY" : "DRAFT",
+        failureReason: undefined,
+        updatedAt: new Date().toISOString(),
+      });
+      setProviderStatus("");
+      setNotice(
+        "Queued render canceled. Your previous video is still safe and ready.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to cancel this render.",
+      );
+    } finally {
+      setWorking("");
     }
   };
 
@@ -810,9 +895,47 @@ export default function VideoStudio({
                 {project.channel} · 9:16 · {project.durationSeconds}s ·{" "}
                 {project.status}
                 {project.status === "GENERATING"
-                  ? ` · ${project.providerProgress || 0}%`
+                  ? providerStatus === "queued"
+                    ? " · Queued at provider"
+                    : ` · Processing ${project.providerProgress || 0}%`
                   : ""}
               </p>
+              {project.status === "GENERATING" ? (
+                <div className="mt-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium text-blue-100">
+                      {(project.providerProgress || 0) > 0
+                        ? "Rendering video"
+                        : "Queued for rendering"}
+                    </span>
+                    <span className="font-semibold text-blue-200">
+                      {Math.round(project.providerProgress || 0)}%
+                    </span>
+                  </div>
+                  <div
+                    className="mt-3 h-3 overflow-hidden rounded-full bg-zinc-800"
+                    role="progressbar"
+                    aria-label="Video rendering progress"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(project.providerProgress || 0)}
+                  >
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-[width] duration-700 ease-out"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.max(0, project.providerProgress || 0),
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-zinc-400">
+                    The confirmed progress will only move forward. You can
+                    leave this page and return while rendering continues.
+                  </p>
+                </div>
+              ) : null}
             </div>
             {previewUrl ? (
               <video
@@ -971,15 +1094,26 @@ export default function VideoStudio({
                   : "Generate voiceover"}
               </button>
               {project.status === "GENERATING" ? (
-                <button
-                  disabled={Boolean(working)}
-                  onClick={() => void checkRender(false)}
-                  className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-60"
-                >
-                  {working === "status"
-                    ? "Checking…"
-                    : "Check render status"}
-                </button>
+                <>
+                  <button
+                    disabled={Boolean(working)}
+                    onClick={() => void checkRender(false)}
+                    className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-60"
+                  >
+                    {working === "status"
+                      ? "Checking…"
+                      : "Check render status"}
+                  </button>
+                  <button
+                    disabled={Boolean(working)}
+                    onClick={() => void cancelRender()}
+                    className="rounded-lg border border-red-500/40 px-4 py-2 text-red-200 disabled:opacity-60"
+                  >
+                    {working === "cancel"
+                      ? "Canceling…"
+                      : "Cancel queued render"}
+                  </button>
+                </>
               ) : !project.videoStoragePath ? (
                 <button
                   disabled={Boolean(working)}
@@ -1016,15 +1150,28 @@ export default function VideoStudio({
                   placeholder="Example: Show the product in the first two seconds, brighten the trail scene, and make the final logo shot longer"
                   className="mt-3 min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
                 />
-                <button
-                  disabled={Boolean(working) || !revisionRequest.trim()}
-                  onClick={() => void startRevision()}
-                  className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:opacity-60"
-                >
-                  {working === "revision"
-                    ? "Starting revision…"
-                    : "Generate revised video"}
-                </button>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button
+                    disabled={Boolean(working) || !revisionRequest.trim()}
+                    onClick={() => void startRevision("edit")}
+                    className="rounded-lg bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:opacity-60"
+                  >
+                    {working === "revision"
+                      ? "Starting revision…"
+                      : "Generate targeted revision"}
+                  </button>
+                  <button
+                    disabled={Boolean(working) || !revisionRequest.trim()}
+                    onClick={() => void startRevision("fresh")}
+                    className="rounded-lg border border-blue-500/40 px-4 py-2 text-blue-100 hover:bg-blue-500/10 disabled:opacity-60"
+                  >
+                    Generate fresh revision
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Use a fresh revision if a targeted edit remains queued. Your
+                  approved original stays in Version History.
+                </p>
               </div>
             ) : null}
             {versions.length ? (

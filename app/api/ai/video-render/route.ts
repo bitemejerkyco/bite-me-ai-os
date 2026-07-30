@@ -92,3 +92,26 @@ export async function GET(request: Request) {
     status: upstream.status,
   });
 }
+
+export async function DELETE(request: Request) {
+  if (!(await requireUser())) {
+    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  }
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "OpenAI is not configured." }, { status: 503 });
+  }
+  const videoId = new URL(request.url).searchParams.get("id") || "";
+  if (!VIDEO_ID_PATTERN.test(videoId)) {
+    return NextResponse.json({ error: "Invalid video ID." }, { status: 400 });
+  }
+  const upstream = await fetch(`https://api.openai.com/v1/videos/${videoId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: "no-store",
+  });
+  const payload = await upstream.json().catch(() => null);
+  return NextResponse.json(payload || { deleted: upstream.ok }, {
+    status: upstream.status,
+  });
+}
