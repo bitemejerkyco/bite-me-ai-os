@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   cancelCloudScheduledPost,
   loadCloudDrafts,
@@ -96,6 +96,7 @@ export default function ContentCalendar() {
   const [performance, setPerformance] = useState<PerformanceSnapshot[]>([]);
   const [knowledge, setKnowledge] = useState<ContentKnowledgeItem[]>([]);
   const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
+  const [selectedDay, setSelectedDay] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState("");
   const [contentDraftId, setContentDraftId] = useState<string | undefined>();
   const [videoProjectId, setVideoProjectId] = useState<string | undefined>();
@@ -110,6 +111,7 @@ export default function ContentCalendar() {
   const [time, setTime] = useState("09:00");
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
+  const detailsRef = useRef<HTMLElement | null>(null);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
   useEffect(() => {
@@ -218,6 +220,20 @@ export default function ContentCalendar() {
     selectedPost && selectedSnapshot
       ? calculateContentScore(selectedPost, selectedSnapshot)
       : null;
+  const selectedDayPosts = selectedDay
+    ? postsByDate.get(selectedDay) || []
+    : [];
+
+  const openPost = (post: ScheduledPost) => {
+    setSelectedPost(post);
+    setSelectedDay("");
+    window.setTimeout(() => {
+      detailsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+  };
 
   const submit = async (postNow: boolean) => {
     if (!title.trim() || !content.trim()) {
@@ -574,12 +590,12 @@ export default function ContentCalendar() {
           <div className="mt-4 space-y-3">
             {posts.filter((post) => post.status === "PENDING_APPROVAL").map((post) => (
               <article key={post.id} className="flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-white/70 p-4 md:flex-row md:items-center md:justify-between">
-                <button onClick={() => setSelectedPost(post)} className="text-left">
+                <button onClick={() => openPost(post)} className="text-left">
                   <p className="font-semibold">{post.title}</p>
                   <p className="mt-1 text-sm text-slate-500">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
                 </button>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelectedPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View ad</button>
+                  <button onClick={() => openPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View ad</button>
                   <button onClick={() => void approve(post)} className="rounded-xl border border-emerald-500/40 px-3 py-2 text-sm text-emerald-700">Approve & schedule</button>
                 </div>
               </article>
@@ -688,13 +704,22 @@ export default function ContentCalendar() {
                       <button
                         key={post.id}
                         title={`${post.entryType}: ${post.title}`}
-                        onClick={() => setSelectedPost(post)}
+                        onClick={() => openPost(post)}
                         className={`block w-full truncate rounded px-1.5 py-1 text-left text-[10px] ring-offset-white hover:ring-1 hover:ring-violet-300 ${statusStyle[post.status]} ${post.entryType === "AD" ? "border border-amber-400/40" : ""}`}
                       >
                         {post.entryType} · {post.channel}: {post.title}
                       </button>
                     ))}
-                    {dayPosts.length > 3 ? <p className="text-[10px] text-slate-400">+{dayPosts.length - 3} more</p> : null}
+                    {dayPosts.length > 3 ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDay(key)}
+                        className="w-full rounded px-1.5 py-1 text-left text-[10px] font-semibold text-violet-700 hover:bg-violet-100"
+                        aria-label={`Show all ${dayPosts.length} scheduled items for ${day.toLocaleDateString()}`}
+                      >
+                        +{dayPosts.length - 3} more
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -703,8 +728,75 @@ export default function ContentCalendar() {
         </section>
       </div>
 
+      {selectedDay ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="day-agenda-title"
+          onClick={() => setSelectedDay("")}
+        >
+          <section
+            className="max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-white/80 bg-white p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">
+                  Scheduled content
+                </p>
+                <h2 id="day-agenda-title" className="mt-1 text-2xl font-bold">
+                  {new Date(`${selectedDay}T12:00:00`).toLocaleDateString(
+                    undefined,
+                    {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    },
+                  )}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDay("")}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-5 space-y-3">
+              {selectedDayPosts.map((post) => (
+                <button
+                  type="button"
+                  key={post.id}
+                  onClick={() => openPost(post)}
+                  className="flex w-full items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-left transition hover:border-violet-300 hover:bg-violet-50"
+                >
+                  <span>
+                    <span className="block font-semibold">{post.title}</span>
+                    <span className="mt-1 block text-sm text-slate-500">
+                      {post.channel} ·{" "}
+                      {new Date(post.scheduledFor).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-1 text-xs ${statusStyle[post.status]}`}
+                  >
+                    {post.status.replaceAll("_", " ")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {selectedPost ? (
-        <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
+        <section ref={detailsRef} className="scroll-mt-6 rounded-3xl border border-slate-200/80 bg-white/80 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -841,7 +933,7 @@ export default function ContentCalendar() {
                   <p className="text-3xl font-black">{score.score}</p>
                   <p className="text-xs text-slate-500">Grade {score.grade}</p>
                 </div>
-                <button onClick={() => setSelectedPost(post)} className="text-left">
+                <button onClick={() => openPost(post)} className="text-left">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{post.title}</p>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{post.entryType}</span>
@@ -876,7 +968,7 @@ export default function ContentCalendar() {
                 <p className="mt-1 text-sm text-slate-500">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setSelectedPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View details</button>
+                <button onClick={() => openPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View details</button>
                 {post.channel === "TikTok" && Boolean(post.mediaStoragePath) && ["SCHEDULED", "FAILED"].includes(post.status) ? (
                   <button disabled={working} onClick={() => void sendToTikTok(post)} className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                     Send now
