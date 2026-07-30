@@ -10,6 +10,7 @@ import {
   type ContentDraft,
   type ContentFeedback,
   type ContentKnowledgeItem,
+  type LibraryFolder,
   type MediaAsset,
   type PerformanceSnapshot,
   type ScheduledPost,
@@ -120,7 +121,7 @@ export async function loadCloudDrafts(): Promise<ContentDraft[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("content_drafts")
-    .select("id,title,channel,objective,copy,compliance_note,status,created_at,entry_type,generation_run_id,original_copy,model,prompt_version,content_format,video_project_id,media_storage_path")
+    .select("id,title,channel,objective,copy,compliance_note,status,created_at,entry_type,generation_run_id,original_copy,model,prompt_version,content_format,video_project_id,media_storage_path,folder_id")
     .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
@@ -142,6 +143,7 @@ export async function loadCloudDrafts(): Promise<ContentDraft[]> {
       row.content_format === "VERTICAL_VIDEO" ? "VERTICAL_VIDEO" : "STATIC",
     videoProjectId: row.video_project_id || undefined,
     mediaStoragePath: row.media_storage_path || undefined,
+    folderId: row.folder_id || undefined,
   }));
 }
 
@@ -174,6 +176,7 @@ export async function saveCloudDraft(draft: ContentDraft): Promise<void> {
     content_format: draft.contentFormat || "STATIC",
     video_project_id: draft.videoProjectId || null,
     media_storage_path: draft.mediaStoragePath || null,
+    folder_id: draft.folderId || null,
   });
   if (error) throw new Error(error.message);
 }
@@ -263,6 +266,7 @@ type MediaRow = {
   size_bytes: number;
   tags: string[];
   created_at: string;
+  folder_id: string | null;
 };
 
 function mediaFromRow(row: MediaRow): MediaAsset {
@@ -274,6 +278,7 @@ function mediaFromRow(row: MediaRow): MediaAsset {
     tags: row.tags || [],
     createdAt: row.created_at,
     storagePath: row.storage_path,
+    folderId: row.folder_id || undefined,
   };
 }
 
@@ -286,7 +291,7 @@ export async function loadCloudMedia(): Promise<MediaAsset[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("media_assets")
-    .select("id,storage_path,file_name,mime_type,size_bytes,tags,created_at")
+    .select("id,storage_path,file_name,mime_type,size_bytes,tags,created_at,folder_id")
     .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
@@ -296,6 +301,7 @@ export async function loadCloudMedia(): Promise<MediaAsset[]> {
 export async function uploadCloudMedia(
   file: File,
   tags: string[],
+  folderId?: string,
 ): Promise<MediaAsset> {
   if (isDemoMode()) {
     const asset: MediaAsset = {
@@ -305,6 +311,7 @@ export async function uploadCloudMedia(
       size: file.size,
       tags: [...new Set([...tags, "demo"])],
       createdAt: new Date().toISOString(),
+      folderId,
     };
     const media = loadLocal<MediaAsset[]>(STORAGE_KEYS.demoMedia, []);
     saveLocal(STORAGE_KEYS.demoMedia, [asset, ...media]);
@@ -332,8 +339,9 @@ export async function uploadCloudMedia(
       mime_type: file.type || null,
       size_bytes: file.size,
       tags,
+      folder_id: folderId || null,
     })
-    .select("id,storage_path,file_name,mime_type,size_bytes,tags,created_at")
+    .select("id,storage_path,file_name,mime_type,size_bytes,tags,created_at,folder_id")
     .single();
 
   if (error) {
@@ -341,6 +349,136 @@ export async function uploadCloudMedia(
     throw new Error(error.message);
   }
   return mediaFromRow(data as MediaRow);
+}
+
+export async function loadCloudFolders(
+  libraryType: LibraryFolder["libraryType"],
+): Promise<LibraryFolder[]> {
+  if (isDemoMode()) {
+    return loadLocal<LibraryFolder[]>(STORAGE_KEYS.demoFolders, []).filter(
+      (folder) => folder.libraryType === libraryType,
+    );
+  }
+  const workspace = await getWorkspaceRow();
+  if (!workspace) return [];
+  const { data, error } = await createClient()
+    .from("library_folders")
+    .select("id,library_type,name,parent_id,created_at")
+    .eq("workspace_id", workspace.id)
+    .eq("library_type", libraryType)
+    .order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []).map((row) => ({
+    id: row.id,
+    libraryType: row.library_type as LibraryFolder["libraryType"],
+    name: row.name,
+    parentId: row.parent_id || undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function createCloudFolder(
+  libraryType: LibraryFolder["libraryType"],
+  name: string,
+): Promise<LibraryFolder> {
+  const cleanName = name.trim().replace(/\s+/g, " ").slice(0, 80);
+  if (!cleanName) throw new Error("Enter a folder name.");
+  if (isDemoMode()) {
+    const folder: LibraryFolder = {
+      id: crypto.randomUUID(),
+      libraryType,
+      name: cleanName,
+      createdAt: new Date().toISOString(),
+    };
+    const current = loadLocal<LibraryFolder[]>(STORAGE_KEYS.demoFolders, []);
+    saveLocal(STORAGE_KEYS.demoFolders, [folder, ...current]);
+    return folder;
+  }
+  const workspace = await requireWorkspace();
+  const userId = await currentUserId();
+  const { data, error } = await createClient()
+    .from("library_folders")
+    .insert({
+      workspace_id: workspace.id,
+      created_by: userId,
+      library_type: libraryType,
+      name: cleanName,
+    })
+    .select("id,library_type,name,parent_id,created_at")
+    .single();
+  if (error) throw new Error(error.message);
+  return {
+    id: data.id,
+    libraryType: data.library_type as LibraryFolder["libraryType"],
+    name: data.name,
+    parentId: data.parent_id || undefined,
+    createdAt: data.created_at,
+  };
+}
+
+export async function renameCloudFolder(
+  folder: LibraryFolder,
+  name: string,
+): Promise<LibraryFolder> {
+  const cleanName = name.trim().replace(/\s+/g, " ").slice(0, 80);
+  if (!cleanName) throw new Error("Enter a folder name.");
+  if (isDemoMode()) {
+    const updated = { ...folder, name: cleanName };
+    const current = loadLocal<LibraryFolder[]>(STORAGE_KEYS.demoFolders, []);
+    saveLocal(
+      STORAGE_KEYS.demoFolders,
+      current.map((item) => (item.id === folder.id ? updated : item)),
+    );
+    return updated;
+  }
+  const { error } = await createClient()
+    .from("library_folders")
+    .update({ name: cleanName })
+    .eq("id", folder.id);
+  if (error) throw new Error(error.message);
+  return { ...folder, name: cleanName };
+}
+
+export async function moveCloudDraftToFolder(
+  draftId: string,
+  folderId?: string,
+): Promise<void> {
+  if (isDemoMode()) {
+    const drafts = loadLocal<ContentDraft[]>(STORAGE_KEYS.demoDrafts, []);
+    saveLocal(
+      STORAGE_KEYS.demoDrafts,
+      drafts.map((draft) =>
+        draft.id === draftId ? { ...draft, folderId } : draft,
+      ),
+    );
+    return;
+  }
+  const { error } = await createClient()
+    .from("content_drafts")
+    .update({ folder_id: folderId || null })
+    .eq("id", draftId);
+  if (error) throw new Error(error.message);
+}
+
+export async function moveCloudMediaToFolder(
+  assetId: string,
+  folderId?: string,
+): Promise<void> {
+  if (isDemoMode()) {
+    const assets = loadLocal<MediaAsset[]>(STORAGE_KEYS.demoMedia, []);
+    saveLocal(
+      STORAGE_KEYS.demoMedia,
+      assets.map((asset) =>
+        asset.id === assetId ? { ...asset, folderId } : asset,
+      ),
+    );
+    return;
+  }
+  const { error } = await createClient()
+    .from("media_assets")
+    .update({ folder_id: folderId || null })
+    .eq("id", assetId);
+  if (error) throw new Error(error.message);
 }
 
 export async function removeCloudMedia(asset: MediaAsset): Promise<void> {

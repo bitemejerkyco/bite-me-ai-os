@@ -25,6 +25,11 @@ import {
   type VideoProject,
   type VideoVoice,
 } from "@/features/core/video-project";
+import {
+  canStartVideoRender,
+  quoteVideoCredits,
+  type VideoCreditStatus,
+} from "@/features/core/video-credits";
 
 type VideoPlanPayload = {
   title?: string;
@@ -81,6 +86,9 @@ export default function VideoStudio({
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [creditStatus, setCreditStatus] =
+    useState<VideoCreditStatus | null>(null);
+  const [creditError, setCreditError] = useState("");
   const checkRenderRef = useRef<() => Promise<void>>(async () => undefined);
   const renderCheckInFlightRef = useRef(false);
 
@@ -110,6 +118,40 @@ export default function VideoStudio({
               : "Unable to load video projects.",
           ),
         );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const refreshCreditStatus = async () => {
+    try {
+      const response = await fetch("/api/ai/video-credits", {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as
+        | VideoCreditStatus
+        | { error?: string };
+      if (!response.ok || "error" in payload) {
+        throw new Error(
+          "error" in payload
+            ? payload.error || "Unable to load video credits."
+            : "Unable to load video credits.",
+        );
+      }
+      setCreditStatus(payload as VideoCreditStatus);
+      setCreditError("");
+    } catch (caught) {
+      setCreditStatus(null);
+      setCreditError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to load video credits.",
+      );
+    }
+  };
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void refreshCreditStatus();
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -152,6 +194,39 @@ export default function VideoStudio({
       project?.scenes.reduce((sum, scene) => sum + scene.seconds, 0) || 0,
     [project?.scenes],
   );
+  const renderSeconds = project?.durationSeconds || duration;
+  const renderQuote = useMemo(
+    () => quoteVideoCredits(renderSeconds),
+    [renderSeconds],
+  );
+  const renderPermission = creditStatus
+    ? canStartVideoRender(creditStatus, renderSeconds)
+    : { allowed: false, reason: "Video credit balance is unavailable." };
+
+  const applyCreditUsage = (usage?: {
+    chargedCredits?: number;
+    remainingCredits?: number;
+    monthlyUsedCredits?: number;
+    monthlyLimitCredits?: number;
+    billingExempt?: boolean;
+  }) => {
+    if (!usage || !creditStatus) return;
+    setCreditStatus({
+      ...creditStatus,
+      balanceCredits: Number(
+        usage.remainingCredits ?? creditStatus.balanceCredits,
+      ),
+      monthlyUsedCredits: Number(
+        usage.monthlyUsedCredits ?? creditStatus.monthlyUsedCredits,
+      ),
+      monthlyLimitCredits: Number(
+        usage.monthlyLimitCredits ?? creditStatus.monthlyLimitCredits,
+      ),
+      billingExempt: Boolean(
+        usage.billingExempt ?? creditStatus.billingExempt,
+      ),
+    });
+  };
 
   const updateProject = async (next: VideoProject) => {
     setProject(next);
@@ -307,6 +382,10 @@ export default function VideoStudio({
 
   const startRender = async () => {
     if (!project) return;
+    if (!renderPermission.allowed) {
+      setError(renderPermission.reason || "Video credits are unavailable.");
+      return;
+    }
     setWorking("render");
     setError("");
     try {
@@ -322,11 +401,19 @@ export default function VideoStudio({
         id?: string;
         status?: string;
         progress?: number;
+        creditUsage?: {
+          chargedCredits?: number;
+          remainingCredits?: number;
+          monthlyUsedCredits?: number;
+          monthlyLimitCredits?: number;
+          billingExempt?: boolean;
+        };
         error?: string;
       };
       if (!response.ok || !payload.id) {
         throw new Error(payload.error || "Video generation could not start.");
       }
+      applyCreditUsage(payload.creditUsage);
       await updateProject({
         ...project,
         providerJobId: payload.id,
@@ -368,6 +455,10 @@ export default function VideoStudio({
       );
       return;
     }
+    if (!renderPermission.allowed) {
+      setError(renderPermission.reason || "Video credits are unavailable.");
+      return;
+    }
     setWorking("revision");
     setError("");
     try {
@@ -405,11 +496,19 @@ export default function VideoStudio({
         id?: string;
         status?: string;
         progress?: number;
+        creditUsage?: {
+          chargedCredits?: number;
+          remainingCredits?: number;
+          monthlyUsedCredits?: number;
+          monthlyLimitCredits?: number;
+          billingExempt?: boolean;
+        };
         error?: string;
       };
       if (!response.ok || !payload.id) {
         throw new Error(payload.error || "Video revision could not start.");
       }
+      applyCreditUsage(payload.creditUsage);
       await updateProject({
         ...project,
         providerJobId: payload.id,
@@ -854,6 +953,66 @@ export default function VideoStudio({
           Video generation may take 5–10 minutes. You can leave this page and
           return while it continues processing.
         </p>
+        <div className="mt-3 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 to-cyan-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-900">Video credits</p>
+              <p className="mt-1 text-sm text-slate-600">
+                This {renderSeconds}-second video requires{" "}
+                <strong>{renderQuote.requiredCredits} credits</strong>.
+                Credits are only charged when the provider accepts the render.
+              </p>
+            </div>
+            {creditStatus?.billingExempt ? (
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
+                Unlimited · Super Admin
+              </span>
+            ) : creditStatus ? (
+              <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-violet-700 shadow-sm">
+                {creditStatus.balanceCredits} credits available
+              </span>
+            ) : (
+              <span className="rounded-full bg-white px-3 py-1 text-sm text-slate-500">
+                Loading balance…
+              </span>
+            )}
+          </div>
+          {creditStatus ? (
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
+              <span>
+                Monthly use: {creditStatus.monthlyUsedCredits}/
+                {creditStatus.monthlyLimitCredits} credits
+              </span>
+              {creditStatus.billingExempt ? (
+                <span>
+                  Estimated platform cost:{" "}
+                  {(
+                    renderQuote.estimatedProviderCostCents / 100
+                  ).toLocaleString(undefined, {
+                    style: "currency",
+                    currency: "USD",
+                  })}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {creditError ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p className="text-sm text-rose-700">{creditError}</p>
+              <button
+                type="button"
+                onClick={() => void refreshCreditStatus()}
+                className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm text-rose-700"
+              >
+                Retry
+              </button>
+            </div>
+          ) : !renderPermission.allowed && renderPermission.reason ? (
+            <p className="mt-3 text-sm text-rose-700">
+              {renderPermission.reason}
+            </p>
+          ) : null}
+        </div>
         {!project ? (
           <div className="mt-6">
             <p className="text-slate-500">
@@ -1116,13 +1275,17 @@ export default function VideoStudio({
                 </>
               ) : !project.videoStoragePath ? (
                 <button
-                  disabled={Boolean(working)}
+                  disabled={Boolean(working) || !renderPermission.allowed}
                   onClick={() => void startRender()}
                   className="rounded-xl bg-violet-600 px-4 py-2 font-semibold disabled:opacity-60"
                 >
                   {working === "render"
                     ? "Starting render…"
-                    : "Generate vertical video"}
+                    : `Generate vertical video · ${
+                        creditStatus?.billingExempt
+                          ? "Included"
+                          : `${renderQuote.requiredCredits} credits`
+                      }`}
                 </button>
               ) : (
                 <button
@@ -1152,20 +1315,35 @@ export default function VideoStudio({
                 />
                 <div className="mt-3 flex flex-wrap gap-3">
                   <button
-                    disabled={Boolean(working) || !revisionRequest.trim()}
+                    disabled={
+                      Boolean(working) ||
+                      !revisionRequest.trim() ||
+                      !renderPermission.allowed
+                    }
                     onClick={() => void startRevision("edit")}
                     className="rounded-xl bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:opacity-60"
                   >
                     {working === "revision"
                       ? "Starting revision…"
-                      : "Generate targeted revision"}
+                      : `Generate targeted revision · ${
+                          creditStatus?.billingExempt
+                            ? "Included"
+                            : `${renderQuote.requiredCredits} credits`
+                        }`}
                   </button>
                   <button
-                    disabled={Boolean(working) || !revisionRequest.trim()}
+                    disabled={
+                      Boolean(working) ||
+                      !revisionRequest.trim() ||
+                      !renderPermission.allowed
+                    }
                     onClick={() => void startRevision("fresh")}
                     className="rounded-xl border border-blue-500/40 px-4 py-2 text-blue-100 hover:bg-blue-500/10 disabled:opacity-60"
                   >
-                    Generate fresh revision
+                    Generate fresh revision ·{" "}
+                    {creditStatus?.billingExempt
+                      ? "Included"
+                      : `${renderQuote.requiredCredits} credits`}
                   </button>
                 </div>
                 <p className="mt-2 text-xs text-slate-400">

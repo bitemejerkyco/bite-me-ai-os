@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   demoPerformance: "postmotive:demo:performance",
   demoKnowledge: "postmotive:demo:knowledge",
   demoVideos: "postmotive:demo:videos",
+  demoFolders: "postmotive:demo:folders",
   calendarPrefill: "postmotive:calendar:prefill",
 } as const;
 
@@ -54,6 +55,7 @@ export type ContentDraft = {
   contentFormat?: "STATIC" | "VERTICAL_VIDEO";
   videoProjectId?: string;
   mediaStoragePath?: string;
+  folderId?: string;
 };
 
 export type ContentFeedback = {
@@ -96,6 +98,15 @@ export type MediaAsset = {
   tags: string[];
   createdAt: string;
   storagePath?: string;
+  folderId?: string;
+};
+
+export type LibraryFolder = {
+  id: string;
+  libraryType: "CONTENT" | "MEDIA";
+  name: string;
+  parentId?: string;
+  createdAt: string;
 };
 
 export type ScheduledPost = {
