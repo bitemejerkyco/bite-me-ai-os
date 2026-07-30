@@ -9,7 +9,9 @@ import {
   type CampaignPlan,
   type ContentDraft,
   type ContentFeedback,
+  type ContentKnowledgeItem,
   type MediaAsset,
+  type PerformanceSnapshot,
   type ScheduledPost,
   type WorkspaceProfile,
 } from "@/features/core/local-os";
@@ -361,6 +363,9 @@ type ScheduledPostRow = {
   status: ScheduledPost["status"];
   approved_at: string | null;
   content_draft_id: string | null;
+  provider_job_id: string | null;
+  failure_reason: string | null;
+  published_at: string | null;
 };
 
 function scheduledPostFromRow(row: ScheduledPostRow): ScheduledPost {
@@ -375,6 +380,9 @@ function scheduledPostFromRow(row: ScheduledPostRow): ScheduledPost {
     status: row.status,
     approvedAt: row.approved_at || undefined,
     contentDraftId: row.content_draft_id || undefined,
+    providerJobId: row.provider_job_id || undefined,
+    failureReason: row.failure_reason || undefined,
+    publishedAt: row.published_at || undefined,
   };
 }
 
@@ -387,7 +395,7 @@ export async function loadCloudSchedule(): Promise<ScheduledPost[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("scheduled_posts")
-    .select("id,entry_type,channel,title,content,scheduled_for,timezone,status,approved_at,content_draft_id")
+    .select("id,entry_type,channel,title,content,scheduled_for,timezone,status,approved_at,content_draft_id,provider_job_id,failure_reason,published_at")
     .eq("workspace_id", workspace.id)
     .order("scheduled_for", { ascending: true });
   if (error) throw new Error(error.message);
@@ -431,4 +439,108 @@ export async function cancelCloudScheduledPost(
   post: ScheduledPost,
 ): Promise<void> {
   await saveCloudScheduledPost({ ...post, status: "CANCELED" });
+}
+
+export async function loadCloudPerformance(): Promise<PerformanceSnapshot[]> {
+  if (isDemoMode()) {
+    ensureDemoData();
+    return loadLocal(STORAGE_KEYS.demoPerformance, []);
+  }
+  const workspace = await getWorkspaceRow();
+  if (!workspace) return [];
+  const { data, error } = await createClient()
+    .from("content_performance_snapshots")
+    .select("id,scheduled_post_id,source,impressions,reach,engagements,clicks,conversions,revenue,spend,currency,recorded_at")
+    .eq("workspace_id", workspace.id)
+    .order("recorded_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map((row) => ({
+    id: row.id,
+    scheduledPostId: row.scheduled_post_id,
+    source: row.source === "MANUAL" ? "MANUAL" : "PROVIDER",
+    impressions: Number(row.impressions),
+    reach: Number(row.reach),
+    engagements: Number(row.engagements),
+    clicks: Number(row.clicks),
+    conversions: Number(row.conversions),
+    revenue: Number(row.revenue),
+    spend: Number(row.spend),
+    currency: row.currency,
+    recordedAt: row.recorded_at,
+  }));
+}
+
+export async function loadCloudKnowledge(): Promise<ContentKnowledgeItem[]> {
+  if (isDemoMode()) {
+    ensureDemoData();
+    return loadLocal(STORAGE_KEYS.demoKnowledge, []);
+  }
+  const workspace = await getWorkspaceRow();
+  if (!workspace) return [];
+  const { data, error } = await createClient()
+    .from("content_knowledge")
+    .select("id,scheduled_post_id,performance_snapshot_id,entry_type,channel,title,content,score,grade,confidence,strengths,score_version,active,created_at")
+    .eq("workspace_id", workspace.id)
+    .eq("active", true)
+    .order("score", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map((row) => ({
+    id: row.id,
+    scheduledPostId: row.scheduled_post_id,
+    performanceSnapshotId: row.performance_snapshot_id || undefined,
+    entryType: row.entry_type === "AD" ? "AD" : "POST",
+    channel: row.channel,
+    title: row.title,
+    content: row.content,
+    score: Number(row.score),
+    grade: row.grade as ContentKnowledgeItem["grade"],
+    confidence: row.confidence as ContentKnowledgeItem["confidence"],
+    strengths: row.strengths || [],
+    scoreVersion: row.score_version,
+    active: Boolean(row.active),
+    createdAt: row.created_at,
+  }));
+}
+
+export async function saveCloudKnowledge(
+  item: ContentKnowledgeItem,
+): Promise<void> {
+  if (isDemoMode()) {
+    const current = loadLocal<ContentKnowledgeItem[]>(
+      STORAGE_KEYS.demoKnowledge,
+      [],
+    );
+    const next = current.some(
+      (knowledge) => knowledge.scheduledPostId === item.scheduledPostId,
+    )
+      ? current.map((knowledge) =>
+          knowledge.scheduledPostId === item.scheduledPostId ? item : knowledge,
+        )
+      : [item, ...current];
+    saveLocal(STORAGE_KEYS.demoKnowledge, next);
+    return;
+  }
+  const workspace = await requireWorkspace();
+  const userId = await currentUserId();
+  const { error } = await createClient().from("content_knowledge").upsert(
+    {
+      id: item.id,
+      workspace_id: workspace.id,
+      scheduled_post_id: item.scheduledPostId,
+      performance_snapshot_id: item.performanceSnapshotId || null,
+      created_by: userId,
+      entry_type: item.entryType,
+      channel: item.channel,
+      title: item.title,
+      content: item.content,
+      score: item.score,
+      grade: item.grade,
+      confidence: item.confidence,
+      strengths: item.strengths,
+      score_version: item.scoreVersion,
+      active: item.active,
+    },
+    { onConflict: "scheduled_post_id" },
+  );
+  if (error) throw new Error(error.message);
 }

@@ -10,6 +10,8 @@ export const STORAGE_KEYS = {
   demoMedia: "postmotive:demo:media",
   demoSchedule: "postmotive:demo:schedule",
   demoFeedback: "postmotive:demo:feedback",
+  demoPerformance: "postmotive:demo:performance",
+  demoKnowledge: "postmotive:demo:knowledge",
   calendarPrefill: "postmotive:calendar:prefill",
 } as const;
 
@@ -117,6 +119,41 @@ export type ScheduledPost = {
     | "CANCELED";
   approvedAt?: string;
   contentDraftId?: string;
+  providerJobId?: string;
+  failureReason?: string;
+  publishedAt?: string;
+};
+
+export type PerformanceSnapshot = {
+  id: string;
+  scheduledPostId: string;
+  source: "PROVIDER" | "MANUAL";
+  impressions: number;
+  reach: number;
+  engagements: number;
+  clicks: number;
+  conversions: number;
+  revenue: number;
+  spend: number;
+  currency: string;
+  recordedAt: string;
+};
+
+export type ContentKnowledgeItem = {
+  id: string;
+  scheduledPostId: string;
+  performanceSnapshotId?: string;
+  entryType: "POST" | "AD";
+  channel: string;
+  title: string;
+  content: string;
+  score: number;
+  grade: "A" | "B" | "C" | "D";
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  strengths: string[];
+  scoreVersion: string;
+  active: boolean;
+  createdAt: string;
 };
 
 export function loadLocal<T>(key: string, fallback: T): T {
@@ -244,6 +281,8 @@ export function resetDemoData(): void {
     },
   ] satisfies ScheduledPost[]);
   saveLocal(STORAGE_KEYS.demoFeedback, [] satisfies ContentFeedback[]);
+  saveLocal(STORAGE_KEYS.demoPerformance, [] satisfies PerformanceSnapshot[]);
+  saveLocal(STORAGE_KEYS.demoKnowledge, [] satisfies ContentKnowledgeItem[]);
 }
 
 export function ensureDemoData(): void {

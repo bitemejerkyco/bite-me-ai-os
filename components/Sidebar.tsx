@@ -41,6 +41,7 @@ export default function Sidebar() {
           ["/marketing", "Marketing", "◆"],
           ["/studio", "AI Studio", "✦"],
           ["/calendar", "Calendar", "◫"],
+          ["/knowledge", "Knowledge Base", "★"],
           ["/media", "Media Library", "▧"],
           ["/analytics", "Analytics", "↗"],
           ["/settings/integrations/amazon-ads", "Integrations", "⚙"],

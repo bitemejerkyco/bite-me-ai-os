@@ -4,14 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import {
   cancelCloudScheduledPost,
   loadCloudDrafts,
+  loadCloudKnowledge,
+  loadCloudPerformance,
   loadCloudSchedule,
+  saveCloudKnowledge,
   saveCloudScheduledPost,
 } from "@/features/core/cloud-store";
+import {
+  calculateContentScore,
+  type ContentScore,
+} from "@/features/core/content-score";
 import {
   loadLocal,
   saveLocal,
   STORAGE_KEYS,
   type ContentDraft,
+  type ContentKnowledgeItem,
+  type PerformanceSnapshot,
   type ScheduledPost,
 } from "@/features/core/local-os";
 
@@ -71,11 +80,18 @@ function draftForm(draft: ContentDraft) {
   };
 }
 
+function percent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 export default function ContentCalendar() {
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 86_400_000);
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [drafts, setDrafts] = useState<ContentDraft[]>([]);
+  const [performance, setPerformance] = useState<PerformanceSnapshot[]>([]);
+  const [knowledge, setKnowledge] = useState<ContentKnowledgeItem[]>([]);
+  const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState("");
   const [contentDraftId, setContentDraftId] = useState<string | undefined>();
   const [month, setMonth] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -91,10 +107,23 @@ export default function ContentCalendar() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void Promise.all([loadCloudSchedule(), loadCloudDrafts()])
-        .then(([schedule, savedDrafts]) => {
+      void Promise.all([
+        loadCloudSchedule(),
+        loadCloudDrafts(),
+        loadCloudPerformance(),
+        loadCloudKnowledge(),
+      ])
+        .then(([schedule, savedDrafts, snapshots, knowledgeItems]) => {
           setPosts(schedule);
           setDrafts(savedDrafts);
+          setPerformance(snapshots);
+          setKnowledge(knowledgeItems);
+          setSelectedPost(
+            schedule.find((item) => item.status === "PENDING_APPROVAL") ||
+              schedule.find((item) => item.status === "SCHEDULED") ||
+              schedule[0] ||
+              null,
+          );
           const prefill = loadLocal<ContentDraft | null>(
             STORAGE_KEYS.calendarPrefill,
             null,
@@ -129,6 +158,43 @@ export default function ContentCalendar() {
     });
     return grouped;
   }, [posts]);
+  const latestPerformanceByPost = useMemo(() => {
+    const latest = new Map<string, PerformanceSnapshot>();
+    performance.forEach((snapshot) => {
+      if (!latest.has(snapshot.scheduledPostId)) {
+        latest.set(snapshot.scheduledPostId, snapshot);
+      }
+    });
+    return latest;
+  }, [performance]);
+  const scorecards = useMemo(
+    () =>
+      posts
+        .map((post) => {
+          const snapshot = latestPerformanceByPost.get(post.id);
+          return snapshot
+            ? { post, snapshot, score: calculateContentScore(post, snapshot) }
+            : null;
+        })
+        .filter(
+          (
+            item,
+          ): item is {
+            post: ScheduledPost;
+            snapshot: PerformanceSnapshot;
+            score: ContentScore;
+          } => Boolean(item),
+        )
+        .sort((left, right) => right.score.score - left.score.score),
+    [latestPerformanceByPost, posts],
+  );
+  const selectedSnapshot = selectedPost
+    ? latestPerformanceByPost.get(selectedPost.id)
+    : undefined;
+  const selectedScore =
+    selectedPost && selectedSnapshot
+      ? calculateContentScore(selectedPost, selectedSnapshot)
+      : null;
 
   const submit = async (postNow: boolean) => {
     if (!title.trim() || !content.trim()) {
@@ -158,6 +224,7 @@ export default function ContentCalendar() {
     try {
       await saveCloudScheduledPost(post);
       setPosts((current) => [...current, post]);
+      setSelectedPost(post);
       setTitle("");
       setContent("");
       setSelectedDraftId("");
@@ -187,6 +254,7 @@ export default function ContentCalendar() {
       setPosts((current) =>
         current.map((item) => (item.id === post.id ? approved : item)),
       );
+      setSelectedPost(approved);
       setMessage("Ad approved and added to the publishing queue.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to approve ad.");
@@ -201,9 +269,56 @@ export default function ContentCalendar() {
           item.id === post.id ? { ...item, status: "CANCELED" } : item,
         ),
       );
+      setSelectedPost({ ...post, status: "CANCELED" });
       setMessage("Scheduled item canceled.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to cancel.");
+    }
+  };
+
+  const addToKnowledge = async (
+    post: ScheduledPost,
+    snapshot: PerformanceSnapshot,
+    score: ContentScore,
+  ) => {
+    if (score.score < 75 || score.confidence === "LOW") {
+      setMessage(
+        "This result needs a score of at least 75 and medium confidence before it can teach future content.",
+      );
+      return;
+    }
+    const item: ContentKnowledgeItem = {
+      id: crypto.randomUUID(),
+      scheduledPostId: post.id,
+      performanceSnapshotId: snapshot.id,
+      entryType: post.entryType,
+      channel: post.channel,
+      title: post.title,
+      content: post.content,
+      score: score.score,
+      grade: score.grade,
+      confidence: score.confidence,
+      strengths: score.strengths,
+      scoreVersion: score.version,
+      active: true,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await saveCloudKnowledge(item);
+      setKnowledge((current) => [
+        item,
+        ...current.filter(
+          (knowledgeItem) =>
+            knowledgeItem.scheduledPostId !== post.id,
+        ),
+      ]);
+      setMessage("Winner added to the Knowledge Base. Future AI drafts can learn from it.");
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to add this result to the Knowledge Base.",
+      );
     }
   };
 
@@ -212,6 +327,42 @@ export default function ContentCalendar() {
       <section className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-100">
         Calendar and approval queue are active. Items will remain safely queued until the selected channel is connected. Ads always require approval before launch or spending.
       </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        {[
+          ["AI drafts", drafts.length, "text-zinc-200"],
+          ["Approval needed", posts.filter((post) => post.status === "PENDING_APPROVAL").length, "text-amber-200"],
+          ["Scheduled", posts.filter((post) => post.status === "SCHEDULED").length, "text-blue-200"],
+          ["Publishing", posts.filter((post) => post.status === "PUBLISHING").length, "text-purple-200"],
+          ["Published", posts.filter((post) => post.status === "PUBLISHED").length, "text-emerald-200"],
+          ["Failed", posts.filter((post) => post.status === "FAILED").length, "text-red-200"],
+        ].map(([label, value, color]) => (
+          <div key={String(label)} className="rounded-xl border border-white/10 bg-[#111827] p-4">
+            <p className="text-xs text-zinc-400">{label}</p>
+            <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
+          </div>
+        ))}
+      </section>
+
+      {posts.some((post) => post.status === "PENDING_APPROVAL") ? (
+        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+          <h2 className="text-xl font-bold text-amber-100">Ads awaiting approval</h2>
+          <div className="mt-4 space-y-3">
+            {posts.filter((post) => post.status === "PENDING_APPROVAL").map((post) => (
+              <article key={post.id} className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-black/20 p-4 md:flex-row md:items-center md:justify-between">
+                <button onClick={() => setSelectedPost(post)} className="text-left">
+                  <p className="font-semibold">{post.title}</p>
+                  <p className="mt-1 text-sm text-zinc-400">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedPost(post)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">View ad</button>
+                  <button onClick={() => void approve(post)} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300">Approve & schedule</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[390px_1fr]">
         <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
@@ -302,9 +453,14 @@ export default function ContentCalendar() {
                   <p className="text-xs">{day.getDate()}</p>
                   <div className="mt-1 space-y-1">
                     {dayPosts.slice(0, 3).map((post) => (
-                      <div key={post.id} title={post.title} className={`truncate rounded px-1.5 py-1 text-[10px] ${statusStyle[post.status]}`}>
-                        {post.channel}: {post.title}
-                      </div>
+                      <button
+                        key={post.id}
+                        title={`${post.entryType}: ${post.title}`}
+                        onClick={() => setSelectedPost(post)}
+                        className={`block w-full truncate rounded px-1.5 py-1 text-left text-[10px] ring-offset-[#111827] hover:ring-1 hover:ring-white/40 ${statusStyle[post.status]} ${post.entryType === "AD" ? "border border-amber-400/40" : ""}`}
+                      >
+                        {post.entryType} · {post.channel}: {post.title}
+                      </button>
                     ))}
                     {dayPosts.length > 3 ? <p className="text-[10px] text-zinc-500">+{dayPosts.length - 3} more</p> : null}
                   </div>
@@ -314,6 +470,150 @@ export default function ContentCalendar() {
           </div>
         </section>
       </div>
+
+      {selectedPost ? (
+        <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2 py-1 text-xs ${selectedPost.entryType === "AD" ? "bg-amber-500/20 text-amber-200" : "bg-zinc-700 text-zinc-200"}`}>
+                  {selectedPost.entryType === "AD" ? "PAID AD" : "ORGANIC POST"}
+                </span>
+                <span className={`rounded-full px-2 py-1 text-xs ${statusStyle[selectedPost.status]}`}>
+                  {selectedPost.status.replaceAll("_", " ")}
+                </span>
+              </div>
+              <h2 className="mt-3 text-xl font-bold">{selectedPost.title}</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                {selectedPost.channel} · {new Date(selectedPost.scheduledFor).toLocaleString()} · {selectedPost.timezone}
+              </p>
+            </div>
+            <button onClick={() => setSelectedPost(null)} className="rounded-lg border border-white/10 px-3 py-2 text-sm">Close details</button>
+          </div>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-300">Post or ad content</h3>
+              <div className="mt-2 whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-950 p-4 leading-7">
+                {selectedPost.content}
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">
+                Source: {selectedPost.contentDraftId ? "AI Studio draft linked" : "Created directly in Calendar"}
+                {selectedPost.providerJobId ? ` · Provider job: ${selectedPost.providerJobId}` : ""}
+              </p>
+              {selectedPost.failureReason ? (
+                <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                  Publishing failure: {selectedPost.failureReason}
+                </p>
+              ) : null}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-300">Workflow status</h3>
+              <div className="mt-3 space-y-2">
+                {[
+                  ["Created", true],
+                  [
+                    selectedPost.entryType === "AD" ? "Human approval" : "Approval not required",
+                    selectedPost.entryType === "POST" || Boolean(selectedPost.approvedAt),
+                  ],
+                  [
+                    "Scheduled",
+                    ["SCHEDULED", "PUBLISHING", "PUBLISHED", "FAILED"].includes(selectedPost.status),
+                  ],
+                  [
+                    "Publishing started",
+                    ["PUBLISHING", "PUBLISHED", "FAILED"].includes(selectedPost.status),
+                  ],
+                  ["Published", selectedPost.status === "PUBLISHED"],
+                ].map(([label, complete]) => (
+                  <div key={String(label)} className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${complete ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-200" : "border-white/10 text-zinc-500"}`}>
+                    <span>{complete ? "✓" : "○"}</span>
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+              {selectedPost.publishedAt ? <p className="mt-3 text-xs text-zinc-400">Published: {new Date(selectedPost.publishedAt).toLocaleString()}</p> : null}
+            </div>
+          </div>
+          <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
+            <h3 className="font-semibold">Performance scorecard</h3>
+            {!selectedScore || !selectedSnapshot ? (
+              <p className="mt-2 text-sm text-zinc-400">
+                Score pending. Performance data will appear here after the connected channel reports results.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-4 lg:grid-cols-[180px_1fr_auto] lg:items-center">
+                <div>
+                  <p className="text-4xl font-black">{selectedScore.score}<span className="text-lg text-zinc-500">/100</span></p>
+                  <p className="mt-1 text-sm text-zinc-300">Grade {selectedScore.grade} · {selectedScore.confidence} confidence</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                  <div><p className="text-zinc-500">Engagement</p><p className="font-semibold">{percent(selectedScore.metrics.engagementRate)}</p></div>
+                  <div><p className="text-zinc-500">Click rate</p><p className="font-semibold">{percent(selectedScore.metrics.clickThroughRate)}</p></div>
+                  <div><p className="text-zinc-500">Conversion</p><p className="font-semibold">{percent(selectedScore.metrics.conversionRate)}</p></div>
+                  <div><p className="text-zinc-500">ROAS</p><p className="font-semibold">{selectedScore.metrics.returnOnAdSpend === null ? "N/A" : `${selectedScore.metrics.returnOnAdSpend.toFixed(2)}x`}</p></div>
+                </div>
+                <button
+                  disabled={
+                    selectedScore.score < 75 ||
+                    selectedScore.confidence === "LOW" ||
+                    knowledge.some((item) => item.scheduledPostId === selectedPost.id)
+                  }
+                  onClick={() => void addToKnowledge(selectedPost, selectedSnapshot, selectedScore)}
+                  className="rounded-lg border border-emerald-500/40 px-4 py-3 text-sm text-emerald-300 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {knowledge.some((item) => item.scheduledPostId === selectedPost.id)
+                    ? "In Knowledge Base ✓"
+                    : "Add to Knowledge Base"}
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold">Post and ad scorecards</h2>
+            <p className="mt-1 text-sm text-zinc-400">Results are organized from highest to lowest score.</p>
+          </div>
+          <a href="/knowledge" className="rounded-lg border border-emerald-500/40 px-4 py-2 text-sm text-emerald-300">Open Knowledge Base</a>
+        </div>
+        <div className="mt-4 space-y-3">
+          {scorecards.length === 0 ? (
+            <p className="text-zinc-400">Scorecards will appear after connected channels return performance data.</p>
+          ) : scorecards.map(({ post, snapshot, score }) => {
+            const savedToKnowledge = knowledge.some(
+              (item) => item.scheduledPostId === post.id,
+            );
+            return (
+              <article key={post.id} className="grid gap-4 rounded-xl border border-white/10 bg-black/20 p-4 md:grid-cols-[90px_1fr_auto] md:items-center">
+                <div>
+                  <p className="text-3xl font-black">{score.score}</p>
+                  <p className="text-xs text-zinc-400">Grade {score.grade}</p>
+                </div>
+                <button onClick={() => setSelectedPost(post)} className="text-left">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{post.title}</p>
+                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-xs">{post.entryType}</span>
+                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-xs">{score.confidence} confidence</span>
+                  </div>
+                  <p className="mt-1 text-sm text-zinc-400">{post.channel} · {snapshot.impressions.toLocaleString()} impressions · {score.strengths.join(" · ")}</p>
+                </button>
+                <button
+                  disabled={score.score < 75 || score.confidence === "LOW" || savedToKnowledge}
+                  onClick={() => void addToKnowledge(post, snapshot, score)}
+                  className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {savedToKnowledge ? "Saved winner ✓" : "Add winner"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
         <h2 className="text-xl font-bold">Publishing queue</h2>
@@ -329,6 +629,7 @@ export default function ContentCalendar() {
                 <p className="mt-1 text-sm text-zinc-400">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
               </div>
               <div className="flex gap-2">
+                <button onClick={() => setSelectedPost(post)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">View details</button>
                 {post.status === "PENDING_APPROVAL" ? <button onClick={() => void approve(post)} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300">Approve & schedule</button> : null}
                 {!["PUBLISHED", "CANCELED"].includes(post.status) ? <button onClick={() => void cancel(post)} className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-300">Cancel</button> : null}
               </div>

@@ -79,6 +79,20 @@ export async function POST(request: Request) {
         `${editedCount} recent drafts were edited by a human before use; preserve brand facts and favor concise, editable copy.`,
       );
     }
+    const { data: knowledge } = await supabase
+      .from("content_knowledge")
+      .select("entry_type,channel,title,content,score,grade,confidence,strengths")
+      .eq("workspace_id", workspace.id)
+      .eq("active", true)
+      .gte("score", 75)
+      .in("confidence", ["MEDIUM", "HIGH"])
+      .order("score", { ascending: false })
+      .limit(5);
+    for (const winner of knowledge || []) {
+      learningSignals.push(
+        `Proven ${winner.entry_type === "AD" ? "ad" : "post"} winner for ${winner.channel} (score ${winner.score}, grade ${winner.grade}): ${winner.title}. Strengths: ${(winner.strengths || []).join(", ")}. Winning copy pattern: ${String(winner.content).slice(0, 180)}`,
+      );
+    }
   }
 
   const model = process.env.OPENAI_MODEL || "gpt-5.6-sol";
