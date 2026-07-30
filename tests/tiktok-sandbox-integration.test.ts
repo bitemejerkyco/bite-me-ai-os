@@ -102,6 +102,13 @@ describe("TikTok sandbox integration", () => {
       state: "state-1",
       scopes: ["user.info.basic", "video.upload"],
     });
+    expect(
+      parseTikTokCallback(
+        new URL(
+          "https://postmotive.example/callback?code=code-1*0!&state=state-1",
+        ),
+      ).code,
+    ).toBe("code-1*0!");
     expect(() =>
       parseTikTokCallback(
         new URL("https://postmotive.example/callback?code=bad%20code&state=x"),

@@ -6,7 +6,8 @@ import { redactTikTokSecrets } from "@/features/integrations/tiktok/token-crypto
 
 const SETTINGS_PATH = "/settings/integrations/tiktok";
 const MAX_OAUTH_VALUE_LENGTH = 2048;
-const SAFE_OAUTH_VALUE = /^[A-Za-z0-9._~-]+$/u;
+const SAFE_AUTHORIZATION_CODE = /^[A-Za-z0-9._~!*'-]+$/u;
+const SAFE_STATE = /^[A-Za-z0-9._~-]+$/u;
 
 export function parseTikTokCallback(url: URL): {
   code: string;
@@ -25,8 +26,8 @@ export function parseTikTokCallback(url: URL): {
   if (
     code.length > MAX_OAUTH_VALUE_LENGTH ||
     state.length > MAX_OAUTH_VALUE_LENGTH ||
-    !SAFE_OAUTH_VALUE.test(code) ||
-    !SAFE_OAUTH_VALUE.test(state)
+    !SAFE_AUTHORIZATION_CODE.test(code) ||
+    !SAFE_STATE.test(state)
   ) {
     throw new Error("TIKTOK_CALLBACK_INVALID:Authorization response is malformed.");
   }
