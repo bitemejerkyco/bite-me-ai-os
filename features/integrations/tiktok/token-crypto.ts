@@ -2,7 +2,9 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   randomBytes,
+  timingSafeEqual,
 } from "node:crypto";
 
 const ALGORITHM = "aes-256-gcm";
@@ -69,6 +71,63 @@ export function decryptTikTokToken(payload: string, rawKey: string): string {
 
 export function hashOAuthState(state: string): string {
   return createHash("sha256").update(state).digest("hex");
+}
+
+type TikTokOAuthStatePayload = {
+  userId: string;
+  workspaceId: string;
+  expiresAt: number;
+  nonce: string;
+};
+
+export function createTikTokOAuthState(
+  input: Omit<TikTokOAuthStatePayload, "nonce">,
+  rawKey: string,
+): string {
+  const payload = Buffer.from(
+    JSON.stringify({
+      ...input,
+      nonce: randomBytes(16).toString("base64url"),
+    } satisfies TikTokOAuthStatePayload),
+    "utf8",
+  ).toString("base64url");
+  const signature = createHmac("sha256", parseKey(rawKey))
+    .update(payload)
+    .digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+export function verifyTikTokOAuthState(
+  state: string,
+  rawKey: string,
+): TikTokOAuthStatePayload {
+  const [payload, signature, ...extra] = state.split(".");
+  if (!payload || !signature || extra.length > 0) {
+    throw new Error("TIKTOK_STATE_INVALID:Authorization state is malformed.");
+  }
+  const expected = createHmac("sha256", parseKey(rawKey))
+    .update(payload)
+    .digest();
+  const actual = Buffer.from(signature, "base64url");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    throw new Error("TIKTOK_STATE_INVALID:Authorization state signature is invalid.");
+  }
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as Partial<TikTokOAuthStatePayload>;
+    if (
+      typeof parsed.userId !== "string" ||
+      typeof parsed.workspaceId !== "string" ||
+      typeof parsed.expiresAt !== "number" ||
+      typeof parsed.nonce !== "string"
+    ) {
+      throw new Error("invalid payload");
+    }
+    return parsed as TikTokOAuthStatePayload;
+  } catch {
+    throw new Error("TIKTOK_STATE_INVALID:Authorization state payload is invalid.");
+  }
 }
 
 export function redactTikTokSecrets(input: string): string {

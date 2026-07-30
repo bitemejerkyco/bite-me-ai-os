@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { parseTikTokCallback } from "@/app/api/integrations/tiktok/callback/route";
 import { TikTokApiClient } from "@/features/integrations/tiktok/client";
 import {
+  createTikTokOAuthState,
   decryptTikTokToken,
   encryptTikTokToken,
   hashOAuthState,
   redactTikTokSecrets,
+  verifyTikTokOAuthState,
 } from "@/features/integrations/tiktok/token-crypto";
 import type { TikTokConfig } from "@/features/integrations/tiktok/config";
 
@@ -135,5 +137,24 @@ describe("TikTok sandbox integration", () => {
     expect(redacted).not.toContain("refresh_token=refresh");
     expect(redacted).not.toContain("client_secret=secret");
     expect(redacted).not.toContain("code=code");
+  });
+
+  it("signs OAuth state and rejects tampering", () => {
+    const state = createTikTokOAuthState(
+      {
+        userId: "user-1",
+        workspaceId: "workspace-1",
+        expiresAt: 2_000_000_000_000,
+      },
+      config.encryptionKey,
+    );
+    expect(verifyTikTokOAuthState(state, config.encryptionKey)).toMatchObject({
+      userId: "user-1",
+      workspaceId: "workspace-1",
+      expiresAt: 2_000_000_000_000,
+    });
+    expect(() =>
+      verifyTikTokOAuthState(`${state.slice(0, -1)}x`, config.encryptionKey),
+    ).toThrow("TIKTOK_STATE_INVALID");
   });
 });

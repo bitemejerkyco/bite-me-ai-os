@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import type { createClient } from "@/lib/supabase/server";
 import {
   getMissingTikTokConfig,
@@ -7,9 +6,10 @@ import {
 } from "@/features/integrations/tiktok/config";
 import { TikTokApiClient } from "@/features/integrations/tiktok/client";
 import {
+  createTikTokOAuthState,
   decryptTikTokToken,
   encryptTikTokToken,
-  hashOAuthState,
+  verifyTikTokOAuthState,
 } from "@/features/integrations/tiktok/token-crypto";
 import {
   TIKTOK_REQUIRED_SCOPES,
@@ -103,23 +103,15 @@ export class TikTokConnectionService {
     if (!availability.configured) {
       throw new Error(`TIKTOK_SETUP_REQUIRED:${availability.message}`);
     }
-    const state = randomBytes(32).toString("base64url");
-    const stateHash = hashOAuthState(state);
     const now = this.now();
-    await actor.supabase
-      .from("tiktok_oauth_states")
-      .delete()
-      .eq("user_id", actor.userId)
-      .lt("expires_at", now.toISOString());
-    const { error } = await actor.supabase.from("tiktok_oauth_states").insert({
-      state_hash: stateHash,
-      workspace_id: actor.workspaceId,
-      user_id: actor.userId,
-      expires_at: new Date(
-        now.getTime() + STATE_TTL_MILLISECONDS,
-      ).toISOString(),
-    });
-    if (error) throw new Error(`TIKTOK_STATE_FAILED:${error.message}`);
+    const state = createTikTokOAuthState(
+      {
+        userId: actor.userId,
+        workspaceId: actor.workspaceId,
+        expiresAt: now.getTime() + STATE_TTL_MILLISECONDS,
+      },
+      this.config.encryptionKey,
+    );
     return this.client.buildAuthorizeUrl(state);
   }
 
@@ -127,29 +119,16 @@ export class TikTokConnectionService {
     actor: TikTokActor,
     input: { state: string; code: string; scopes: string[] },
   ): Promise<void> {
-    const stateHash = hashOAuthState(input.state);
-    const { data: stateRow, error: stateError } = await actor.supabase
-      .from("tiktok_oauth_states")
-      .select("state_hash,workspace_id,user_id,expires_at,used_at")
-      .eq("state_hash", stateHash)
-      .eq("workspace_id", actor.workspaceId)
-      .eq("user_id", actor.userId)
-      .maybeSingle();
-    if (stateError) throw new Error(`TIKTOK_STATE_FAILED:${stateError.message}`);
+    const state = verifyTikTokOAuthState(
+      input.state,
+      this.config.encryptionKey,
+    );
     if (
-      !stateRow ||
-      stateRow.used_at ||
-      new Date(String(stateRow.expires_at)).getTime() <= this.now().getTime()
+      state.userId !== actor.userId ||
+      state.workspaceId !== actor.workspaceId ||
+      state.expiresAt <= this.now().getTime()
     ) {
       throw new Error("TIKTOK_STATE_INVALID:Authorization state is invalid or expired.");
-    }
-    const { error: consumeError } = await actor.supabase
-      .from("tiktok_oauth_states")
-      .update({ used_at: this.now().toISOString() })
-      .eq("state_hash", stateHash)
-      .is("used_at", null);
-    if (consumeError) {
-      throw new Error(`TIKTOK_STATE_FAILED:${consumeError.message}`);
     }
 
     const tokens = await this.client.exchangeCode(input.code);
