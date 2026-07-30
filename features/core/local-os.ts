@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   demoFeedback: "postmotive:demo:feedback",
   demoPerformance: "postmotive:demo:performance",
   demoKnowledge: "postmotive:demo:knowledge",
+  demoVideos: "postmotive:demo:videos",
   calendarPrefill: "postmotive:calendar:prefill",
 } as const;
 
@@ -50,6 +51,9 @@ export type ContentDraft = {
   originalCopy?: string;
   model?: string;
   promptVersion?: string;
+  contentFormat?: "STATIC" | "VERTICAL_VIDEO";
+  videoProjectId?: string;
+  mediaStoragePath?: string;
 };
 
 export type ContentFeedback = {
@@ -122,6 +126,8 @@ export type ScheduledPost = {
   providerJobId?: string;
   failureReason?: string;
   publishedAt?: string;
+  videoProjectId?: string;
+  mediaStoragePath?: string;
 };
 
 export type PerformanceSnapshot = {
@@ -283,6 +289,7 @@ export function resetDemoData(): void {
   saveLocal(STORAGE_KEYS.demoFeedback, [] satisfies ContentFeedback[]);
   saveLocal(STORAGE_KEYS.demoPerformance, [] satisfies PerformanceSnapshot[]);
   saveLocal(STORAGE_KEYS.demoKnowledge, [] satisfies ContentKnowledgeItem[]);
+  saveLocal(STORAGE_KEYS.demoVideos, []);
 }
 
 export function ensureDemoData(): void {

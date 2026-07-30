@@ -17,6 +17,7 @@ import {
   saveCloudContentFeedback,
   saveCloudDraft,
 } from "@/features/core/cloud-store";
+import VideoStudio from "@/components/core/VideoStudio";
 
 export default function AIStudio() {
   const [workspace, setWorkspace] = useState<WorkspaceProfile>(demoWorkspace());
@@ -32,6 +33,9 @@ export default function AIStudio() {
   const [saved, setSaved] = useState(false);
   const [feedbackNote, setFeedbackNote] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [creationMode, setCreationMode] = useState<"CONTENT" | "VIDEO">(
+    "CONTENT",
+  );
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -220,7 +224,33 @@ export default function AIStudio() {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div>
+      <div className="mb-6 flex flex-wrap gap-3 rounded-xl border border-white/10 bg-[#111827] p-2">
+        <button
+          onClick={() => setCreationMode("CONTENT")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+            creationMode === "CONTENT"
+              ? "bg-red-600 text-white"
+              : "text-zinc-300 hover:bg-white/5"
+          }`}
+        >
+          Post or ad
+        </button>
+        <button
+          onClick={() => setCreationMode("VIDEO")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+            creationMode === "VIDEO"
+              ? "bg-red-600 text-white"
+              : "text-zinc-300 hover:bg-white/5"
+          }`}
+        >
+          TikTok video
+        </button>
+      </div>
+      {creationMode === "VIDEO" ? (
+        <VideoStudio workspace={workspace} />
+      ) : (
+      <div className="grid gap-6 lg:grid-cols-2">
       <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
         <h2 className="text-xl font-bold">Create marketing content</h2>
         <p className="mt-1 text-sm text-zinc-400">Brand: {workspace.businessName} · Compliance: {workspace.industry.replaceAll("_", " ")}</p>
@@ -304,6 +334,8 @@ export default function AIStudio() {
         )}
         <p className="mt-6 text-xs text-zinc-500">{drafts.length} drafts saved in this workspace.</p>
       </section>
+      </div>
+      )}
     </div>
   );
 }

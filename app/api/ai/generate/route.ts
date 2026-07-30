@@ -5,6 +5,7 @@ import {
   parseAIContentRequest,
 } from "@/features/core/ai-content";
 import { createClient } from "@/lib/supabase/server";
+import { buildAgentPrompt } from "@/features/core/agent-prompts";
 
 const PROMPT_VERSION = "postmotive-content-v2";
 
@@ -106,7 +107,38 @@ export async function POST(request: Request) {
       model,
       instructions:
         "You are the marketing content engine for PostMotive. Follow the supplied business facts and compliance requirement. Never invent discounts, prices, certifications, customer claims, or legal approval.",
-      input: buildMarketingPrompt({ ...input, learningSignals }),
+      input: buildAgentPrompt({
+        jobType: "CONTENT",
+        businessName: input.workspace.businessName,
+        channel: input.channel,
+        objective: input.objective,
+        roles: [
+          "PROMPT_DIRECTOR",
+          "BRAND_STRATEGIST",
+          "CHANNEL_SPECIALIST",
+          "COPYWRITER",
+          "COMPLIANCE_REVIEWER",
+          "PERFORMANCE_ANALYST",
+        ],
+        facts: [
+          `Website: ${input.workspace.website || "not supplied"}`,
+          `Audience: ${input.workspace.audience || "not supplied"}`,
+          `Brand voice: ${input.workspace.voice || "not supplied"}`,
+          `Industry: ${input.workspace.industry}`,
+          `Entry type: ${input.entryType}`,
+        ],
+        constraints: [
+          "Never invent discounts, prices, certifications, testimonials, customer claims, legal approval, or product facts.",
+          "Keep paid ads approval-gated.",
+          "Apply the selected industry's compliance mode and channel safety requirements.",
+        ],
+        learningSignals,
+        requiredOutput: [
+          "Return only the publishable marketing copy.",
+          "Make the opening useful immediately and end with the requested call to action.",
+        ],
+        task: buildMarketingPrompt({ ...input, learningSignals: [] }),
+      }),
       max_output_tokens: 700,
     }),
     cache: "no-store",

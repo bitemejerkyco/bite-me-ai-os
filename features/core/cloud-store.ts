@@ -15,6 +15,7 @@ import {
   type ScheduledPost,
   type WorkspaceProfile,
 } from "@/features/core/local-os";
+import type { VideoProject } from "@/features/core/video-project";
 
 type WorkspaceRow = {
   id: string;
@@ -116,7 +117,7 @@ export async function loadCloudDrafts(): Promise<ContentDraft[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("content_drafts")
-    .select("id,title,channel,objective,copy,compliance_note,status,created_at,entry_type,generation_run_id,original_copy,model,prompt_version")
+    .select("id,title,channel,objective,copy,compliance_note,status,created_at,entry_type,generation_run_id,original_copy,model,prompt_version,content_format,video_project_id,media_storage_path")
     .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
@@ -134,6 +135,10 @@ export async function loadCloudDrafts(): Promise<ContentDraft[]> {
     originalCopy: row.original_copy || undefined,
     model: row.model || undefined,
     promptVersion: row.prompt_version || undefined,
+    contentFormat:
+      row.content_format === "VERTICAL_VIDEO" ? "VERTICAL_VIDEO" : "STATIC",
+    videoProjectId: row.video_project_id || undefined,
+    mediaStoragePath: row.media_storage_path || undefined,
   }));
 }
 
@@ -163,6 +168,9 @@ export async function saveCloudDraft(draft: ContentDraft): Promise<void> {
     original_copy: draft.originalCopy || draft.copy,
     model: draft.model || null,
     prompt_version: draft.promptVersion || null,
+    content_format: draft.contentFormat || "STATIC",
+    video_project_id: draft.videoProjectId || null,
+    media_storage_path: draft.mediaStoragePath || null,
   });
   if (error) throw new Error(error.message);
 }
@@ -352,6 +360,19 @@ export async function removeCloudMedia(asset: MediaAsset): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function resolveCloudMediaUrl(
+  storagePath: string,
+): Promise<string> {
+  if (!storagePath) return "";
+  if (isDemoMode()) return "";
+  const { data, error } = await createClient()
+    .storage
+    .from("brand-media")
+    .createSignedUrl(storagePath, 3_600);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
 type ScheduledPostRow = {
   id: string;
   entry_type: ScheduledPost["entryType"];
@@ -366,6 +387,8 @@ type ScheduledPostRow = {
   provider_job_id: string | null;
   failure_reason: string | null;
   published_at: string | null;
+  video_project_id: string | null;
+  media_storage_path: string | null;
 };
 
 function scheduledPostFromRow(row: ScheduledPostRow): ScheduledPost {
@@ -383,6 +406,8 @@ function scheduledPostFromRow(row: ScheduledPostRow): ScheduledPost {
     providerJobId: row.provider_job_id || undefined,
     failureReason: row.failure_reason || undefined,
     publishedAt: row.published_at || undefined,
+    videoProjectId: row.video_project_id || undefined,
+    mediaStoragePath: row.media_storage_path || undefined,
   };
 }
 
@@ -395,7 +420,7 @@ export async function loadCloudSchedule(): Promise<ScheduledPost[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("scheduled_posts")
-    .select("id,entry_type,channel,title,content,scheduled_for,timezone,status,approved_at,content_draft_id,provider_job_id,failure_reason,published_at")
+    .select("id,entry_type,channel,title,content,scheduled_for,timezone,status,approved_at,content_draft_id,provider_job_id,failure_reason,published_at,video_project_id,media_storage_path")
     .eq("workspace_id", workspace.id)
     .order("scheduled_for", { ascending: true });
   if (error) throw new Error(error.message);
@@ -431,6 +456,123 @@ export async function saveCloudScheduledPost(
     approved_by: post.approvedAt ? userId : null,
     approved_at: post.approvedAt || null,
     content_draft_id: post.contentDraftId || null,
+    video_project_id: post.videoProjectId || null,
+    media_storage_path: post.mediaStoragePath || null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+type VideoProjectRow = {
+  id: string;
+  content_draft_id: string | null;
+  title: string;
+  channel: VideoProject["channel"];
+  objective: string;
+  prompt: string;
+  script: string;
+  caption: string;
+  scenes: VideoProject["scenes"];
+  duration_seconds: VideoProject["durationSeconds"];
+  aspect_ratio: "9:16";
+  voice: VideoProject["voice"];
+  voice_disclosure: boolean;
+  music_mode: VideoProject["musicMode"];
+  licensed_music_asset_id: string | null;
+  provider: VideoProject["provider"];
+  provider_job_id: string | null;
+  provider_progress: number | null;
+  video_storage_path: string | null;
+  voiceover_storage_path: string | null;
+  status: VideoProject["status"];
+  failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function videoProjectFromRow(row: VideoProjectRow): VideoProject {
+  return {
+    id: row.id,
+    contentDraftId: row.content_draft_id || undefined,
+    title: row.title,
+    channel: row.channel,
+    objective: row.objective,
+    prompt: row.prompt,
+    script: row.script,
+    caption: row.caption,
+    scenes: row.scenes || [],
+    durationSeconds: Number(row.duration_seconds) as VideoProject["durationSeconds"],
+    aspectRatio: "9:16",
+    voice: row.voice,
+    voiceDisclosure: row.voice_disclosure,
+    musicMode: row.music_mode,
+    licensedMusicAssetId: row.licensed_music_asset_id || undefined,
+    provider: row.provider,
+    providerJobId: row.provider_job_id || undefined,
+    providerProgress: row.provider_progress ?? undefined,
+    videoStoragePath: row.video_storage_path || undefined,
+    voiceoverStoragePath: row.voiceover_storage_path || undefined,
+    status: row.status,
+    failureReason: row.failure_reason || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function loadCloudVideoProjects(): Promise<VideoProject[]> {
+  if (isDemoMode()) {
+    return loadLocal<VideoProject[]>(STORAGE_KEYS.demoVideos, []);
+  }
+  const workspace = await getWorkspaceRow();
+  if (!workspace) return [];
+  const { data, error } = await createClient()
+    .from("video_projects")
+    .select("id,content_draft_id,title,channel,objective,prompt,script,caption,scenes,duration_seconds,aspect_ratio,voice,voice_disclosure,music_mode,licensed_music_asset_id,provider,provider_job_id,provider_progress,video_storage_path,voiceover_storage_path,status,failure_reason,created_at,updated_at")
+    .eq("workspace_id", workspace.id)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).map((row) =>
+    videoProjectFromRow(row as VideoProjectRow),
+  );
+}
+
+export async function saveCloudVideoProject(
+  project: VideoProject,
+): Promise<void> {
+  if (isDemoMode()) {
+    const current = loadLocal<VideoProject[]>(STORAGE_KEYS.demoVideos, []);
+    const next = current.some((item) => item.id === project.id)
+      ? current.map((item) => (item.id === project.id ? project : item))
+      : [project, ...current];
+    saveLocal(STORAGE_KEYS.demoVideos, next);
+    return;
+  }
+  const workspace = await requireWorkspace();
+  const userId = await currentUserId();
+  const { error } = await createClient().from("video_projects").upsert({
+    id: project.id,
+    workspace_id: workspace.id,
+    content_draft_id: project.contentDraftId || null,
+    created_by: userId,
+    title: project.title,
+    channel: project.channel,
+    objective: project.objective,
+    prompt: project.prompt,
+    script: project.script,
+    caption: project.caption,
+    scenes: project.scenes,
+    duration_seconds: project.durationSeconds,
+    aspect_ratio: project.aspectRatio,
+    voice: project.voice,
+    voice_disclosure: project.voiceDisclosure,
+    music_mode: project.musicMode,
+    licensed_music_asset_id: project.licensedMusicAssetId || null,
+    provider: project.provider,
+    provider_job_id: project.providerJobId || null,
+    provider_progress: project.providerProgress ?? null,
+    video_storage_path: project.videoStoragePath || null,
+    voiceover_storage_path: project.voiceoverStoragePath || null,
+    status: project.status,
+    failure_reason: project.failureReason || null,
   });
   if (error) throw new Error(error.message);
 }

@@ -7,6 +7,7 @@ import {
   loadCloudKnowledge,
   loadCloudPerformance,
   loadCloudSchedule,
+  resolveCloudMediaUrl,
   saveCloudKnowledge,
   saveCloudScheduledPost,
 } from "@/features/core/cloud-store";
@@ -77,6 +78,8 @@ function draftForm(draft: ContentDraft) {
     channel: calendarChannel(draft.channel),
     title: draft.title,
     content: draft.copy,
+    videoProjectId: draft.videoProjectId,
+    mediaStoragePath: draft.mediaStoragePath,
   };
 }
 
@@ -94,6 +97,9 @@ export default function ContentCalendar() {
   const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState("");
   const [contentDraftId, setContentDraftId] = useState<string | undefined>();
+  const [videoProjectId, setVideoProjectId] = useState<string | undefined>();
+  const [mediaStoragePath, setMediaStoragePath] = useState<string | undefined>();
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState("");
   const [month, setMonth] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
   const [entryType, setEntryType] = useState<ScheduledPost["entryType"]>("POST");
   const [channel, setChannel] = useState<ScheduledPost["channel"]>("TikTok");
@@ -136,6 +142,8 @@ export default function ContentCalendar() {
             setChannel(form.channel);
             setTitle(form.title);
             setContent(form.content);
+            setVideoProjectId(form.videoProjectId);
+            setMediaStoragePath(form.mediaStoragePath);
             saveLocal(STORAGE_KEYS.calendarPrefill, null);
             setMessage("AI Studio content loaded. Choose Schedule or Post now.");
           }
@@ -148,6 +156,20 @@ export default function ContentCalendar() {
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    const path = selectedPost?.mediaStoragePath;
+    const frame = requestAnimationFrame(() => {
+      if (!path) {
+        setSelectedMediaUrl("");
+        return;
+      }
+      void resolveCloudMediaUrl(path)
+        .then(setSelectedMediaUrl)
+        .catch(() => setSelectedMediaUrl(""));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedPost?.mediaStoragePath]);
 
   const cells = useMemo(() => monthCells(month), [month]);
   const postsByDate = useMemo(() => {
@@ -218,6 +240,8 @@ export default function ContentCalendar() {
       timezone,
       status: entryType === "AD" ? "PENDING_APPROVAL" : "SCHEDULED",
       contentDraftId,
+      videoProjectId,
+      mediaStoragePath,
     };
     setWorking(true);
     setMessage("");
@@ -229,6 +253,8 @@ export default function ContentCalendar() {
       setContent("");
       setSelectedDraftId("");
       setContentDraftId(undefined);
+      setVideoProjectId(undefined);
+      setMediaStoragePath(undefined);
       setMessage(
         entryType === "AD"
           ? "Ad submitted for approval. No spend was authorized."
@@ -381,10 +407,14 @@ export default function ContentCalendar() {
                     setChannel(form.channel);
                     setTitle(form.title);
                     setContent(form.content);
+                    setVideoProjectId(form.videoProjectId);
+                    setMediaStoragePath(form.mediaStoragePath);
                   }
                   else {
                     setSelectedDraftId("");
                     setContentDraftId(undefined);
+                    setVideoProjectId(undefined);
+                    setMediaStoragePath(undefined);
                   }
                 }}
                 className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
@@ -493,12 +523,26 @@ export default function ContentCalendar() {
 
           <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
             <div>
+              {selectedMediaUrl ? (
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-zinc-300">
+                    Scheduled video
+                  </h3>
+                  <video
+                    src={selectedMediaUrl}
+                    controls
+                    playsInline
+                    className="mt-2 max-h-[560px] rounded-xl bg-black"
+                  />
+                </div>
+              ) : null}
               <h3 className="text-sm font-semibold text-zinc-300">Post or ad content</h3>
               <div className="mt-2 whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-950 p-4 leading-7">
                 {selectedPost.content}
               </div>
               <p className="mt-3 text-xs text-zinc-500">
                 Source: {selectedPost.contentDraftId ? "AI Studio draft linked" : "Created directly in Calendar"}
+                {selectedPost.videoProjectId ? " · Video Studio project linked" : ""}
                 {selectedPost.providerJobId ? ` · Provider job: ${selectedPost.providerJobId}` : ""}
               </p>
               {selectedPost.failureReason ? (
