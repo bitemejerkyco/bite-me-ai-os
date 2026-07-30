@@ -7,6 +7,7 @@ import type { TikTokConfig } from "@/features/integrations/tiktok/config";
 const AUTHORIZE_ENDPOINT = "https://www.tiktok.com/v2/auth/authorize/";
 const TOKEN_ENDPOINT = "https://open.tiktokapis.com/v2/oauth/token/";
 const REVOKE_ENDPOINT = "https://open.tiktokapis.com/v2/oauth/revoke/";
+const USER_INFO_ENDPOINT = "https://open.tiktokapis.com/v2/user/info/";
 const CREATOR_INFO_ENDPOINT =
   "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
 
@@ -174,6 +175,41 @@ export class TikTokApiClient {
         typeof payload.data.max_video_post_duration_sec === "number"
           ? payload.data.max_video_post_duration_sec
           : null,
+    };
+  }
+
+  async queryBasicUserInfo(accessToken: string): Promise<TikTokCreatorInfo> {
+    const url = new URL(USER_INFO_ENDPOINT);
+    url.searchParams.set("fields", "open_id,avatar_url,display_name");
+    const response = await this.fetchImpl(url, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const payload = (await response.json()) as {
+      data?: {
+        user?: {
+          avatar_url?: string;
+          display_name?: string;
+        };
+      };
+      error?: { code?: string };
+    };
+    if (!response.ok || payload.error?.code !== "ok" || !payload.data?.user) {
+      throw new Error(
+        `TIKTOK_USER_INFO_FAILED:${payload.error?.code || response.status}.`,
+      );
+    }
+    return {
+      avatarUrl: payload.data.user.avatar_url || null,
+      username: null,
+      nickname: payload.data.user.display_name || null,
+      privacyLevelOptions: [],
+      commentDisabled: false,
+      duetDisabled: false,
+      stitchDisabled: false,
+      maxVideoDurationSeconds: null,
     };
   }
 }

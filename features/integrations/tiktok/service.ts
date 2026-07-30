@@ -141,7 +141,7 @@ export class TikTokConnectionService {
         `TIKTOK_SCOPE_MISSING:Authorization did not grant ${absent.join(", ")}.`,
       );
     }
-    const creator = await this.client.queryCreatorInfo(tokens.accessToken);
+    const creator = await this.client.queryBasicUserInfo(tokens.accessToken);
     const now = this.now();
     const row = {
       workspace_id: actor.workspaceId,

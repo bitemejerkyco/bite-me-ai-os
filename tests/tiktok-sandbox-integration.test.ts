@@ -93,6 +93,33 @@ describe("TikTok sandbox integration", () => {
     expect(creator.maxVideoDurationSeconds).toBe(180);
   });
 
+  it("loads the sandbox creator profile with user.info.basic", async () => {
+    let capturedUrl = "";
+    const fetchImpl = vi.fn(async (input: URL | RequestInfo) => {
+      capturedUrl = String(input);
+      return new Response(
+        JSON.stringify({
+          data: {
+            user: {
+              open_id: "open-id",
+              avatar_url: "https://example.com/avatar.jpg",
+              display_name: "Original Bite Me Jerky",
+            },
+          },
+          error: { code: "ok", message: "", log_id: "log" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    const creator = await new TikTokApiClient(config, {
+      fetchImpl: fetchImpl as typeof fetch,
+    }).queryBasicUserInfo("access");
+    expect(capturedUrl).toContain("/v2/user/info/");
+    expect(capturedUrl).toContain("display_name");
+    expect(creator.nickname).toBe("Original Bite Me Jerky");
+    expect(creator.avatarUrl).toBe("https://example.com/avatar.jpg");
+  });
+
   it("validates callback values and returned scopes", () => {
     const parsed = parseTikTokCallback(
       new URL(
@@ -153,8 +180,13 @@ describe("TikTok sandbox integration", () => {
       workspaceId: "workspace-1",
       expiresAt: 2_000_000_000_000,
     });
+    const [payload, signature] = state.split(".");
+    const tamperedSignature = `${signature.startsWith("a") ? "b" : "a"}${signature.slice(1)}`;
     expect(() =>
-      verifyTikTokOAuthState(`${state.slice(0, -1)}x`, config.encryptionKey),
+      verifyTikTokOAuthState(
+        `${payload}.${tamperedSignature}`,
+        config.encryptionKey,
+      ),
     ).toThrow("TIKTOK_STATE_INVALID");
   });
 });
