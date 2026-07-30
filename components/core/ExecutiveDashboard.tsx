@@ -73,12 +73,20 @@ export default function ExecutiveDashboard() {
         <p className="mt-2 text-zinc-300">{profile.primaryGoal}</p>
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            ["Active campaigns", active],
-            ["Content drafts", drafts.length],
-            ["Approved content", approved],
-            ["Media assets", media.length],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-xl border border-white/5 bg-black/25 p-4"><p className="text-sm text-zinc-400">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>
+            ["Active campaigns", active, "/marketing"],
+            ["Content drafts", drafts.length, "/content?status=DRAFT"],
+            ["Approved content", approved, "/content?status=APPROVED"],
+            ["Media assets", media.length, "/media"],
+          ].map(([label, value, href]) => (
+            <Link
+              key={label}
+              href={String(href)}
+              className="group rounded-xl border border-white/5 bg-black/25 p-4 transition hover:-translate-y-0.5 hover:border-red-500/50 hover:bg-red-500/5"
+            >
+              <p className="text-sm text-zinc-400 group-hover:text-zinc-200">{label}</p>
+              <p className="mt-2 text-3xl font-bold">{value}</p>
+              <p className="mt-2 text-xs text-red-300 opacity-0 transition group-hover:opacity-100">Open records →</p>
+            </Link>
           ))}
         </div>
       </section>

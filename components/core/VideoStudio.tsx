@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadCloudVideoProjects,
   resolveCloudMediaUrl,
@@ -56,11 +56,26 @@ export default function VideoStudio({
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const checkRenderRef = useRef<() => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       void loadCloudVideoProjects()
-        .then(setProjects)
+        .then((items) => {
+          setProjects(items);
+          const resumed =
+            items.find((item) => item.status === "GENERATING") ||
+            items.find((item) => item.status === "READY") ||
+            items[0];
+          if (resumed) {
+            setProject(resumed);
+            if (resumed.status === "GENERATING") {
+              setNotice(
+                `Resumed video render at ${resumed.providerProgress || 0}%. PostMotive will keep checking automatically.`,
+              );
+            }
+          }
+        })
         .catch((caught: unknown) =>
           setError(
             caught instanceof Error
@@ -254,9 +269,9 @@ export default function VideoStudio({
     }
   };
 
-  const checkRender = async () => {
+  const checkRender = async (silent = false) => {
     if (!project?.providerJobId) return;
-    setWorking("status");
+    if (!silent) setWorking("status");
     setError("");
     try {
       const response = await fetch(
@@ -324,9 +339,34 @@ export default function VideoStudio({
         caught instanceof Error ? caught.message : "Unable to finish the video.",
       );
     } finally {
-      setWorking("");
+      if (!silent) setWorking("");
     }
   };
+
+  useEffect(() => {
+    checkRenderRef.current = () => checkRender(true);
+  });
+
+  useEffect(() => {
+    if (
+      project?.status !== "GENERATING" ||
+      !project.providerJobId
+    ) {
+      return;
+    }
+    const checkNow = window.setTimeout(
+      () => void checkRenderRef.current(),
+      1_000,
+    );
+    const interval = window.setInterval(
+      () => void checkRenderRef.current(),
+      8_000,
+    );
+    return () => {
+      window.clearTimeout(checkNow);
+      window.clearInterval(interval);
+    };
+  }, [project?.providerJobId, project?.status]);
 
   const schedule = async () => {
     if (!project?.videoStoragePath) {
@@ -603,7 +643,7 @@ export default function VideoStudio({
               {project.status === "GENERATING" ? (
                 <button
                   disabled={Boolean(working)}
-                  onClick={() => void checkRender()}
+                  onClick={() => void checkRender(false)}
                   className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-60"
                 >
                   {working === "status"
@@ -650,8 +690,11 @@ export default function VideoStudio({
         <p className="mt-5 text-xs text-zinc-500">
           {projects.length} video projects saved in this workspace.
         </p>
+        <p className="mt-2 text-xs text-zinc-500">
+          In-progress renders continue at the provider if this page closes.
+          Reopening Video Studio automatically resumes status tracking.
+        </p>
       </section>
     </div>
   );
 }
-

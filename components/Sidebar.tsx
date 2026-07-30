@@ -40,6 +40,7 @@ export default function Sidebar() {
           ["/onboarding", "Business Setup", "✓"],
           ["/marketing", "Marketing", "◆"],
           ["/studio", "AI Studio", "✦"],
+          ["/content", "Content Library", "▤"],
           ["/calendar", "Calendar", "◫"],
           ["/knowledge", "Knowledge Base", "★"],
           ["/media", "Media Library", "▧"],
