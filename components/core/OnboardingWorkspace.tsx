@@ -67,9 +67,9 @@ export default function OnboardingWorkspace() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
         <h2 className="text-xl font-bold">Business profile</h2>
-        <p className="mt-1 text-sm text-zinc-400">This controls brand voice, recommendations, and compliance checks.</p>
+        <p className="mt-1 text-sm text-slate-500">This controls brand voice, recommendations, and compliance checks.</p>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           {[
             ["businessName", "Business name", "Bite Me Jerky"],
@@ -79,21 +79,21 @@ export default function OnboardingWorkspace() {
             ["voice", "Brand voice", "Bold, witty, confident"],
           ].map(([field, label, placeholder]) => (
             <label key={field} className={field === "primaryGoal" ? "md:col-span-2" : ""}>
-              <span className="text-sm text-zinc-300">{label}</span>
+              <span className="text-sm text-slate-700">{label}</span>
               <input
                 value={profile[field as keyof WorkspaceProfile]}
                 onChange={(event) => update(field as keyof WorkspaceProfile, event.target.value)}
                 placeholder={placeholder}
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
               />
             </label>
           ))}
           <label className="md:col-span-2">
-            <span className="text-sm text-zinc-300">Industry / Compliance Mode</span>
+            <span className="text-sm text-slate-700">Industry / Compliance Mode</span>
             <select
               value={profile.industry}
               onChange={(event) => update("industry", event.target.value as Industry)}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
             >
               <option value="GENERAL_RETAIL">General Retail</option>
               <option value="FOOD_BEVERAGE">Food & Beverage</option>
@@ -107,7 +107,7 @@ export default function OnboardingWorkspace() {
           </label>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button disabled={saving} onClick={() => void save()} className="rounded-lg bg-red-600 px-5 py-2.5 font-semibold hover:bg-red-500 disabled:opacity-60">
+          <button disabled={saving} onClick={() => void save()} className="rounded-xl bg-violet-600 px-5 py-2.5 font-semibold hover:bg-violet-500 disabled:opacity-60">
             {saving ? "Saving securely…" : saved ? "Saved ✓" : "Save business setup"}
           </button>
           <button
@@ -117,17 +117,17 @@ export default function OnboardingWorkspace() {
               setProfile(demo);
               void save(demo);
             }}
-            className="rounded-lg border border-zinc-700 px-5 py-2.5 text-zinc-200 hover:bg-white/5"
+            className="rounded-xl border border-slate-200 px-5 py-2.5 text-slate-700 hover:bg-violet-50"
           >
             Load Bite Me Jerky demo
           </button>
         </div>
         {saved ? <p className="mt-3 text-sm text-emerald-400">Business setup saved.</p> : null}
-        {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
       </section>
-      <aside className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
-        <h3 className="font-bold text-amber-200">Compliance Mode</h3>
-        <p className="mt-2 text-sm leading-6 text-zinc-300">
+      <aside className="rounded-3xl border border-amber-500/20 bg-amber-500/5 p-5">
+        <h3 className="font-bold text-amber-800">Compliance Mode</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-700">
           Content guidance changes by industry. Restricted industries receive safer channel recommendations,
           claim warnings, and alternatives when direct promotion may violate platform policy.
         </p>

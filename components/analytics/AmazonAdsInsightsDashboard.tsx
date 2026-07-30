@@ -37,10 +37,10 @@ const currency = (value: number) =>
 const percent = (value: number) => `${value.toFixed(2)}%`;
 
 const priorityClassMap: Record<RecommendationPriority, string> = {
-  critical: "border-red-500/70 bg-red-500/10 text-red-200",
+  critical: "border-rose-300 bg-rose-50 text-rose-700",
   high: "border-orange-500/70 bg-orange-500/10 text-orange-200",
-  medium: "border-amber-500/70 bg-amber-500/10 text-amber-200",
-  low: "border-zinc-500/70 bg-zinc-500/10 text-zinc-200",
+  medium: "border-amber-500/70 bg-amber-500/10 text-amber-800",
+  low: "border-slate-200 bg-slate-50 text-slate-700",
 };
 
 const priorityLabel = (priority: RecommendationPriority) =>
@@ -122,22 +122,22 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-red-950 px-4 py-6 text-zinc-100 md:px-8">
+    <main className="min-h-screen bg-gradient-to-b from-violet-50 via-white to-cyan-50 px-4 py-6 text-slate-900 md:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="rounded-2xl border border-red-500/30 bg-black/60 p-6 shadow-xl">
+        <header className="rounded-3xl border border-violet-200 bg-white/80 p-6 shadow-xl">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">
+            <span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-800">
               {activeModel.sourceMode === "LIVE" ? "Live Amazon Data" : "Sandbox Data"}
             </span>
-            <span className="rounded-full border border-red-500/60 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-200">
+            <span className="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
               Read Only
             </span>
           </div>
           <h1 className="mt-4 text-3xl font-bold tracking-tight md:text-4xl">Amazon Ads Insights</h1>
-          <p className="mt-2 text-sm text-zinc-300">
+          <p className="mt-2 text-sm text-slate-700">
             Workspace-isolated analytics preview for campaign, keyword, and search-term performance.
           </p>
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-1 text-xs text-slate-500">
             Generated: {new Date(activeModel.generatedAt).toISOString()}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -145,27 +145,27 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               type="button"
               onClick={loadLiveData}
               disabled={liveLoading}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {liveLoading ? "Loading Amazon report…" : "Load Live Amazon Ads"}
             </button>
-            <span className="text-xs text-zinc-400">
+            <span className="text-xs text-slate-500">
               Generates a read-only Sponsored Products search-term report. No account changes are made.
             </span>
           </div>
           {liveError ? (
-            <p className="mt-3 rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-200">
+            <p className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700">
               {liveError}
             </p>
           ) : null}
         </header>
 
-        <section className="grid grid-cols-1 gap-3 rounded-2xl border border-red-500/25 bg-black/50 p-4 md:grid-cols-5">
-          <label className="text-sm text-zinc-300">
+        <section className="grid grid-cols-1 gap-3 rounded-3xl border border-violet-200 bg-white/70 p-4 md:grid-cols-5">
+          <label className="text-sm text-slate-700">
             Start Date
             <input
               type="date"
-              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
               value={filters.startDate}
               min={activeModel.filters.dateRange.min}
               max={activeModel.filters.dateRange.max}
@@ -173,11 +173,11 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
             />
           </label>
 
-          <label className="text-sm text-zinc-300">
+          <label className="text-sm text-slate-700">
             End Date
             <input
               type="date"
-              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
               value={filters.endDate}
               min={activeModel.filters.dateRange.min}
               max={activeModel.filters.dateRange.max}
@@ -185,10 +185,10 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
             />
           </label>
 
-          <label className="text-sm text-zinc-300">
+          <label className="text-sm text-slate-700">
             Marketplace
             <select
-              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
               value={filters.marketplaceId}
               onChange={(event) => setFilters((prev) => ({ ...prev, marketplaceId: event.target.value }))}
             >
@@ -201,10 +201,10 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
             </select>
           </label>
 
-          <label className="text-sm text-zinc-300">
+          <label className="text-sm text-slate-700">
             Profile
             <select
-              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
               value={filters.profileId}
               onChange={(event) => setFilters((prev) => ({ ...prev, profileId: event.target.value }))}
             >
@@ -217,10 +217,10 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
             </select>
           </label>
 
-          <label className="text-sm text-zinc-300">
+          <label className="text-sm text-slate-700">
             Campaign Status
             <select
-              className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
               value={filters.campaignStatus}
               onChange={(event) => setFilters((prev) => ({ ...prev, campaignStatus: event.target.value }))}
             >
@@ -234,7 +234,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
           </label>
         </section>
 
-        <p className="text-xs text-zinc-400">{filterHint}</p>
+        <p className="text-xs text-slate-500">{filterHint}</p>
 
         <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <MetricCard label="Impressions" value={filtered.overview.impressions.toLocaleString()} />
@@ -305,33 +305,33 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
           emptyMessage="No search term rows for selected filters."
         />
 
-        <section className="rounded-2xl border border-red-500/25 bg-black/55 p-4 md:p-6">
+        <section className="rounded-3xl border border-violet-200 bg-white/75 p-4 md:p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold text-zinc-100">Recommendations</h2>
-              <p className="mt-1 text-sm text-zinc-300">
+              <h2 className="text-2xl font-semibold text-slate-900">Recommendations</h2>
+              <p className="mt-1 text-sm text-slate-700">
                 Deterministic, explainable guidance from sandbox performance data.
               </p>
             </div>
-            <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">
+            <span className="inline-flex items-center rounded-full border border-amber-500/60 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-800">
               Read Only — No changes applied
             </span>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             {(["critical", "high", "medium", "low"] as RecommendationPriority[]).map((priority) => (
-              <div key={priority} className={`rounded-xl border p-3 ${priorityClassMap[priority]}`}>
+              <div key={priority} className={`rounded-2xl border p-3 ${priorityClassMap[priority]}`}>
                 <p className="text-xs uppercase tracking-wide">{priorityLabel(priority)}</p>
                 <p className="mt-1 text-2xl font-semibold">{recommendationModel.summary[priority]}</p>
               </div>
             ))}
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 md:grid-cols-4">
-            <label className="text-sm text-zinc-300">
+          <div className="mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white/70 p-4 md:grid-cols-4">
+            <label className="text-sm text-slate-700">
               Priority
               <select
-                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
                 value={recommendationFilters.priority}
                 onChange={(event) =>
                   setRecommendationFilters((prev) => ({
@@ -349,10 +349,10 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               </select>
             </label>
 
-            <label className="text-sm text-zinc-300">
+            <label className="text-sm text-slate-700">
               Type
               <select
-                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
                 value={recommendationFilters.type}
                 onChange={(event) =>
                   setRecommendationFilters((prev) => ({
@@ -370,10 +370,10 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               </select>
             </label>
 
-            <label className="text-sm text-zinc-300">
+            <label className="text-sm text-slate-700">
               Campaign
               <select
-                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
                 value={recommendationFilters.campaignId}
                 onChange={(event) =>
                   setRecommendationFilters((prev) => ({
@@ -391,10 +391,10 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               </select>
             </label>
 
-            <label className="text-sm text-zinc-300">
+            <label className="text-sm text-slate-700">
               Marketplace
               <select
-                className="mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2"
                 value={recommendationFilters.marketplaceId}
                 onChange={(event) =>
                   setRecommendationFilters((prev) => ({
@@ -414,7 +414,7 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
           </div>
 
           {filteredRecommendations.length === 0 ? (
-            <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-sm text-zinc-300">
+            <p className="mt-4 rounded-2xl border border-slate-200 bg-white/60 p-4 text-sm text-slate-700">
               No recommendations for the selected filter combination.
             </p>
           ) : (
@@ -422,15 +422,15 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
               {filteredRecommendations.map((recommendation) => (
                 <article
                   key={recommendation.id}
-                  className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4"
+                  className="rounded-2xl border border-slate-200 bg-white/70 p-4"
                   aria-label={`${recommendationTypeLabel(recommendation.type)} recommendation`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-base font-semibold text-zinc-100">
+                      <h3 className="text-base font-semibold text-slate-900">
                         {recommendationTypeLabel(recommendation.type)}
                       </h3>
-                      <p className="mt-1 text-sm text-zinc-300">{recommendation.explanation}</p>
+                      <p className="mt-1 text-sm text-slate-700">{recommendation.explanation}</p>
                     </div>
                     <span
                       className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${priorityClassMap[recommendation.priority]}`}
@@ -439,43 +439,43 @@ export default function AmazonAdsInsightsDashboard({ model }: AmazonAdsInsightsD
                     </span>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-1 gap-3 text-sm text-zinc-300 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="mt-3 grid grid-cols-1 gap-3 text-sm text-slate-700 md:grid-cols-2 xl:grid-cols-4">
                     <p>
-                      <span className="text-zinc-400">Campaign:</span>{" "}
+                      <span className="text-slate-500">Campaign:</span>{" "}
                       {recommendation.reference.campaignName}
                     </p>
                     <p>
-                      <span className="text-zinc-400">Marketplace:</span>{" "}
+                      <span className="text-slate-500">Marketplace:</span>{" "}
                       {recommendation.marketplaceId}
                     </p>
                     <p>
-                      <span className="text-zinc-400">Confidence:</span>{" "}
+                      <span className="text-slate-500">Confidence:</span>{" "}
                       {Math.round(recommendation.confidenceScore * 100)}%
                     </p>
                     <p>
-                      <span className="text-zinc-400">Impact:</span>{" "}
+                      <span className="text-slate-500">Impact:</span>{" "}
                       {recommendation.estimatedImpactRange.label} ({recommendation.estimatedImpactRange.low}–
                       {recommendation.estimatedImpactRange.high} {recommendation.estimatedImpactRange.unit})
                     </p>
                   </div>
 
-                  <p className="mt-2 text-sm text-amber-200">
+                  <p className="mt-2 text-sm text-amber-800">
                     Suggested action: {recommendation.suggestedAction}
                   </p>
 
-                  <details className="mt-3 rounded-lg border border-zinc-800 bg-black/45 p-3">
-                    <summary className="cursor-pointer text-sm font-medium text-zinc-200">
+                  <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-slate-700">
                       View evidence
                     </summary>
-                    <p className="mt-2 text-sm text-zinc-300">{recommendation.calculationEvidence}</p>
-                    <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-zinc-300 md:grid-cols-2">
+                    <p className="mt-2 text-sm text-slate-700">{recommendation.calculationEvidence}</p>
+                    <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-slate-700 md:grid-cols-2">
                       {Object.entries(recommendation.supportingMetrics).map(([key, value]) => (
                         <li key={`${recommendation.id}-${key}`}>
-                          <span className="text-zinc-400">{recommendationTypeLabel(key)}:</span> {String(value)}
+                          <span className="text-slate-500">{recommendationTypeLabel(key)}:</span> {String(value)}
                         </li>
                       ))}
                     </ul>
-                    <p className="mt-2 text-xs text-zinc-400">{recommendation.status}</p>
+                    <p className="mt-2 text-xs text-slate-500">{recommendation.status}</p>
                   </details>
                 </article>
               ))}

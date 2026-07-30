@@ -7,7 +7,7 @@ type TrendMiniChartProps = {
 export default function TrendMiniChart({ data }: TrendMiniChartProps) {
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-red-500/30 bg-zinc-900/80 p-6 text-sm text-zinc-300">
+      <div className="rounded-2xl border border-violet-200 bg-white/80 p-6 text-sm text-slate-700">
         No trend data available for the selected filters.
       </div>
     );
@@ -29,8 +29,8 @@ export default function TrendMiniChart({ data }: TrendMiniChartProps) {
   const salesPath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.salesY}`).join(" ");
 
   return (
-    <div className="rounded-xl border border-red-500/30 bg-zinc-900/80 p-4">
-      <p className="mb-3 text-sm font-medium text-zinc-200">Spend vs Sales Trend</p>
+    <div className="rounded-2xl border border-violet-200 bg-white/80 p-4">
+      <p className="mb-3 text-sm font-medium text-slate-700">Spend vs Sales Trend</p>
       <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full" role="img" aria-label="Spend vs Sales Trend">
         <path d={spendPath} fill="none" stroke="#f59e0b" strokeWidth="3" />
         <path d={salesPath} fill="none" stroke="#ef4444" strokeWidth="3" />
@@ -41,9 +41,9 @@ export default function TrendMiniChart({ data }: TrendMiniChartProps) {
           </g>
         ))}
       </svg>
-      <div className="mt-3 flex gap-4 text-xs text-zinc-300">
+      <div className="mt-3 flex gap-4 text-xs text-slate-700">
         <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-500" />Spend</span>
-        <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-500" />Sales</span>
+        <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-fuchsia-500" />Sales</span>
       </div>
     </div>
   );

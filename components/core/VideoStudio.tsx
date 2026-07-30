@@ -735,33 +735,33 @@ export default function VideoStudio({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
         <h2 className="text-xl font-bold">Create a vertical video</h2>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-slate-500">
           TikTok first. The same 9:16 project will later work for Reels and
           Shorts.
         </p>
         <div className="mt-6 space-y-4">
-          <label className="block text-sm text-zinc-300">
+          <label className="block text-sm text-slate-700">
             Channel
             <select
               value={channel}
               onChange={(event) =>
                 setChannel(event.target.value as VideoProject["channel"])
               }
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
             >
               <option>TikTok</option>
               <option disabled>Instagram Reels — next</option>
               <option disabled>YouTube Shorts — next</option>
             </select>
           </label>
-          <label className="block text-sm text-zinc-300">
+          <label className="block text-sm text-slate-700">
             Objective
             <select
               value={objective}
               onChange={(event) => setObjective(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
             >
               <option>Drive engagement</option>
               <option>Generate sales</option>
@@ -769,25 +769,25 @@ export default function VideoStudio({
               <option>Educate customers</option>
             </select>
           </label>
-          <label className="block text-sm text-zinc-300">
+          <label className="block text-sm text-slate-700">
             What should the video communicate?
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               placeholder="Example: Show premium beef jerky paired with real fruit on a trail ride"
-              className="mt-1 min-h-28 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              className="mt-1 min-h-28 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
             />
           </label>
-          <label className="block text-sm text-zinc-300">
+          <label className="block text-sm text-slate-700">
             Call to action
             <input
               value={cta}
               onChange={(event) => setCta(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-slate-700">
               Length
               <select
                 value={duration}
@@ -796,21 +796,21 @@ export default function VideoStudio({
                     Number(event.target.value) as VideoProject["durationSeconds"],
                   )
                 }
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
               >
                 <option value={8}>8 seconds</option>
                 <option value={16}>16 seconds</option>
                 <option value={20}>20 seconds</option>
               </select>
             </label>
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-slate-700">
               Voice
               <select
                 value={voice}
                 onChange={(event) =>
                   setVoice(event.target.value as VideoVoice)
                 }
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
               >
                 {VIDEO_VOICES.map((item) => (
                   <option key={item} value={item}>
@@ -820,14 +820,14 @@ export default function VideoStudio({
               </select>
             </label>
           </div>
-          <label className="block text-sm text-zinc-300">
+          <label className="block text-sm text-slate-700">
             Music
             <select
               value={musicMode}
               onChange={(event) =>
                 setMusicMode(event.target.value as VideoMusicMode)
               }
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
             >
               <option value="GENERATED_AMBIENT">
                 Original generated ambient audio
@@ -841,27 +841,27 @@ export default function VideoStudio({
           <button
             disabled={Boolean(working)}
             onClick={() => void generatePlan()}
-            className="w-full rounded-lg bg-red-600 px-5 py-3 font-semibold hover:bg-red-500 disabled:opacity-60"
+            className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold hover:bg-violet-500 disabled:opacity-60"
           >
             {working === "plan" ? "Planning video…" : "Create video plan"}
           </button>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
         <h2 className="text-xl font-bold">Video production</h2>
-        <p className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm font-medium text-amber-100">
+        <p className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm font-medium text-amber-800">
           Video generation may take 5–10 minutes. You can leave this page and
           return while it continues processing.
         </p>
         {!project ? (
           <div className="mt-6">
-            <p className="text-zinc-400">
+            <p className="text-slate-500">
               Create a plan to see the script, scenes, voiceover, and video
               preview.
             </p>
             {projects.length ? (
-              <label className="mt-5 block text-sm text-zinc-300">
+              <label className="mt-5 block text-sm text-slate-700">
                 Or reopen a saved video
                 <select
                   defaultValue=""
@@ -875,7 +875,7 @@ export default function VideoStudio({
                       if (!saved.voiceoverStoragePath) setVoiceoverUrl("");
                     }
                   }}
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
                 >
                   <option value="">Choose a video project</option>
                   {projects.map((item) => (
@@ -891,7 +891,7 @@ export default function VideoStudio({
           <div className="mt-5 space-y-5">
             <div>
               <p className="font-semibold">{project.title}</p>
-              <p className="mt-1 text-sm text-zinc-400">
+              <p className="mt-1 text-sm text-slate-500">
                 {project.channel} · 9:16 · {project.durationSeconds}s ·{" "}
                 {project.status}
                 {project.status === "GENERATING"
@@ -901,19 +901,19 @@ export default function VideoStudio({
                   : ""}
               </p>
               {project.status === "GENERATING" ? (
-                <div className="mt-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                <div className="mt-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="font-medium text-blue-100">
                       {(project.providerProgress || 0) > 0
                         ? "Rendering video"
                         : "Queued for rendering"}
                     </span>
-                    <span className="font-semibold text-blue-200">
+                    <span className="font-semibold text-blue-700">
                       {Math.round(project.providerProgress || 0)}%
                     </span>
                   </div>
                   <div
-                    className="mt-3 h-3 overflow-hidden rounded-full bg-zinc-800"
+                    className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100"
                     role="progressbar"
                     aria-label="Video rendering progress"
                     aria-valuemin={0}
@@ -930,7 +930,7 @@ export default function VideoStudio({
                       }}
                     />
                   </div>
-                  <p className="mt-2 text-xs text-zinc-400">
+                  <p className="mt-2 text-xs text-slate-500">
                     The confirmed progress will only move forward. You can
                     leave this page and return while rendering continues.
                   </p>
@@ -942,18 +942,18 @@ export default function VideoStudio({
                 src={previewUrl}
                 controls
                 playsInline
-                className="mx-auto max-h-[520px] rounded-xl bg-black"
+                className="mx-auto max-h-[520px] rounded-2xl bg-black"
               />
             ) : null}
-            <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold">Editable scene plan</p>
-                  <p className="mt-1 text-xs text-zinc-400">
+                  <p className="mt-1 text-xs text-slate-500">
                     Adjust what viewers see, hear, and read in every scene.
                   </p>
                 </div>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-slate-500">
                   Planned time: {totalSceneSeconds}s /{" "}
                   {project.durationSeconds}s
                 </p>
@@ -962,12 +962,12 @@ export default function VideoStudio({
                 {project.scenes.map((scene, sceneIndex) => (
                   <div
                     key={scene.order}
-                    className="rounded-lg border border-white/10 p-4"
+                    className="rounded-xl border border-slate-200/80 p-4"
                   >
                     <p className="text-sm font-semibold">
                       Scene {scene.order} · {scene.seconds}s
                     </p>
-                    <label className="mt-3 block text-xs text-zinc-300">
+                    <label className="mt-3 block text-xs text-slate-700">
                       Visual direction
                       <textarea
                         value={scene.visual}
@@ -981,10 +981,10 @@ export default function VideoStudio({
                             ),
                           })
                         }
-                        className="mt-1 min-h-20 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+                        className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
                       />
                     </label>
-                    <label className="mt-3 block text-xs text-zinc-300">
+                    <label className="mt-3 block text-xs text-slate-700">
                       Narration for this scene
                       <textarea
                         value={scene.narration}
@@ -998,10 +998,10 @@ export default function VideoStudio({
                             ),
                           })
                         }
-                        className="mt-1 min-h-16 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+                        className="mt-1 min-h-16 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
                       />
                     </label>
-                    <label className="mt-3 block text-xs text-zinc-300">
+                    <label className="mt-3 block text-xs text-slate-700">
                       On-screen text
                       <input
                         value={scene.onScreenText}
@@ -1015,35 +1015,35 @@ export default function VideoStudio({
                             ),
                           })
                         }
-                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
                       />
                     </label>
                   </div>
                 ))}
               </div>
             </div>
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-slate-700">
               Voiceover script
               <textarea
                 value={project.script}
                 onChange={(event) =>
                   setProject({ ...project, script: event.target.value })
                 }
-                className="mt-1 min-h-28 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                className="mt-1 min-h-28 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
               />
             </label>
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-slate-700">
               Post caption
               <textarea
                 value={project.caption}
                 onChange={(event) =>
                   setProject({ ...project, caption: event.target.value })
                 }
-                className="mt-1 min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
               />
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm text-zinc-300">
+              <label className="block text-sm text-slate-700">
                 Production voice
                 <select
                   value={project.voice}
@@ -1052,7 +1052,7 @@ export default function VideoStudio({
                     setVoice(nextVoice);
                     setProject({ ...project, voice: nextVoice });
                   }}
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
                 >
                   {VIDEO_VOICES.map((item) => (
                     <option key={item} value={item}>
@@ -1061,7 +1061,7 @@ export default function VideoStudio({
                   ))}
                 </select>
               </label>
-              <label className="block text-sm text-zinc-300">
+              <label className="block text-sm text-slate-700">
                 Voice direction
                 <textarea
                   value={voiceInstructions}
@@ -1069,7 +1069,7 @@ export default function VideoStudio({
                     setVoiceInstructions(event.target.value)
                   }
                   placeholder="Example: Warm and trustworthy, medium pace, pause after the opening hook"
-                  className="mt-1 min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                  className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
                 />
               </label>
             </div>
@@ -1080,14 +1080,14 @@ export default function VideoStudio({
               <button
                 disabled={Boolean(working)}
                 onClick={() => void savePlanEdits()}
-                className="rounded-lg border border-emerald-500/40 px-4 py-2 text-emerald-200 disabled:opacity-60"
+                className="rounded-xl border border-emerald-500/40 px-4 py-2 text-emerald-700 disabled:opacity-60"
               >
                 {working === "save" ? "Saving edits…" : "Save plan edits"}
               </button>
               <button
                 disabled={Boolean(working)}
                 onClick={() => void generateVoiceover()}
-                className="rounded-lg border border-blue-500/40 px-4 py-2 text-blue-200 disabled:opacity-60"
+                className="rounded-xl border border-blue-500/40 px-4 py-2 text-blue-700 disabled:opacity-60"
               >
                 {working === "voice"
                   ? "Creating voice…"
@@ -1098,7 +1098,7 @@ export default function VideoStudio({
                   <button
                     disabled={Boolean(working)}
                     onClick={() => void checkRender(false)}
-                    className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-60"
+                    className="rounded-xl bg-violet-600 px-4 py-2 font-semibold disabled:opacity-60"
                   >
                     {working === "status"
                       ? "Checking…"
@@ -1107,7 +1107,7 @@ export default function VideoStudio({
                   <button
                     disabled={Boolean(working)}
                     onClick={() => void cancelRender()}
-                    className="rounded-lg border border-red-500/40 px-4 py-2 text-red-200 disabled:opacity-60"
+                    className="rounded-xl border border-violet-300 px-4 py-2 text-rose-700 disabled:opacity-60"
                   >
                     {working === "cancel"
                       ? "Canceling…"
@@ -1118,7 +1118,7 @@ export default function VideoStudio({
                 <button
                   disabled={Boolean(working)}
                   onClick={() => void startRender()}
-                  className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-60"
+                  className="rounded-xl bg-violet-600 px-4 py-2 font-semibold disabled:opacity-60"
                 >
                   {working === "render"
                     ? "Starting render…"
@@ -1128,7 +1128,7 @@ export default function VideoStudio({
                 <button
                   disabled={Boolean(working)}
                   onClick={() => void schedule()}
-                  className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-60"
+                  className="rounded-xl bg-violet-600 px-4 py-2 font-semibold disabled:opacity-60"
                 >
                   Schedule / Post now
                 </button>
@@ -1136,9 +1136,9 @@ export default function VideoStudio({
             </div>
             {project.videoStoragePath &&
             project.status !== "GENERATING" ? (
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
                 <p className="text-sm font-semibold">Revise this video</p>
-                <p className="mt-1 text-xs text-zinc-400">
+                <p className="mt-1 text-xs text-slate-500">
                   Describe the exact change you want. The current version will
                   stay saved for comparison.
                 </p>
@@ -1148,13 +1148,13 @@ export default function VideoStudio({
                     setRevisionRequest(event.target.value)
                   }
                   placeholder="Example: Show the product in the first two seconds, brighten the trail scene, and make the final logo shot longer"
-                  className="mt-3 min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                  className="mt-3 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
                 />
                 <div className="mt-3 flex flex-wrap gap-3">
                   <button
                     disabled={Boolean(working) || !revisionRequest.trim()}
                     onClick={() => void startRevision("edit")}
-                    className="rounded-lg bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:opacity-60"
+                    className="rounded-xl bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 disabled:opacity-60"
                   >
                     {working === "revision"
                       ? "Starting revision…"
@@ -1163,22 +1163,22 @@ export default function VideoStudio({
                   <button
                     disabled={Boolean(working) || !revisionRequest.trim()}
                     onClick={() => void startRevision("fresh")}
-                    className="rounded-lg border border-blue-500/40 px-4 py-2 text-blue-100 hover:bg-blue-500/10 disabled:opacity-60"
+                    className="rounded-xl border border-blue-500/40 px-4 py-2 text-blue-100 hover:bg-blue-500/10 disabled:opacity-60"
                   >
                     Generate fresh revision
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-zinc-500">
+                <p className="mt-2 text-xs text-slate-400">
                   Use a fresh revision if a targeted edit remains queued. Your
                   approved original stays in Version History.
                 </p>
               </div>
             ) : null}
             {versions.length ? (
-              <div className="rounded-xl border border-white/10 p-4">
+              <div className="rounded-2xl border border-slate-200/80 p-4">
                 <div>
                   <p className="text-sm font-semibold">Version history</p>
-                  <p className="mt-1 text-xs text-zinc-400">
+                  <p className="mt-1 text-xs text-slate-500">
                     Compare earlier video and voiceover versions, then restore
                     the one the client approves.
                   </p>
@@ -1187,7 +1187,7 @@ export default function VideoStudio({
                   {versions.map((version) => (
                     <div
                       key={version.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 p-3"
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white/70 p-3"
                     >
                       <div>
                         <p className="text-sm font-medium">
@@ -1196,7 +1196,7 @@ export default function VideoStudio({
                             : "Voiceover"}{" "}
                           version {version.versionNumber}
                         </p>
-                        <p className="mt-1 text-xs text-zinc-500">
+                        <p className="mt-1 text-xs text-slate-400">
                           {new Date(version.createdAt).toLocaleString()}
                           {version.voice
                             ? ` · ${version.voice[0].toUpperCase() + version.voice.slice(1)}`
@@ -1206,7 +1206,7 @@ export default function VideoStudio({
                       <button
                         disabled={Boolean(working)}
                         onClick={() => void restoreVersion(version)}
-                        className="rounded-lg border border-white/15 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-60"
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-violet-50 disabled:opacity-60"
                       >
                         {working === "restore"
                           ? "Restoring…"
@@ -1217,7 +1217,7 @@ export default function VideoStudio({
                 </div>
               </div>
             ) : null}
-            <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-100">
+            <p className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-800">
               AI-generated voice disclosure is required. Copyrighted music,
               celebrities, real-person likenesses, and third-party watermarks
               are not allowed.
@@ -1225,19 +1225,19 @@ export default function VideoStudio({
           </div>
         )}
         {notice ? (
-          <p className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+          <p className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
             {notice}
           </p>
         ) : null}
         {error ? (
-          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+          <p className="mt-4 rounded-xl border border-violet-200 bg-rose-50 p-3 text-sm text-rose-700">
             {error}
           </p>
         ) : null}
-        <p className="mt-5 text-xs text-zinc-500">
+        <p className="mt-5 text-xs text-slate-400">
           {projects.length} video projects saved in this workspace.
         </p>
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-slate-400">
           In-progress renders continue at the provider if this page closes.
           Reopening Video Studio automatically resumes status tracking.
         </p>

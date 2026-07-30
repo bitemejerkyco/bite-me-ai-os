@@ -9,10 +9,9 @@ export default function SignOutButton() {
         await createClient().auth.signOut();
         window.location.href = "/login";
       }}
-      className="mt-3 w-full rounded-lg border border-white/10 px-3 py-2 text-left text-xs text-zinc-400 hover:bg-white/5 hover:text-white"
+      className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-xs font-medium text-slate-500 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
     >
       Sign out
     </button>
   );
 }
-

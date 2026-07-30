@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "Terms governing use of the PostMotive platform.",
 };
 
-const headingClass = "text-2xl font-bold text-white";
+const headingClass = "text-2xl font-bold text-slate-900";
 const listClass = "list-disc space-y-2 pl-6";
 
 export default function TermsPage() {
@@ -16,7 +16,7 @@ export default function TermsPage() {
       title="Terms of Service"
     >
       <p>
-        <strong className="text-white">Effective date:</strong> July 30, 2026
+        <strong className="text-slate-900">Effective date:</strong> July 30, 2026
       </p>
 
       <section className="space-y-3">
@@ -186,7 +186,7 @@ export default function TermsPage() {
           We may update these terms and will post the revised effective date on
           this page. For questions, contact CaliKing Distro at{" "}
           <a
-            className="text-red-400 underline hover:text-red-300"
+            className="text-violet-600 underline hover:text-rose-600"
             href="mailto:calikingdistro@gmail.com"
           >
             calikingdistro@gmail.com

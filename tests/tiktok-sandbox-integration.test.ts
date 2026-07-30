@@ -18,7 +18,7 @@ const config: TikTokConfig = {
     "utf8",
   ).toString("base64"),
   sandboxEnabled: true,
-  scopes: ["user.info.basic", "video.publish"],
+  scopes: ["user.info.basic", "video.upload"],
 };
 
 describe("TikTok sandbox integration", () => {
@@ -29,7 +29,7 @@ describe("TikTok sandbox integration", () => {
     );
     expect(url.searchParams.get("client_key")).toBe("client-key");
     expect(url.searchParams.get("scope")).toBe(
-      "user.info.basic,video.publish",
+      "user.info.basic,video.upload",
     );
     expect(url.searchParams.get("redirect_uri")).toBe(config.redirectUri);
     expect(url.searchParams.get("state")).toBe("state-1");
@@ -47,7 +47,7 @@ describe("TikTok sandbox integration", () => {
           access_token: "access",
           refresh_token: "refresh",
           open_id: "open-id",
-          scope: "user.info.basic,video.publish",
+          scope: "user.info.basic,video.upload",
           expires_in: 86400,
           refresh_expires_in: 31536000,
           token_type: "Bearer",
@@ -59,7 +59,7 @@ describe("TikTok sandbox integration", () => {
     const tokens = await new TikTokApiClient(config, {
       fetchImpl: fetchImpl as typeof fetch,
     }).exchangeCode("authorization-code");
-    expect(tokens.scope).toEqual(["user.info.basic", "video.publish"]);
+    expect(tokens.scope).toEqual(["user.info.basic", "video.upload"]);
     expect(tokens.accessToken).toBe("access");
     expect(capturedUrl).toBe("https://open.tiktokapis.com/v2/oauth/token/");
     expect(capturedBody).toContain("client_secret=client-secret");
@@ -94,13 +94,13 @@ describe("TikTok sandbox integration", () => {
   it("validates callback values and returned scopes", () => {
     const parsed = parseTikTokCallback(
       new URL(
-        "https://postmotive.example/callback?code=code-1&state=state-1&scopes=user.info.basic%2Cvideo.publish",
+        "https://postmotive.example/callback?code=code-1&state=state-1&scopes=user.info.basic%2Cvideo.upload",
       ),
     );
     expect(parsed).toEqual({
       code: "code-1",
       state: "state-1",
-      scopes: ["user.info.basic", "video.publish"],
+      scopes: ["user.info.basic", "video.upload"],
     });
     expect(() =>
       parseTikTokCallback(

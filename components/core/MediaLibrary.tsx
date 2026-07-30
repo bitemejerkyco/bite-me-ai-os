@@ -77,10 +77,10 @@ export default function MediaLibrary() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-dashed border-red-500/40 bg-red-500/5 p-6 text-center">
+      <section className="rounded-3xl border border-dashed border-violet-300 bg-violet-50 p-6 text-center">
         <h2 className="text-xl font-bold">Upload branded media</h2>
-        <p className="mt-2 text-sm text-zinc-400">Photos, videos, logos, graphics, and licensed audio.</p>
-        <label className={`mt-4 inline-block rounded-lg bg-red-600 px-5 py-2.5 font-semibold hover:bg-red-500 ${uploading ? "cursor-wait opacity-60" : "cursor-pointer"}`}>
+        <p className="mt-2 text-sm text-slate-500">Photos, videos, logos, graphics, and licensed audio.</p>
+        <label className={`mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 font-semibold hover:bg-violet-500 ${uploading ? "cursor-wait opacity-60" : "cursor-pointer"}`}>
           {uploading ? "Uploading…" : "Choose files"}
           <input
             type="file"
@@ -94,36 +94,36 @@ export default function MediaLibrary() {
         {message ? <p className="mt-3 text-sm text-emerald-400">{message}</p> : null}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-xl font-bold">Asset library</h2>
-            <p className="text-sm text-zinc-400">{assets.length} saved assets</p>
+            <p className="text-sm text-slate-500">{assets.length} saved assets</p>
           </div>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search names or tags"
-            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2"
           />
         </div>
         {filtered.length === 0 ? (
-          <p className="mt-6 rounded-xl border border-white/5 bg-black/20 p-6 text-center text-zinc-400">
+          <p className="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-6 text-center text-slate-500">
             Upload your first brand asset to begin.
           </p>
         ) : (
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((asset) => (
-              <article key={asset.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+              <article key={asset.id} className="rounded-2xl border border-slate-200/80 bg-white/70 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{asset.name}</p>
-                    <p className="mt-1 text-xs text-zinc-500">{asset.type} · {(asset.size / 1024).toFixed(1)} KB</p>
+                    <p className="mt-1 text-xs text-slate-400">{asset.type} · {(asset.size / 1024).toFixed(1)} KB</p>
                   </div>
-                  <button onClick={() => void remove(asset)} className="text-xs text-red-300 hover:text-red-200">Remove</button>
+                  <button onClick={() => void remove(asset)} className="text-xs text-rose-600 hover:text-rose-700">Remove</button>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {asset.tags.map((tag) => <span key={tag} className="rounded-full bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{tag}</span>)}
+                  {asset.tags.map((tag) => <span key={tag} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">{tag}</span>)}
                 </div>
               </article>
             ))}

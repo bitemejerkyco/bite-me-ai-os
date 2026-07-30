@@ -62,15 +62,15 @@ export default function ExecutiveDashboard() {
   return (
     <div className="space-y-6">
       {!setupComplete ? (
-        <section className="flex flex-col gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 md:flex-row md:items-center md:justify-between">
-          <div><h2 className="font-bold text-amber-100">Complete your business setup</h2><p className="mt-1 text-sm text-zinc-300">Add your brand, audience, voice, and industry compliance mode.</p></div>
-          <Link href="/onboarding" className="rounded-lg bg-amber-400 px-4 py-2 text-center font-semibold text-black">Finish setup</Link>
+        <section className="flex flex-col gap-4 rounded-3xl border border-amber-500/30 bg-amber-500/5 p-5 md:flex-row md:items-center md:justify-between">
+          <div><h2 className="font-bold text-amber-800">Complete your business setup</h2><p className="mt-1 text-sm text-slate-700">Add your brand, audience, voice, and industry compliance mode.</p></div>
+          <Link href="/onboarding" className="rounded-xl bg-amber-400 px-4 py-2 text-center font-semibold text-black">Finish setup</Link>
         </section>
       ) : null}
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-6">
-        <p className="text-sm text-zinc-400">Workspace</p>
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-6">
+        <p className="text-sm text-slate-500">Workspace</p>
         <h2 className="mt-1 text-3xl font-black">{profile.businessName}</h2>
-        <p className="mt-2 text-zinc-300">{profile.primaryGoal}</p>
+        <p className="mt-2 text-slate-700">{profile.primaryGoal}</p>
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             ["Active campaigns", active, "/marketing"],
@@ -81,11 +81,11 @@ export default function ExecutiveDashboard() {
             <Link
               key={label}
               href={String(href)}
-              className="group rounded-xl border border-white/5 bg-black/25 p-4 transition hover:-translate-y-0.5 hover:border-red-500/50 hover:bg-red-500/5"
+              className="group rounded-2xl border border-slate-200/60 bg-white/70 p-4 transition hover:-translate-y-0.5 hover:border-rose-300 hover:bg-violet-500/5"
             >
-              <p className="text-sm text-zinc-400 group-hover:text-zinc-200">{label}</p>
+              <p className="text-sm text-slate-500 group-hover:text-slate-700">{label}</p>
               <p className="mt-2 text-3xl font-bold">{value}</p>
-              <p className="mt-2 text-xs text-red-300 opacity-0 transition group-hover:opacity-100">Open records →</p>
+              <p className="mt-2 text-xs text-rose-600 opacity-0 transition group-hover:opacity-100">Open records →</p>
             </Link>
           ))}
         </div>
@@ -96,7 +96,7 @@ export default function ExecutiveDashboard() {
           ["/media", "Upload media", "Organize logos, photos, videos, and brand assets."],
           ["/marketing", "Plan a campaign", "Turn an objective into an actionable campaign plan."],
         ].map(([href, title, copy]) => (
-          <Link key={href} href={href} className="rounded-2xl border border-white/10 bg-[#111827] p-5 transition hover:-translate-y-0.5 hover:border-red-500/40"><h3 className="font-bold">{title} →</h3><p className="mt-2 text-sm leading-6 text-zinc-400">{copy}</p></Link>
+          <Link key={href} href={href} className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 transition hover:-translate-y-0.5 hover:border-violet-300"><h3 className="font-bold">{title} →</h3><p className="mt-2 text-sm leading-6 text-slate-500">{copy}</p></Link>
         ))}
       </section>
     </div>

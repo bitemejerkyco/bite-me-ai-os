@@ -44,13 +44,13 @@ function monthCells(month: Date): Date[] {
 }
 
 const statusStyle: Record<ScheduledPost["status"], string> = {
-  DRAFT: "bg-zinc-700 text-zinc-200",
-  PENDING_APPROVAL: "bg-amber-500/20 text-amber-200",
-  SCHEDULED: "bg-blue-500/20 text-blue-200",
-  PUBLISHING: "bg-purple-500/20 text-purple-200",
-  PUBLISHED: "bg-emerald-500/20 text-emerald-200",
-  FAILED: "bg-red-500/20 text-red-200",
-  CANCELED: "bg-zinc-800 text-zinc-400",
+  DRAFT: "bg-slate-100 text-slate-700",
+  PENDING_APPROVAL: "bg-amber-500/20 text-amber-800",
+  SCHEDULED: "bg-blue-500/20 text-blue-700",
+  PUBLISHING: "bg-purple-500/20 text-purple-700",
+  PUBLISHED: "bg-emerald-500/20 text-emerald-700",
+  FAILED: "bg-rose-100 text-rose-700",
+  CANCELED: "bg-slate-100 text-slate-500",
 };
 
 const CHANNELS: ScheduledPost["channel"][] = [
@@ -350,39 +350,39 @@ export default function ContentCalendar() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-100">
+      <section className="rounded-3xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-800">
         Calendar and approval queue are active. Items will remain safely queued until the selected channel is connected. Ads always require approval before launch or spending.
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {[
-          ["AI drafts", drafts.length, "text-zinc-200"],
-          ["Approval needed", posts.filter((post) => post.status === "PENDING_APPROVAL").length, "text-amber-200"],
-          ["Scheduled", posts.filter((post) => post.status === "SCHEDULED").length, "text-blue-200"],
-          ["Publishing", posts.filter((post) => post.status === "PUBLISHING").length, "text-purple-200"],
-          ["Published", posts.filter((post) => post.status === "PUBLISHED").length, "text-emerald-200"],
-          ["Failed", posts.filter((post) => post.status === "FAILED").length, "text-red-200"],
+          ["AI drafts", drafts.length, "text-slate-700"],
+          ["Approval needed", posts.filter((post) => post.status === "PENDING_APPROVAL").length, "text-amber-800"],
+          ["Scheduled", posts.filter((post) => post.status === "SCHEDULED").length, "text-blue-700"],
+          ["Publishing", posts.filter((post) => post.status === "PUBLISHING").length, "text-purple-700"],
+          ["Published", posts.filter((post) => post.status === "PUBLISHED").length, "text-emerald-700"],
+          ["Failed", posts.filter((post) => post.status === "FAILED").length, "text-rose-700"],
         ].map(([label, value, color]) => (
-          <div key={String(label)} className="rounded-xl border border-white/10 bg-[#111827] p-4">
-            <p className="text-xs text-zinc-400">{label}</p>
+          <div key={String(label)} className="rounded-2xl border border-slate-200/80 bg-white/80 p-4">
+            <p className="text-xs text-slate-500">{label}</p>
             <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
           </div>
         ))}
       </section>
 
       {posts.some((post) => post.status === "PENDING_APPROVAL") ? (
-        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
-          <h2 className="text-xl font-bold text-amber-100">Ads awaiting approval</h2>
+        <section className="rounded-3xl border border-amber-500/30 bg-amber-500/5 p-5">
+          <h2 className="text-xl font-bold text-amber-800">Ads awaiting approval</h2>
           <div className="mt-4 space-y-3">
             {posts.filter((post) => post.status === "PENDING_APPROVAL").map((post) => (
-              <article key={post.id} className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-black/20 p-4 md:flex-row md:items-center md:justify-between">
+              <article key={post.id} className="flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-white/70 p-4 md:flex-row md:items-center md:justify-between">
                 <button onClick={() => setSelectedPost(post)} className="text-left">
                   <p className="font-semibold">{post.title}</p>
-                  <p className="mt-1 text-sm text-zinc-400">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
+                  <p className="mt-1 text-sm text-slate-500">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
                 </button>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelectedPost(post)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">View ad</button>
-                  <button onClick={() => void approve(post)} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300">Approve & schedule</button>
+                  <button onClick={() => setSelectedPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View ad</button>
+                  <button onClick={() => void approve(post)} className="rounded-xl border border-emerald-500/40 px-3 py-2 text-sm text-emerald-700">Approve & schedule</button>
                 </div>
               </article>
             ))}
@@ -391,10 +391,10 @@ export default function ContentCalendar() {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[390px_1fr]">
-        <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
+        <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
           <h2 className="text-xl font-bold">Create scheduled content</h2>
           <div className="mt-5 space-y-4">
-            <label className="block text-sm text-zinc-300">Use AI Studio draft
+            <label className="block text-sm text-slate-700">Use AI Studio draft
               <select
                 value={selectedDraftId}
                 onChange={(event) => {
@@ -417,7 +417,7 @@ export default function ContentCalendar() {
                     setMediaStoragePath(undefined);
                   }
                 }}
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
               >
                 <option value="">Create from scratch</option>
                 {drafts.map((draft) => (
@@ -427,59 +427,59 @@ export default function ContentCalendar() {
                 ))}
               </select>
             </label>
-            <label className="block text-sm text-zinc-300">Content type
-              <select value={entryType} onChange={(event) => setEntryType(event.target.value as ScheduledPost["entryType"])} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5">
+            <label className="block text-sm text-slate-700">Content type
+              <select value={entryType} onChange={(event) => setEntryType(event.target.value as ScheduledPost["entryType"])} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5">
                 <option value="POST">Organic post</option>
                 <option value="AD">Paid ad</option>
               </select>
             </label>
-            <label className="block text-sm text-zinc-300">Channel
-              <select value={channel} onChange={(event) => setChannel(event.target.value as ScheduledPost["channel"])} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5">
+            <label className="block text-sm text-slate-700">Channel
+              <select value={channel} onChange={(event) => setChannel(event.target.value as ScheduledPost["channel"])} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5">
                 {CHANNELS.map((item) => <option key={item}>{item}</option>)}
               </select>
             </label>
-            <label className="block text-sm text-zinc-300">Title
-              <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Behind the scenes" className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5" />
+            <label className="block text-sm text-slate-700">Title
+              <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Behind the scenes" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" />
             </label>
-            <label className="block text-sm text-zinc-300">Post or ad content
-              <textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="Write or paste the approved content" className="mt-1 min-h-28 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5" />
+            <label className="block text-sm text-slate-700">Post or ad content
+              <textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="Write or paste the approved content" className="mt-1 min-h-28 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" />
             </label>
             <div className="grid grid-cols-2 gap-3">
-              <label className="block text-sm text-zinc-300">Date
-                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5" />
+              <label className="block text-sm text-slate-700">Date
+                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" />
               </label>
-              <label className="block text-sm text-zinc-300">Time
-                <input type="time" value={time} onChange={(event) => setTime(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5" />
+              <label className="block text-sm text-slate-700">Time
+                <input type="time" value={time} onChange={(event) => setTime(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" />
               </label>
             </div>
-            <p className="text-xs text-zinc-500">Timezone: {timezone}</p>
+            <p className="text-xs text-slate-400">Timezone: {timezone}</p>
             <div className="grid grid-cols-2 gap-3">
-              <button disabled={working} onClick={() => void submit(false)} className="rounded-lg border border-red-500/40 px-4 py-3 font-semibold text-red-200 hover:bg-red-500/10 disabled:opacity-60">
+              <button disabled={working} onClick={() => void submit(false)} className="rounded-xl border border-violet-300 px-4 py-3 font-semibold text-rose-700 hover:bg-violet-500/10 disabled:opacity-60">
                 Schedule
               </button>
-              <button disabled={working} onClick={() => void submit(true)} className="rounded-lg bg-red-600 px-4 py-3 font-semibold hover:bg-red-500 disabled:opacity-60">
+              <button disabled={working} onClick={() => void submit(true)} className="rounded-xl bg-violet-600 px-4 py-3 font-semibold hover:bg-violet-500 disabled:opacity-60">
                 Post now
               </button>
             </div>
-            {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
+            {message ? <p className="text-sm text-slate-700">{message}</p> : null}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#111827] p-4 md:p-5">
+        <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-4 md:p-5">
           <div className="flex items-center justify-between gap-3">
-            <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded-lg border border-white/10 px-3 py-2">←</button>
+            <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded-xl border border-slate-200/80 px-3 py-2">←</button>
             <h2 className="text-xl font-bold">{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
-            <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded-lg border border-white/10 px-3 py-2">→</button>
+            <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded-xl border border-slate-200/80 px-3 py-2">→</button>
           </div>
-          <div className="mt-4 grid grid-cols-7 text-center text-xs text-zinc-500">
+          <div className="mt-4 grid grid-cols-7 text-center text-xs text-slate-400">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <div key={day} className="py-2">{day}</div>)}
           </div>
-          <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-white/10">
+          <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-slate-200/80">
             {cells.map((day) => {
               const key = localDate(day);
               const dayPosts = postsByDate.get(key) || [];
               return (
-                <div key={key} className={`min-h-24 border-b border-r border-white/5 p-1.5 ${day.getMonth() === month.getMonth() ? "bg-black/10" : "bg-black/30 text-zinc-600"}`}>
+                <div key={key} className={`min-h-24 border-b border-r border-slate-200/60 p-1.5 ${day.getMonth() === month.getMonth() ? "bg-white/50" : "bg-slate-50/70 text-slate-400"}`}>
                   <p className="text-xs">{day.getDate()}</p>
                   <div className="mt-1 space-y-1">
                     {dayPosts.slice(0, 3).map((post) => (
@@ -487,12 +487,12 @@ export default function ContentCalendar() {
                         key={post.id}
                         title={`${post.entryType}: ${post.title}`}
                         onClick={() => setSelectedPost(post)}
-                        className={`block w-full truncate rounded px-1.5 py-1 text-left text-[10px] ring-offset-[#111827] hover:ring-1 hover:ring-white/40 ${statusStyle[post.status]} ${post.entryType === "AD" ? "border border-amber-400/40" : ""}`}
+                        className={`block w-full truncate rounded px-1.5 py-1 text-left text-[10px] ring-offset-white hover:ring-1 hover:ring-violet-300 ${statusStyle[post.status]} ${post.entryType === "AD" ? "border border-amber-400/40" : ""}`}
                       >
                         {post.entryType} · {post.channel}: {post.title}
                       </button>
                     ))}
-                    {dayPosts.length > 3 ? <p className="text-[10px] text-zinc-500">+{dayPosts.length - 3} more</p> : null}
+                    {dayPosts.length > 3 ? <p className="text-[10px] text-slate-400">+{dayPosts.length - 3} more</p> : null}
                   </div>
                 </div>
               );
@@ -502,11 +502,11 @@ export default function ContentCalendar() {
       </div>
 
       {selectedPost ? (
-        <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
+        <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2 py-1 text-xs ${selectedPost.entryType === "AD" ? "bg-amber-500/20 text-amber-200" : "bg-zinc-700 text-zinc-200"}`}>
+                <span className={`rounded-full px-2 py-1 text-xs ${selectedPost.entryType === "AD" ? "bg-amber-500/20 text-amber-800" : "bg-slate-100 text-slate-700"}`}>
                   {selectedPost.entryType === "AD" ? "PAID AD" : "ORGANIC POST"}
                 </span>
                 <span className={`rounded-full px-2 py-1 text-xs ${statusStyle[selectedPost.status]}`}>
@@ -514,46 +514,46 @@ export default function ContentCalendar() {
                 </span>
               </div>
               <h2 className="mt-3 text-xl font-bold">{selectedPost.title}</h2>
-              <p className="mt-1 text-sm text-zinc-400">
+              <p className="mt-1 text-sm text-slate-500">
                 {selectedPost.channel} · {new Date(selectedPost.scheduledFor).toLocaleString()} · {selectedPost.timezone}
               </p>
             </div>
-            <button onClick={() => setSelectedPost(null)} className="rounded-lg border border-white/10 px-3 py-2 text-sm">Close details</button>
+            <button onClick={() => setSelectedPost(null)} className="rounded-xl border border-slate-200/80 px-3 py-2 text-sm">Close details</button>
           </div>
 
           <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
             <div>
               {selectedMediaUrl ? (
                 <div className="mb-5">
-                  <h3 className="text-sm font-semibold text-zinc-300">
+                  <h3 className="text-sm font-semibold text-slate-700">
                     Scheduled video
                   </h3>
                   <video
                     src={selectedMediaUrl}
                     controls
                     playsInline
-                    className="mt-2 max-h-[560px] rounded-xl bg-black"
+                    className="mt-2 max-h-[560px] rounded-2xl bg-black"
                   />
                 </div>
               ) : null}
-              <h3 className="text-sm font-semibold text-zinc-300">Post or ad content</h3>
-              <div className="mt-2 whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-950 p-4 leading-7">
+              <h3 className="text-sm font-semibold text-slate-700">Post or ad content</h3>
+              <div className="mt-2 whitespace-pre-wrap rounded-2xl border border-slate-200/80 bg-white p-4 leading-7">
                 {selectedPost.content}
               </div>
-              <p className="mt-3 text-xs text-zinc-500">
+              <p className="mt-3 text-xs text-slate-400">
                 Source: {selectedPost.contentDraftId ? "AI Studio draft linked" : "Created directly in Calendar"}
                 {selectedPost.videoProjectId ? " · Video Studio project linked" : ""}
                 {selectedPost.providerJobId ? ` · Provider job: ${selectedPost.providerJobId}` : ""}
               </p>
               {selectedPost.failureReason ? (
-                <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                <p className="mt-3 rounded-xl border border-violet-200 bg-rose-50 p-3 text-sm text-rose-700">
                   Publishing failure: {selectedPost.failureReason}
                 </p>
               ) : null}
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-zinc-300">Workflow status</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Workflow status</h3>
               <div className="mt-3 space-y-2">
                 {[
                   ["Created", true],
@@ -571,32 +571,32 @@ export default function ContentCalendar() {
                   ],
                   ["Published", selectedPost.status === "PUBLISHED"],
                 ].map(([label, complete]) => (
-                  <div key={String(label)} className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${complete ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-200" : "border-white/10 text-zinc-500"}`}>
+                  <div key={String(label)} className={`flex items-center gap-3 rounded-xl border p-3 text-sm ${complete ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-700" : "border-slate-200/80 text-slate-400"}`}>
                     <span>{complete ? "✓" : "○"}</span>
                     <span>{label}</span>
                   </div>
                 ))}
               </div>
-              {selectedPost.publishedAt ? <p className="mt-3 text-xs text-zinc-400">Published: {new Date(selectedPost.publishedAt).toLocaleString()}</p> : null}
+              {selectedPost.publishedAt ? <p className="mt-3 text-xs text-slate-500">Published: {new Date(selectedPost.publishedAt).toLocaleString()}</p> : null}
             </div>
           </div>
-          <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
+          <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/70 p-4">
             <h3 className="font-semibold">Performance scorecard</h3>
             {!selectedScore || !selectedSnapshot ? (
-              <p className="mt-2 text-sm text-zinc-400">
+              <p className="mt-2 text-sm text-slate-500">
                 Score pending. Performance data will appear here after the connected channel reports results.
               </p>
             ) : (
               <div className="mt-4 grid gap-4 lg:grid-cols-[180px_1fr_auto] lg:items-center">
                 <div>
-                  <p className="text-4xl font-black">{selectedScore.score}<span className="text-lg text-zinc-500">/100</span></p>
-                  <p className="mt-1 text-sm text-zinc-300">Grade {selectedScore.grade} · {selectedScore.confidence} confidence</p>
+                  <p className="text-4xl font-black">{selectedScore.score}<span className="text-lg text-slate-400">/100</span></p>
+                  <p className="mt-1 text-sm text-slate-700">Grade {selectedScore.grade} · {selectedScore.confidence} confidence</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-                  <div><p className="text-zinc-500">Engagement</p><p className="font-semibold">{percent(selectedScore.metrics.engagementRate)}</p></div>
-                  <div><p className="text-zinc-500">Click rate</p><p className="font-semibold">{percent(selectedScore.metrics.clickThroughRate)}</p></div>
-                  <div><p className="text-zinc-500">Conversion</p><p className="font-semibold">{percent(selectedScore.metrics.conversionRate)}</p></div>
-                  <div><p className="text-zinc-500">ROAS</p><p className="font-semibold">{selectedScore.metrics.returnOnAdSpend === null ? "N/A" : `${selectedScore.metrics.returnOnAdSpend.toFixed(2)}x`}</p></div>
+                  <div><p className="text-slate-400">Engagement</p><p className="font-semibold">{percent(selectedScore.metrics.engagementRate)}</p></div>
+                  <div><p className="text-slate-400">Click rate</p><p className="font-semibold">{percent(selectedScore.metrics.clickThroughRate)}</p></div>
+                  <div><p className="text-slate-400">Conversion</p><p className="font-semibold">{percent(selectedScore.metrics.conversionRate)}</p></div>
+                  <div><p className="text-slate-400">ROAS</p><p className="font-semibold">{selectedScore.metrics.returnOnAdSpend === null ? "N/A" : `${selectedScore.metrics.returnOnAdSpend.toFixed(2)}x`}</p></div>
                 </div>
                 <button
                   disabled={
@@ -605,7 +605,7 @@ export default function ContentCalendar() {
                     knowledge.some((item) => item.scheduledPostId === selectedPost.id)
                   }
                   onClick={() => void addToKnowledge(selectedPost, selectedSnapshot, selectedScore)}
-                  className="rounded-lg border border-emerald-500/40 px-4 py-3 text-sm text-emerald-300 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl border border-emerald-500/40 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {knowledge.some((item) => item.scheduledPostId === selectedPost.id)
                     ? "In Knowledge Base ✓"
@@ -617,39 +617,39 @@ export default function ContentCalendar() {
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold">Post and ad scorecards</h2>
-            <p className="mt-1 text-sm text-zinc-400">Results are organized from highest to lowest score.</p>
+            <p className="mt-1 text-sm text-slate-500">Results are organized from highest to lowest score.</p>
           </div>
-          <a href="/knowledge" className="rounded-lg border border-emerald-500/40 px-4 py-2 text-sm text-emerald-300">Open Knowledge Base</a>
+          <a href="/knowledge" className="rounded-xl border border-emerald-500/40 px-4 py-2 text-sm text-emerald-700">Open Knowledge Base</a>
         </div>
         <div className="mt-4 space-y-3">
           {scorecards.length === 0 ? (
-            <p className="text-zinc-400">Scorecards will appear after connected channels return performance data.</p>
+            <p className="text-slate-500">Scorecards will appear after connected channels return performance data.</p>
           ) : scorecards.map(({ post, snapshot, score }) => {
             const savedToKnowledge = knowledge.some(
               (item) => item.scheduledPostId === post.id,
             );
             return (
-              <article key={post.id} className="grid gap-4 rounded-xl border border-white/10 bg-black/20 p-4 md:grid-cols-[90px_1fr_auto] md:items-center">
+              <article key={post.id} className="grid gap-4 rounded-2xl border border-slate-200/80 bg-white/70 p-4 md:grid-cols-[90px_1fr_auto] md:items-center">
                 <div>
                   <p className="text-3xl font-black">{score.score}</p>
-                  <p className="text-xs text-zinc-400">Grade {score.grade}</p>
+                  <p className="text-xs text-slate-500">Grade {score.grade}</p>
                 </div>
                 <button onClick={() => setSelectedPost(post)} className="text-left">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{post.title}</p>
-                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-xs">{post.entryType}</span>
-                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-xs">{score.confidence} confidence</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{post.entryType}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{score.confidence} confidence</span>
                   </div>
-                  <p className="mt-1 text-sm text-zinc-400">{post.channel} · {snapshot.impressions.toLocaleString()} impressions · {score.strengths.join(" · ")}</p>
+                  <p className="mt-1 text-sm text-slate-500">{post.channel} · {snapshot.impressions.toLocaleString()} impressions · {score.strengths.join(" · ")}</p>
                 </button>
                 <button
                   disabled={score.score < 75 || score.confidence === "LOW" || savedToKnowledge}
                   onClick={() => void addToKnowledge(post, snapshot, score)}
-                  className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl border border-emerald-500/40 px-3 py-2 text-sm text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {savedToKnowledge ? "Saved winner ✓" : "Add winner"}
                 </button>
@@ -659,23 +659,23 @@ export default function ContentCalendar() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <h2 className="text-xl font-bold">Publishing queue</h2>
         <div className="mt-4 space-y-3">
-          {posts.length === 0 ? <p className="text-zinc-400">Nothing scheduled yet.</p> : posts.map((post) => (
-            <article key={post.id} className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 md:flex-row md:items-center md:justify-between">
+          {posts.length === 0 ? <p className="text-slate-500">Nothing scheduled yet.</p> : posts.map((post) => (
+            <article key={post.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-semibold">{post.title}</h3>
                   <span className={`rounded-full px-2 py-1 text-xs ${statusStyle[post.status]}`}>{post.status.replaceAll("_", " ")}</span>
-                  <span className="rounded-full bg-zinc-800 px-2 py-1 text-xs">{post.entryType}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{post.entryType}</span>
                 </div>
-                <p className="mt-1 text-sm text-zinc-400">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
+                <p className="mt-1 text-sm text-slate-500">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setSelectedPost(post)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">View details</button>
-                {post.status === "PENDING_APPROVAL" ? <button onClick={() => void approve(post)} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300">Approve & schedule</button> : null}
-                {!["PUBLISHED", "CANCELED"].includes(post.status) ? <button onClick={() => void cancel(post)} className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-300">Cancel</button> : null}
+                <button onClick={() => setSelectedPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View details</button>
+                {post.status === "PENDING_APPROVAL" ? <button onClick={() => void approve(post)} className="rounded-xl border border-emerald-500/40 px-3 py-2 text-sm text-emerald-700">Approve & schedule</button> : null}
+                {!["PUBLISHED", "CANCELED"].includes(post.status) ? <button onClick={() => void cancel(post)} className="rounded-xl border border-violet-200 px-3 py-2 text-sm text-rose-600">Cancel</button> : null}
               </div>
             </article>
           ))}

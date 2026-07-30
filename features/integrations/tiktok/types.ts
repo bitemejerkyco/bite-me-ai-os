@@ -1,6 +1,6 @@
 export const TIKTOK_REQUIRED_SCOPES = [
   "user.info.basic",
-  "video.publish",
+  "video.upload",
 ] as const;
 
 export type TikTokCreatorInfo = {

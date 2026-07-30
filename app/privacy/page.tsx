@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "How PostMotive collects, uses, and protects information.",
 };
 
-const headingClass = "text-2xl font-bold text-white";
+const headingClass = "text-2xl font-bold text-slate-900";
 const listClass = "list-disc space-y-2 pl-6";
 
 export default function PrivacyPage() {
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       title="Privacy Policy"
     >
       <p>
-        <strong className="text-white">Effective date:</strong> July 30, 2026
+        <strong className="text-slate-900">Effective date:</strong> July 30, 2026
       </p>
 
       <section className="space-y-3">
@@ -32,27 +32,27 @@ export default function PrivacyPage() {
         <h2 className={headingClass}>2. Information we collect</h2>
         <ul className={listClass}>
           <li>
-            <strong className="text-white">Account information:</strong> name,
+            <strong className="text-slate-900">Account information:</strong> name,
             email address, authentication details, and workspace membership.
           </li>
           <li>
-            <strong className="text-white">Business information:</strong> brand,
+            <strong className="text-slate-900">Business information:</strong> brand,
             website, audience, goals, voice, industry, and compliance settings.
           </li>
           <li>
-            <strong className="text-white">Content:</strong> prompts, drafts,
+            <strong className="text-slate-900">Content:</strong> prompts, drafts,
             campaigns, uploaded files, images, video, audio, captions,
             approvals, schedules, and feedback.
           </li>
           <li>
-            <strong className="text-white">
+            <strong className="text-slate-900">
               Connected-platform information:
             </strong>{" "}
             authorized account identifiers, profile information, permission
             scopes, access tokens, publishing status, and performance data.
           </li>
           <li>
-            <strong className="text-white">Technical information:</strong> IP
+            <strong className="text-slate-900">Technical information:</strong> IP
             address, device and browser details, timestamps, usage events,
             diagnostics, and security logs.
           </li>
@@ -203,7 +203,7 @@ export default function PrivacyPage() {
           CaliKing Distro
           <br />
           <a
-            className="text-red-400 underline hover:text-red-300"
+            className="text-violet-600 underline hover:text-rose-600"
             href="mailto:calikingdistro@gmail.com"
           >
             calikingdistro@gmail.com

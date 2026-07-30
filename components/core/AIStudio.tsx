@@ -225,23 +225,23 @@ export default function AIStudio() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap gap-3 rounded-xl border border-white/10 bg-[#111827] p-2">
+      <div className="mb-6 flex flex-wrap gap-3 rounded-2xl border border-slate-200/80 bg-white/80 p-2">
         <button
           onClick={() => setCreationMode("CONTENT")}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+          className={`rounded-xl px-4 py-2 text-sm font-semibold ${
             creationMode === "CONTENT"
-              ? "bg-red-600 text-white"
-              : "text-zinc-300 hover:bg-white/5"
+              ? "bg-violet-600 text-white"
+              : "text-slate-700 hover:bg-violet-50"
           }`}
         >
           Post or ad
         </button>
         <button
           onClick={() => setCreationMode("VIDEO")}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+          className={`rounded-xl px-4 py-2 text-sm font-semibold ${
             creationMode === "VIDEO"
-              ? "bg-red-600 text-white"
-              : "text-zinc-300 hover:bg-white/5"
+              ? "bg-violet-600 text-white"
+              : "text-slate-700 hover:bg-violet-50"
           }`}
         >
           TikTok video
@@ -251,88 +251,88 @@ export default function AIStudio() {
         <VideoStudio workspace={workspace} />
       ) : (
       <div className="grid gap-6 lg:grid-cols-2">
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
         <h2 className="text-xl font-bold">Create marketing content</h2>
-        <p className="mt-1 text-sm text-zinc-400">Brand: {workspace.businessName} · Compliance: {workspace.industry.replaceAll("_", " ")}</p>
+        <p className="mt-1 text-sm text-slate-500">Brand: {workspace.businessName} · Compliance: {workspace.industry.replaceAll("_", " ")}</p>
         <div className="mt-6 space-y-4">
-          <label className="block text-sm text-zinc-300">Content type
-            <select value={entryType} onChange={(e) => setEntryType(e.target.value as "POST" | "AD")} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5">
+          <label className="block text-sm text-slate-700">Content type
+            <select value={entryType} onChange={(e) => setEntryType(e.target.value as "POST" | "AD")} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5">
               <option value="POST">Organic post</option>
               <option value="AD">Paid ad</option>
             </select>
           </label>
-          <label className="block text-sm text-zinc-300">Channel
-            <select value={channel} onChange={(e) => setChannel(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5">
+          <label className="block text-sm text-slate-700">Channel
+            <select value={channel} onChange={(e) => setChannel(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5">
               <option value="instagram">Instagram</option><option value="tiktok">TikTok</option>
               <option value="facebook">Facebook</option>
               <option value="email">Email</option><option value="sms">SMS</option>
               <option value="linkedin">LinkedIn</option><option value="blog">Blog</option>
             </select>
           </label>
-          <label className="block text-sm text-zinc-300">Objective
-            <select value={objective} onChange={(e) => setObjective(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5">
+          <label className="block text-sm text-slate-700">Objective
+            <select value={objective} onChange={(e) => setObjective(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5">
               <option>Drive engagement</option><option>Generate sales</option><option>Build trust</option><option>Announce an event</option><option>Educate customers</option>
             </select>
           </label>
-          <label className="block text-sm text-zinc-300">Offer or message
-            <textarea value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="Example: Free shipping over $75" className="mt-1 min-h-28 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5" />
+          <label className="block text-sm text-slate-700">Offer or message
+            <textarea value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="Example: Free shipping over $75" className="mt-1 min-h-28 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" />
           </label>
-          <label className="block text-sm text-zinc-300">Call to action
-            <input value={cta} onChange={(e) => setCta(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5" />
+          <label className="block text-sm text-slate-700">Call to action
+            <input value={cta} onChange={(e) => setCta(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" />
           </label>
-          <button disabled={generating} onClick={generate} className="w-full rounded-lg bg-red-600 px-5 py-3 font-semibold hover:bg-red-500 disabled:cursor-wait disabled:opacity-60">
+          <button disabled={generating} onClick={generate} className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60">
             {generating ? "Generating with AI…" : "Generate with AI"}
           </button>
           {entryType === "AD" ? (
-            <p className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-100">
+            <p className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-800">
               Paid ads require human approval before launch or spending.
             </p>
           ) : null}
-          {error ? <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p> : null}
+          {error ? <p className="rounded-xl border border-violet-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
         </div>
       </section>
-      <section className="rounded-2xl border border-white/10 bg-[#111827] p-5 md:p-7">
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
         <h2 className="text-xl font-bold">Draft preview</h2>
-        {!result ? <p className="mt-6 text-zinc-400">Complete the brief and generate your first draft.</p> : (
+        {!result ? <p className="mt-6 text-slate-500">Complete the brief and generate your first draft.</p> : (
           <div className="mt-5">
             <h3 className="font-semibold">{result.title}</h3>
             <textarea value={result.copy} onChange={(e) => {
               setResult({ ...result, copy: e.target.value });
               setSaved(false);
-            }} className="mt-3 min-h-44 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-4 leading-7" />
-            <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-100">{result.complianceNote}</p>
+            }} className="mt-3 min-h-44 w-full rounded-xl border border-slate-200 bg-white p-4 leading-7" />
+            <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-800">{result.complianceNote}</p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button disabled={saved} onClick={() => void save()} className="rounded-lg border border-emerald-500/40 px-4 py-2 text-emerald-300 hover:bg-emerald-500/10 disabled:cursor-default disabled:bg-emerald-500/10">
+              <button disabled={saved} onClick={() => void save()} className="rounded-xl border border-emerald-500/40 px-4 py-2 text-emerald-700 hover:bg-emerald-500/10 disabled:cursor-default disabled:bg-emerald-500/10">
                 {saved ? "Saved ✓" : drafts.some((draft) => draft.id === result.id) ? "Save changes" : "Save draft"}
               </button>
-              <button onClick={() => void openCalendar()} className="rounded-lg bg-red-600 px-4 py-2 font-semibold hover:bg-red-500">
+              <button onClick={() => void openCalendar()} className="rounded-xl bg-violet-600 px-4 py-2 font-semibold hover:bg-violet-500">
                 Schedule / Post now
               </button>
             </div>
-            <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
+            <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/70 p-4">
               <h4 className="text-sm font-semibold">Teach the PostMotive agents</h4>
-              <p className="mt-1 text-xs text-zinc-400">
+              <p className="mt-1 text-xs text-slate-500">
                 Tell the system what worked or what should improve. This feedback is used in future drafts for this workspace.
               </p>
               <input
                 value={feedbackNote}
                 onChange={(event) => setFeedbackNote(event.target.value)}
                 placeholder="Optional: strong hook, off-brand tone, incorrect detail…"
-                className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
               />
               <div className="mt-3 flex flex-wrap gap-3">
-                <button onClick={() => void recordFeedback("POSITIVE")} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-500/10">
+                <button onClick={() => void recordFeedback("POSITIVE")} className="rounded-xl border border-emerald-500/40 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-500/10">
                   This worked
                 </button>
-                <button onClick={() => void recordFeedback("NEGATIVE")} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm text-amber-200 hover:bg-amber-500/10">
+                <button onClick={() => void recordFeedback("NEGATIVE")} className="rounded-xl border border-amber-500/40 px-3 py-2 text-sm text-amber-800 hover:bg-amber-500/10">
                   Needs improvement
                 </button>
               </div>
-              {feedbackMessage ? <p className="mt-3 text-sm text-emerald-300">{feedbackMessage}</p> : null}
+              {feedbackMessage ? <p className="mt-3 text-sm text-emerald-700">{feedbackMessage}</p> : null}
             </div>
           </div>
         )}
-        <p className="mt-6 text-xs text-zinc-500">{drafts.length} drafts saved in this workspace.</p>
+        <p className="mt-6 text-xs text-slate-400">{drafts.length} drafts saved in this workspace.</p>
       </section>
       </div>
       )}
