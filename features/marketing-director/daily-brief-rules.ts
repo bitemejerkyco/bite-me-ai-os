@@ -33,9 +33,15 @@ export type MarketingRecommendation = {
 export type PriorityAction = {
   id: string;
   priority: PriorityLevel;
+  priorityScore: number;
   title: string;
+  impact: string;
   description: string;
+  metricLabel: string;
+  metricValue: string;
+  ctaLabel: string;
   source: string;
+  reason: string;
   status: "open" | "completed";
   href: string;
   createdAt: string;
@@ -49,6 +55,11 @@ export type DailyBrief = {
   confidence: number;
   confidenceReason: string;
   dataQualityWarning: string | null;
+  dataCoverageSummary: string;
+  scoreDeltaLabel: string;
+  revenueAvailability: "available" | "unavailable";
+  bestPerformanceSignal: string;
+  missingIntegrations: string[];
   sinceLastVisit: string[];
   needsAttention: string[];
   performingWell: string[];

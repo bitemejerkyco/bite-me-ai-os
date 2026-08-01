@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveOperatingMode, type MarketingDirectorMode } from "@/features/marketing-director/mode-locks";
 
 type FeatureFlagRow = { enabled: boolean | null };
 type WorkspaceMarketingSettingsRow = {
@@ -15,8 +16,6 @@ type WorkspaceMarketingSettingsRow = {
   timezone: string | null;
 };
 
-export type MarketingDirectorMode = "advisor" | "copilot" | "autopilot";
-
 export type MarketingModeSettings = {
   workspaceId: string;
   operatingMode: MarketingDirectorMode;
@@ -27,11 +26,16 @@ export type MarketingModeSettings = {
   dailyBriefEnabled: boolean;
   dailyBriefTime: string;
   timezone: string;
+  copilotAvailable: boolean;
+  copilotMessage: string;
   autopilotAvailable: boolean;
   autopilotMessage: string;
 };
 
-const DEFAULT_SETTINGS: Omit<MarketingModeSettings, "workspaceId" | "autopilotAvailable" | "autopilotMessage"> = {
+const DEFAULT_SETTINGS: Omit<
+  MarketingModeSettings,
+  "workspaceId" | "copilotAvailable" | "copilotMessage" | "autopilotAvailable" | "autopilotMessage"
+> = {
   operatingMode: "advisor",
   approvalRequiredForContent: true,
   approvalRequiredForScheduling: true,
@@ -93,7 +97,7 @@ export function modeCapabilities(mode: MarketingDirectorMode): {
 
 export async function getMarketingModeSettings(workspaceId: string): Promise<MarketingModeSettings> {
   const admin = createAdminClient();
-  const autopilotAvailable = await loadAutopilotFeatureFlag();
+  const stagedModesAvailable = await loadAutopilotFeatureFlag();
   const { data, error } = await admin
     .from("workspace_marketing_settings")
     .select("workspace_id,operating_mode,approval_required_for_content,approval_required_for_scheduling,approval_required_for_budget_changes,approval_required_for_publishing,daily_brief_enabled,daily_brief_time,timezone")
@@ -107,7 +111,7 @@ export async function getMarketingModeSettings(workspaceId: string): Promise<Mar
   }
 
   const operatingMode = normalizeMode(settings?.operating_mode);
-  const safeMode = operatingMode === "autopilot" && !autopilotAvailable ? "advisor" : operatingMode;
+  const safeMode = resolveOperatingMode(operatingMode, stagedModesAvailable);
 
   return {
     workspaceId,
@@ -140,8 +144,12 @@ export async function getMarketingModeSettings(workspaceId: string): Promise<Mar
       typeof settings?.timezone === "string" && settings.timezone
         ? settings.timezone
         : DEFAULT_SETTINGS.timezone,
-    autopilotAvailable,
-    autopilotMessage: autopilotAvailable
+    copilotAvailable: stagedModesAvailable,
+    copilotMessage: stagedModesAvailable
+      ? "Copilot is enabled for this staged rollout."
+      : "Copilot is locked until beta safety entitlement is enabled.",
+    autopilotAvailable: stagedModesAvailable,
+    autopilotMessage: stagedModesAvailable
       ? "Autopilot is feature-flagged for staged rollout."
       : "Coming after beta approval and safety certification.",
   };

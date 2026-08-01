@@ -30,6 +30,10 @@ export default function MarketingDirectorDashboardView({
         mode={dashboard.modeSettings}
       />
 
+      <PriorityActions actions={dashboard.brief.priorityActions} />
+
+      <DailyBriefPanel brief={dashboard.brief} />
+
       <DataCoverageNotice coverage={dashboard.dataCoverage} />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -41,11 +45,6 @@ export default function MarketingDirectorDashboardView({
       <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} />
 
       <MarketingScoreCard score={dashboard.score} trend={dashboard.scoreTrend} />
-
-      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <PriorityActions actions={dashboard.brief.priorityActions} />
-        <DailyBriefPanel brief={dashboard.brief} />
-      </section>
 
       <ChannelHealth channels={dashboard.channelHealth} />
 

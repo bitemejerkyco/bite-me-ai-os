@@ -1,8 +1,14 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { EXECUTIVE_CARD_DESTINATIONS, type ExecutiveMetricCardId } from "@/features/marketing-director/card-routes";
 import { buildDataCoverageModel, detectProductsTable, type DataCoverageModel } from "@/features/marketing-director/data-coverage";
-import { buildDailyBrief, saveDailyBriefSnapshot, type DailyBriefInput } from "@/features/marketing-director/daily-brief";
+import {
+  buildDailyBrief,
+  saveDailyBriefSnapshot,
+  type DailyBriefInput,
+} from "@/features/marketing-director/daily-brief";
+import { restoreDailyBriefFromSnapshot, type StoredBriefRow } from "@/features/marketing-director/daily-brief-snapshot";
 import type { DailyBrief } from "@/features/marketing-director/daily-brief-rules";
 import { getMarketingModeSettings, modeCapabilities, type MarketingModeSettings } from "@/features/marketing-director/modes";
 import {
@@ -45,23 +51,15 @@ type MediaRow = {
 type AiUsageRow = { status: string | null; created_at: string | null };
 type VideoTransactionRow = { kind: string | null; created_at: string | null };
 type LastBriefRow = { created_at: string | null };
-
 export type ExecutiveMetricCard = {
-  id:
-    | "marketing_score"
-    | "marketing_health"
-    | "revenue_impact"
-    | "ai_confidence"
-    | "active_campaigns"
-    | "content_awaiting_approval"
-    | "scheduled_posts"
-    | "connected_channels";
+  id: ExecutiveMetricCardId;
   label: string;
   value: string;
   status: "healthy" | "warning" | "critical" | "unavailable";
   trendDirection: "up" | "down" | "flat" | "unknown";
   trendLabel: string | null;
   detail: string;
+  href: string;
 };
 
 export type ChannelHealthItem = {
@@ -98,6 +96,14 @@ export type MarketingDirectorDashboard = {
   recentActivity: RecentActivityItem[];
 };
 
+function metricHref(id: ExecutiveMetricCard["id"]): string {
+  return EXECUTIVE_CARD_DESTINATIONS[id];
+}
+
+function todayDateKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function greetingForDate(now: Date): string {
   const hour = now.getHours();
   if (hour < 12) return "Good morning";
@@ -123,6 +129,7 @@ export async function loadMarketingDirectorDashboard(input: {
   workspaceId: string;
   firstName: string;
   workspaceName: string;
+  refreshBrief?: boolean;
 }): Promise<MarketingDirectorDashboard> {
   const admin = createAdminClient();
 
@@ -140,6 +147,7 @@ export async function loadMarketingDirectorDashboard(input: {
     aiUsageResult,
     videoTransactionsResult,
     lastBriefResult,
+    briefForTodayResult,
   ] = await Promise.all([
     getMarketingScoreForWorkspace(input.workspaceId),
     getScoreTrend(input.workspaceId),
@@ -179,6 +187,12 @@ export async function loadMarketingDirectorDashboard(input: {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    admin
+      .from("marketing_director_briefs")
+      .select("workspace_id,metrics,priority_actions,recommendations,confidence,data_coverage,created_at,updated_at")
+      .eq("workspace_id", input.workspaceId)
+      .eq("brief_date", todayDateKey())
+      .maybeSingle(),
   ]);
 
   if (campaignsResult.error) throw new Error(`DASHBOARD_CAMPAIGNS_FAILED:${campaignsResult.error.message}`);
@@ -189,6 +203,7 @@ export async function loadMarketingDirectorDashboard(input: {
   if (mediaResult.error) throw new Error(`DASHBOARD_MEDIA_FAILED:${mediaResult.error.message}`);
   if (aiUsageResult.error) throw new Error(`DASHBOARD_AI_USAGE_FAILED:${aiUsageResult.error.message}`);
   if (videoTransactionsResult.error) throw new Error(`DASHBOARD_VIDEO_TRANSACTIONS_FAILED:${videoTransactionsResult.error.message}`);
+  if (briefForTodayResult.error) throw new Error(`DASHBOARD_BRIEF_FAILED:${briefForTodayResult.error.message}`);
 
   const campaigns = (campaignsResult.data as CampaignRow[] | null) || [];
   const drafts = (draftsResult.data as DraftRow[] | null) || [];
@@ -275,6 +290,7 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: scoreTrend.direction,
       trendLabel: trendLabel(scoreTrend),
       detail: `Version ${score.scoreVersion}`,
+      href: metricHref("marketing_score"),
     },
     {
       id: "marketing_health",
@@ -284,6 +300,7 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: scoreTrend.direction,
       trendLabel: trendLabel(scoreTrend),
       detail: score.confidenceReason,
+      href: metricHref("marketing_health"),
     },
     {
       id: "revenue_impact",
@@ -297,6 +314,7 @@ export async function loadMarketingDirectorDashboard(input: {
           ? "Connected conversion revenue from performance snapshots"
           : "Revenue exists but spend data is limited"
         : "Insufficient connected revenue data",
+      href: metricHref("revenue_impact"),
     },
     {
       id: "ai_confidence",
@@ -306,6 +324,7 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: dataCoverage.warning || "Confidence reflects connected and recent data coverage.",
+      href: metricHref("ai_confidence"),
     },
     {
       id: "active_campaigns",
@@ -315,6 +334,7 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Real campaign records in this workspace",
+      href: metricHref("active_campaigns"),
     },
     {
       id: "content_awaiting_approval",
@@ -324,6 +344,7 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Draft and schedule approval queue",
+      href: metricHref("content_awaiting_approval"),
     },
     {
       id: "scheduled_posts",
@@ -333,6 +354,7 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Upcoming scheduled and in-progress posts",
+      href: metricHref("scheduled_posts"),
     },
     {
       id: "connected_channels",
@@ -342,6 +364,7 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Counts currently connected distribution channels",
+      href: metricHref("connected_channels"),
     },
   ];
 
@@ -349,11 +372,14 @@ export async function loadMarketingDirectorDashboard(input: {
     workspaceId: input.workspaceId,
     workspaceName: input.workspaceName,
     score,
+    scoreTrend,
     dataCoverage,
     metrics: {
       activeCampaigns,
       draftsAwaitingApproval: awaitingApproval,
       failedScheduledPosts: posts.filter((row) => row.status === "FAILED").length,
+      pendingScheduledPosts: posts.filter((row) => row.status === "PENDING_APPROVAL" || row.status === "PUBLISHING").length,
+      failedTikTokJobs: tiktokJobs.filter((row) => row.status === "failed").length,
       scheduledPosts,
       connectedChannels,
       tiktokStatus,
@@ -383,8 +409,19 @@ export async function loadMarketingDirectorDashboard(input: {
     },
   };
 
-  const brief = buildDailyBrief(briefInput);
-  await saveDailyBriefSnapshot(brief);
+  const existingBrief = briefForTodayResult.data
+    ? restoreDailyBriefFromSnapshot(briefForTodayResult.data as StoredBriefRow)
+    : null;
+  const shouldRefreshBrief = input.refreshBrief === true || !existingBrief;
+  const brief = shouldRefreshBrief ? buildDailyBrief(briefInput) : existingBrief;
+
+  if (!brief) {
+    throw new Error("DASHBOARD_BRIEF_INVALID:Unable to restore existing daily brief.");
+  }
+
+  if (shouldRefreshBrief) {
+    await saveDailyBriefSnapshot(brief);
+  }
 
   const recentActivity: RecentActivityItem[] = [
     ...posts

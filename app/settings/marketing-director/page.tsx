@@ -15,7 +15,7 @@ export default async function MarketingDirectorSettingsPage() {
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Marketing Director settings</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Operating mode and approvals</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Configure how much automation the Marketing Director can propose. Autopilot remains disabled until the feature flag rollout is enabled.
+            Configure how much automation the Marketing Director can propose. Advisor remains the default mode.
           </p>
         </section>
 
@@ -28,10 +28,19 @@ export default async function MarketingDirectorSettingsPage() {
               className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800"
             >
               <option value="advisor">Advisor (recommendations only)</option>
-              <option value="copilot">Copilot (proposal + assisted drafting)</option>
-              <option value="autopilot" disabled={!settings.autopilotAvailable}>Autopilot (coming soon)</option>
+              <option value="copilot" disabled={!settings.copilotAvailable}>Copilot (proposal + assisted drafting)</option>
+              <option value="autopilot" disabled={!settings.autopilotAvailable}>Autopilot (staged beta only)</option>
             </select>
           </label>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <span className="font-semibold">Copilot:</span> {settings.copilotMessage}
+            </p>
+            <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <span className="font-semibold">Autopilot:</span> {settings.autopilotMessage}
+            </p>
+          </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
@@ -84,8 +93,8 @@ export default async function MarketingDirectorSettingsPage() {
             </label>
           </div>
 
-          <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-            {settings.autopilotMessage}
+          <p className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+            Publishing and budget safety approvals remain enforced even when advanced modes are available.
           </p>
 
           <button type="submit" className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">

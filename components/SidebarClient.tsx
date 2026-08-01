@@ -23,7 +23,7 @@ const baseNavigation = [
   ["/analytics", "Analytics", "↗"],
   ["/pricing", "Pricing", "$"],
   ["/settings/marketing-director", "Director Settings", "◈"],
-  ["/settings/integrations/tiktok", "Integrations", "⚙"],
+  ["/integrations", "Integrations", "⚙"],
 ] as const;
 
 const adminNavigation = [

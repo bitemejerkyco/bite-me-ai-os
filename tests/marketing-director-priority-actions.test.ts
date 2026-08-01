@@ -20,7 +20,12 @@ describe("marketing director priority actions", () => {
       mediaAssetsCount: 0,
       approvedDrafts: 0,
       upcomingScheduledPosts: 0,
+      pendingScheduledPosts: 2,
       integrationErrors: 1,
+      activeCampaigns: 1,
+      failedTikTokJobs: 1,
+      missingIntegrations: ["TikTok", "Revenue tracking"],
+      revenueAvailable: false,
       lowScoreCategories: [{ key: "contentConsistency", label: "Content Consistency", status: "critical" }],
     });
 
@@ -46,11 +51,46 @@ describe("marketing director priority actions", () => {
       mediaAssetsCount: 2,
       approvedDrafts: 0,
       upcomingScheduledPosts: 2,
+      pendingScheduledPosts: 0,
       integrationErrors: 0,
+      activeCampaigns: 1,
+      failedTikTokJobs: 0,
+      missingIntegrations: [],
+      revenueAvailable: true,
       lowScoreCategories: [],
     });
 
     const ids = actions.map((action) => action.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("hides content creation action when approved or scheduled content exists", () => {
+    const actions = buildPriorityActions({
+      workspaceId: "ws-3",
+      onboardingComplete: true,
+      hasLogo: true,
+      hasBrandVoice: true,
+      tiktokStatus: "connected",
+      tiktokInboxPending: 0,
+      draftsAwaitingApproval: 0,
+      failedScheduledPosts: 0,
+      failedVideoRenders: 0,
+      amazonAdsConnected: true,
+      amazonRecommendationsReady: false,
+      hasProductsTable: true,
+      productsCount: 2,
+      mediaAssetsCount: 4,
+      approvedDrafts: 1,
+      upcomingScheduledPosts: 2,
+      pendingScheduledPosts: 0,
+      integrationErrors: 0,
+      activeCampaigns: 0,
+      failedTikTokJobs: 0,
+      missingIntegrations: [],
+      revenueAvailable: true,
+      lowScoreCategories: [],
+    });
+
+    expect(actions.some((action) => action.id === "create-content-pipeline")).toBe(false);
   });
 });

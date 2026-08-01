@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ExecutiveMetricCard } from "@/features/marketing-director/dashboard";
 
 const statusClass: Record<ExecutiveMetricCard["status"], string> = {
@@ -9,11 +10,20 @@ const statusClass: Record<ExecutiveMetricCard["status"], string> = {
 
 export default function MetricCard({ card }: { card: ExecutiveMetricCard }) {
   return (
-    <article className={`rounded-[1.6rem] border p-5 ${statusClass[card.status]}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{card.label}</p>
-      <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">{card.value}</p>
-      <p className="mt-2 text-sm text-slate-600">{card.detail}</p>
-      {card.trendLabel ? <p className="mt-3 text-xs font-semibold text-slate-500">{card.trendLabel}</p> : null}
-    </article>
+    <Link
+      href={card.href}
+      aria-label={`Open ${card.label} details`}
+      className={`group block rounded-[1.6rem] border p-5 transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(76,61,139,0.09)] active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 ${statusClass[card.status]}`}
+    >
+      <article>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{card.label}</p>
+        <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">{card.value}</p>
+        <p className="mt-2 text-sm text-slate-600">{card.detail}</p>
+        {card.trendLabel ? <p className="mt-3 text-xs font-semibold text-slate-500">{card.trendLabel}</p> : null}
+        <p className="mt-3 text-xs font-semibold text-violet-700 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+          View details
+        </p>
+      </article>
+    </Link>
   );
 }

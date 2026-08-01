@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getMarketingModeSettings } from "@/features/marketing-director/modes";
+import { resolveOperatingMode, type MarketingDirectorMode } from "@/features/marketing-director/mode-locks";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 
 function readBoolean(formData: FormData, key: string, defaultValue: boolean) {
@@ -13,11 +15,12 @@ function readBoolean(formData: FormData, key: string, defaultValue: boolean) {
 export async function saveMarketingDirectorSettingsAction(formData: FormData) {
   const context = await requireWorkspaceContext();
   const supabase = await createClient();
+  const modeSettings = await getMarketingModeSettings(context.workspaceId);
 
   const requestedMode = String(formData.get("operatingMode") || "advisor").toLowerCase();
-  const mode = ["advisor", "copilot", "autopilot"].includes(requestedMode)
-    ? requestedMode
-    : "advisor";
+  const normalizedRequestedMode: MarketingDirectorMode =
+    requestedMode === "copilot" || requestedMode === "autopilot" ? requestedMode : "advisor";
+  const mode = resolveOperatingMode(normalizedRequestedMode, modeSettings.autopilotAvailable);
 
   const dailyBriefTimeInput = String(formData.get("dailyBriefTime") || "08:30").trim();
   const dailyBriefTime = /^\d{2}:\d{2}$/.test(dailyBriefTimeInput)

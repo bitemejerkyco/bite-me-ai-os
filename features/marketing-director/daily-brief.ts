@@ -4,24 +4,26 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildPriorityActions } from "@/features/marketing-director/priority-actions";
 import {
   normalizeConfidence,
-  priorityRank,
   type DailyBrief,
   type MarketingRecommendation,
   type RecommendationEvidence,
 } from "@/features/marketing-director/daily-brief-rules";
 import { type DataCoverageModel } from "@/features/marketing-director/data-coverage";
-import { type MarketingScoreResult } from "@/features/marketing-director/marketing-score-rules";
+import { type MarketingScoreResult, type MarketingScoreTrend } from "@/features/marketing-director/marketing-score-rules";
 import { getTopMarketingOpportunities } from "@/features/marketing-director/marketing-score";
 
 export type DailyBriefInput = {
   workspaceId: string;
   workspaceName: string;
   score: MarketingScoreResult;
+  scoreTrend: MarketingScoreTrend;
   dataCoverage: DataCoverageModel;
   metrics: {
     activeCampaigns: number;
     draftsAwaitingApproval: number;
     failedScheduledPosts: number;
+    pendingScheduledPosts: number;
+    failedTikTokJobs: number;
     scheduledPosts: number;
     connectedChannels: number;
     tiktokStatus: "connected" | "reconnect_required" | "disconnected";
@@ -47,6 +49,26 @@ export type DailyBriefInput = {
 
 function recommendationEvidence(label: string, value: string, source: string, recordedAt: string | null): RecommendationEvidence {
   return { label, value, source, recordedAt };
+}
+
+function scoreDeltaLabel(trend: MarketingScoreTrend): string {
+  if (!trend.available) return "No prior Marketing Score snapshot is available yet.";
+  if (trend.direction === "up") return `Marketing Score is up by ${trend.delta.toFixed(1)} points vs prior snapshot.`;
+  if (trend.direction === "down") return `Marketing Score is down by ${Math.abs(trend.delta).toFixed(1)} points vs prior snapshot.`;
+  return "Marketing Score is unchanged vs the prior snapshot.";
+}
+
+function bestPerformanceSignal(input: DailyBriefInput): string {
+  if (input.metrics.revenueLast30Days && input.metrics.revenueLast30Days > 0) {
+    return `Connected revenue in the last 30 days: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(input.metrics.revenueLast30Days)}.`;
+  }
+  if (input.metrics.activeCampaigns > 0) {
+    return `${input.metrics.activeCampaigns} active campaign(s) are currently running.`;
+  }
+  if (input.metrics.scheduledPosts > 0) {
+    return `${input.metrics.scheduledPosts} scheduled post(s) are in the pipeline.`;
+  }
+  return "No strong performance signal is available yet from connected analytics sources.";
 }
 
 function buildRecommendations(input: DailyBriefInput): MarketingRecommendation[] {
@@ -138,7 +160,14 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
     mediaAssetsCount: input.metrics.mediaAssetsCount,
     approvedDrafts: input.metrics.approvedDrafts,
     upcomingScheduledPosts: input.metrics.scheduledPosts,
+    pendingScheduledPosts: input.metrics.pendingScheduledPosts,
     integrationErrors: input.metrics.integrationErrors,
+    activeCampaigns: input.metrics.activeCampaigns,
+    failedTikTokJobs: input.metrics.failedTikTokJobs,
+    missingIntegrations: input.dataCoverage.sources
+      .filter((source) => source.health === "missing" || source.health === "limited")
+      .map((source) => source.label),
+    revenueAvailable: input.metrics.revenueLast30Days !== null,
     lowScoreCategories: input.score.categories
       .filter((category) => category.status === "critical" || category.status === "needs_attention")
       .map((category) => ({ key: category.key, label: category.label, status: category.status })),
@@ -207,8 +236,7 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
     .slice(0, 3)
     .map((category) => `${category.label}: ${category.explanation}`);
 
-  const recommendedNextAction = [...priorityActions]
-    .sort((left, right) => priorityRank(left.priority) - priorityRank(right.priority))[0] || null;
+  const recommendedNextAction = priorityActions[0] || null;
 
   return {
     workspaceId: input.workspaceId,
@@ -218,6 +246,13 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
       ? "Confidence is reduced by missing connected data sources."
       : input.score.confidenceReason,
     dataQualityWarning: input.dataCoverage.warning,
+    dataCoverageSummary: `${Math.round(input.dataCoverage.overallConfidence * 100)}% confidence across ${input.dataCoverage.sources.length} evaluated data sources.`,
+    scoreDeltaLabel: scoreDeltaLabel(input.scoreTrend),
+    revenueAvailability: input.metrics.revenueLast30Days === null ? "unavailable" : "available",
+    bestPerformanceSignal: bestPerformanceSignal(input),
+    missingIntegrations: input.dataCoverage.sources
+      .filter((source) => source.health === "missing" || source.health === "limited")
+      .map((source) => source.label),
     sinceLastVisit,
     needsAttention,
     performingWell,
@@ -239,8 +274,19 @@ export async function saveDailyBriefSnapshot(brief: DailyBrief): Promise<void> {
     recommendations: brief.recommendations,
     confidence: brief.confidence,
     data_coverage: {
+      generatedAt: brief.generatedAt,
       warning: brief.dataQualityWarning,
       confidenceReason: brief.confidenceReason,
+      scoreDeltaLabel: brief.scoreDeltaLabel,
+      dataCoverageSummary: brief.dataCoverageSummary,
+      revenueAvailability: brief.revenueAvailability,
+      bestPerformanceSignal: brief.bestPerformanceSignal,
+      missingIntegrations: brief.missingIntegrations,
+      sinceLastVisit: brief.sinceLastVisit,
+      needsAttention: brief.needsAttention,
+      performingWell: brief.performingWell,
+      underperforming: brief.underperforming,
+      recommendedNextAction: brief.recommendedNextAction,
     },
   } as never, { onConflict: "workspace_id,brief_date" });
 }
