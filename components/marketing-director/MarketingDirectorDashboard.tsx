@@ -1,6 +1,6 @@
 import CommandCenter from "@/components/marketing-director/CommandCenter";
 import AutonomousRecommendationCard from "@/components/marketing-director/AutonomousRecommendationCard";
-import DirectorActivity from "@/componimport DirectorActivity from "import DirectorActivity from "@/components/marketing-director/DirectorActivity";
+import DirectorActivity from import DirectorActivity from "@/components/marketing-director/DirectorActivity";
 import DailyBriefPanel from "@/components/marketing-director/DailyBriefPanel";
 import ChannelHealth from "@/components/marketing-director/ChannelHealth";
 import DataCoverageNotice from "@/components/marketing-director/DataCoverageNotice";
