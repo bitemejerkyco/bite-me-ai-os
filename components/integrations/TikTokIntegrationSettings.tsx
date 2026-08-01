@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { TikTokConnectionView } from "@/features/integrations/tiktok/types";
+import TikTokPublishPanel from "@/components/integrations/TikTokPublishPanel";
+import type { SafeTikTokPublishJob } from "@/features/integrations/tiktok/publish-jobs";
 
 type StatusResponse = {
   ok: boolean;
@@ -29,11 +31,19 @@ function modeLabel(mode: TikTokConnectionView["postingMode"]): string {
 type TikTokIntegrationSettingsProps = {
   initialView: TikTokConnectionView | null;
   initialMessage: string | null;
+  betaAllowed: boolean;
+  betaMessage: string | null;
+  initialJobs: SafeTikTokPublishJob[];
+  initialSelectedAssetId?: string | null;
 };
 
 export default function TikTokIntegrationSettings({
   initialView,
   initialMessage,
+  betaAllowed,
+  betaMessage,
+  initialJobs,
+  initialSelectedAssetId,
 }: TikTokIntegrationSettingsProps) {
   const [view, setView] = useState<TikTokConnectionView | null>(initialView);
   const [busy, setBusy] = useState(false);
@@ -265,6 +275,14 @@ export default function TikTokIntegrationSettings({
             TikTok approves the production integration.
           </p>
         </section>
+
+        <TikTokPublishPanel
+          view={view}
+          betaAllowed={betaAllowed}
+          betaMessage={betaMessage}
+          initialJobs={initialJobs}
+          initialSelectedAssetId={initialSelectedAssetId}
+        />
       </div>
     </main>
   );

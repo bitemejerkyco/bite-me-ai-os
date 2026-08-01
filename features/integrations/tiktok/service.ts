@@ -5,10 +5,12 @@ import {
   type TikTokConfig,
 } from "@/features/integrations/tiktok/config";
 import { TikTokApiClient } from "@/features/integrations/tiktok/client";
+import { writeAdminAuditEvent } from "@/features/admin/audit";
 import {
   createTikTokOAuthState,
   decryptTikTokToken,
   encryptTikTokToken,
+  redactTikTokSecrets,
   verifyTikTokOAuthState,
 } from "@/features/integrations/tiktok/token-crypto";
 import {
@@ -29,7 +31,7 @@ type TikTokConnectionRow = {
   id: string;
   workspace_id: string;
   connected_by: string;
-  status: "CONNECTING" | "CONNECTED" | "EXPIRED" | "ERROR";
+  status: "CONNECTING" | "CONNECTED" | "EXPIRED" | "ERROR" | "RECONNECT_REQUIRED";
   open_id: string;
   tiktok_open_id?: string | null;
   scopes: string[];
@@ -66,6 +68,7 @@ type ServiceDependencies = {
 };
 
 const STATE_TTL_MILLISECONDS = 10 * 60 * 1000;
+const TOKEN_REFRESH_MARGIN_MILLISECONDS = 5 * 60 * 1000;
 const MEDIA_URL_TTL_SECONDS = 60 * 60;
 
 function expiresAt(now: Date, seconds: number): string {
@@ -117,13 +120,13 @@ export class TikTokConnectionService {
     };
   }
 
-  async beginAuthorization(actor: TikTokActor): Promise<string> {
+  async beginAuthorization(actor: TikTokActor, state?: string): Promise<string> {
     const availability = this.getConfiguration();
     if (!availability.configured) {
       throw new Error(`TIKTOK_SETUP_REQUIRED:${availability.message}`);
     }
     const now = this.now();
-    const state = createTikTokOAuthState(
+    const oauthState = state || createTikTokOAuthState(
       {
         userId: actor.userId,
         workspaceId: actor.workspaceId,
@@ -131,7 +134,7 @@ export class TikTokConnectionService {
       },
       this.config.encryptionKey,
     );
-    return this.client.buildAuthorizeUrl(state);
+    return this.client.buildAuthorizeUrl(oauthState);
   }
 
   async completeAuthorization(
@@ -221,6 +224,18 @@ export class TikTokConnectionService {
       .from("tiktok_connections")
       .upsert(row, { onConflict: "workspace_id" });
     if (error) throw new Error(`TIKTOK_CONNECTION_FAILED:${error.message}`);
+    await writeAdminAuditEvent({
+      actorUserId: actor.userId,
+      targetAccountId: actor.workspaceId,
+      action: "tiktok_connection_completed",
+      resourceType: "tiktok_connection",
+      resourceId: actor.workspaceId,
+      newValue: {
+        status: "CONNECTED",
+        scopes: grantedScopes,
+        openId: tokens.openId,
+      },
+    });
   }
 
   async getStatus(actor: TikTokActor): Promise<TikTokConnectionView> {
@@ -329,7 +344,19 @@ export class TikTokConnectionService {
     if (deleteError) {
       throw new Error(`TIKTOK_DISCONNECT_FAILED:${deleteError.message}`);
     }
+    await writeAdminAuditEvent({
+      actorUserId: actor.userId,
+      targetAccountId: actor.workspaceId,
+      action: "tiktok_connection_disconnected",
+      resourceType: "tiktok_connection",
+      resourceId: actor.workspaceId,
+      newValue: { revoked: true, warning },
+    });
     return warning;
+  }
+
+  async getValidAccessToken(actor: TikTokActor): Promise<string> {
+    return this.activeAccessToken(actor);
   }
 
   private async activeAccessToken(actor: TikTokActor): Promise<string> {
@@ -353,49 +380,88 @@ export class TikTokConnectionService {
       String(data.access_token_ciphertext),
       this.config.encryptionKey,
     );
-    if (new Date(String(data.access_expires_at)).getTime() > this.now().getTime()) {
+    if (
+      new Date(String(data.access_expires_at)).getTime() - this.now().getTime() >
+      TOKEN_REFRESH_MARGIN_MILLISECONDS
+    ) {
       return accessToken;
     }
     const refreshToken = decryptTikTokToken(
       String(data.refresh_token_ciphertext),
       this.config.encryptionKey,
     );
-    const refreshed = await this.client.refreshToken(refreshToken);
-    const now = this.now();
-    const { error: refreshError } = await actor.supabase
-      .from("tiktok_connections")
-      .update({
-        access_token_ciphertext: encryptTikTokToken(
-          refreshed.accessToken,
-          this.config.encryptionKey,
-        ),
-        encrypted_access_token: encryptTikTokToken(
-          refreshed.accessToken,
-          this.config.encryptionKey,
-        ),
-        refresh_token_ciphertext: encryptTikTokToken(
-          refreshed.refreshToken,
-          this.config.encryptionKey,
-        ),
-        encrypted_refresh_token: encryptTikTokToken(
-          refreshed.refreshToken,
-          this.config.encryptionKey,
-        ),
-        access_expires_at: expiresAt(now, refreshed.expiresInSeconds),
-        access_token_expires_at: expiresAt(now, refreshed.expiresInSeconds),
-        refresh_expires_at: expiresAt(now, refreshed.refreshExpiresInSeconds),
-        refresh_token_expires_at: expiresAt(now, refreshed.refreshExpiresInSeconds),
-        scopes: refreshed.scope,
-        granted_scopes: refreshed.scope,
-        refreshed_at: now.toISOString(),
-        status: "CONNECTED",
-        last_error: null,
-      })
-      .eq("workspace_id", actor.workspaceId);
-    if (refreshError) {
-      throw new Error(`TIKTOK_CONNECTION_FAILED:${refreshError.message}`);
+    try {
+      const refreshed = await this.client.refreshToken(refreshToken);
+      const now = this.now();
+      const { error: refreshError } = await actor.supabase
+        .from("tiktok_connections")
+        .update({
+          access_token_ciphertext: encryptTikTokToken(
+            refreshed.accessToken,
+            this.config.encryptionKey,
+          ),
+          encrypted_access_token: encryptTikTokToken(
+            refreshed.accessToken,
+            this.config.encryptionKey,
+          ),
+          refresh_token_ciphertext: encryptTikTokToken(
+            refreshed.refreshToken,
+            this.config.encryptionKey,
+          ),
+          encrypted_refresh_token: encryptTikTokToken(
+            refreshed.refreshToken,
+            this.config.encryptionKey,
+          ),
+          access_expires_at: expiresAt(now, refreshed.expiresInSeconds),
+          access_token_expires_at: expiresAt(now, refreshed.expiresInSeconds),
+          refresh_expires_at: expiresAt(now, refreshed.refreshExpiresInSeconds),
+          refresh_token_expires_at: expiresAt(now, refreshed.refreshExpiresInSeconds),
+          scopes: refreshed.scope,
+          granted_scopes: refreshed.scope,
+          refreshed_at: now.toISOString(),
+          status: "CONNECTED",
+          last_error: null,
+        })
+        .eq("workspace_id", actor.workspaceId);
+      if (refreshError) {
+        throw new Error(`TIKTOK_CONNECTION_FAILED:${refreshError.message}`);
+      }
+      await writeAdminAuditEvent({
+        actorUserId: actor.userId,
+        targetAccountId: actor.workspaceId,
+        action: "tiktok_token_refreshed",
+        resourceType: "tiktok_connection",
+        resourceId: actor.workspaceId,
+        newValue: {
+          accessExpiresAt: expiresAt(now, refreshed.expiresInSeconds),
+          refreshExpiresAt: expiresAt(now, refreshed.refreshExpiresInSeconds),
+        },
+      });
+      return refreshed.accessToken;
+    } catch (error) {
+      const safeMessage = redactTikTokSecrets(
+        error instanceof Error ? error.message : String(error),
+      );
+      const { error: updateError } = await actor.supabase
+        .from("tiktok_connections")
+        .update({
+          status: "RECONNECT_REQUIRED",
+          last_error: safeMessage,
+        })
+        .eq("workspace_id", actor.workspaceId);
+      if (updateError) {
+        throw new Error(`TIKTOK_CONNECTION_FAILED:${updateError.message}`);
+      }
+      await writeAdminAuditEvent({
+        actorUserId: actor.userId,
+        targetAccountId: actor.workspaceId,
+        action: "tiktok_token_refresh_failed",
+        resourceType: "tiktok_connection",
+        resourceId: actor.workspaceId,
+        newValue: { lastError: safeMessage },
+      });
+      throw new Error("TIKTOK_AUTH_RECONNECT_REQUIRED:TikTok authorization must be refreshed.");
     }
-    return refreshed.accessToken;
   }
 
   async sendScheduledVideoToInbox(

@@ -9,6 +9,8 @@ import {
 
 const ALGORITHM = "aes-256-gcm";
 const VERSION = "v1";
+export const TIKTOK_OAUTH_STATE_COOKIE_NAME = "pm_tiktok_oauth_state";
+export const TIKTOK_OAUTH_STATE_MAX_AGE_SECONDS = 10 * 60;
 
 function parseKey(raw: string): Buffer {
   const trimmed = raw.trim();
@@ -80,6 +82,8 @@ type TikTokOAuthStatePayload = {
   nonce: string;
 };
 
+export type TikTokOAuthState = TikTokOAuthStatePayload;
+
 export function createTikTokOAuthState(
   input: Omit<TikTokOAuthStatePayload, "nonce">,
   rawKey: string,
@@ -95,6 +99,24 @@ export function createTikTokOAuthState(
     .update(payload)
     .digest("base64url");
   return `${payload}.${signature}`;
+}
+
+export function createTikTokOAuthStateCookie(
+  input: Omit<TikTokOAuthStatePayload, "nonce">,
+  rawKey: string,
+) {
+  const value = createTikTokOAuthState(input, rawKey);
+  return {
+    name: TIKTOK_OAUTH_STATE_COOKIE_NAME,
+    value,
+    options: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax" as const,
+      maxAge: TIKTOK_OAUTH_STATE_MAX_AGE_SECONDS,
+      path: "/api/integrations/tiktok/callback",
+    },
+  };
 }
 
 export function verifyTikTokOAuthState(
@@ -128,6 +150,31 @@ export function verifyTikTokOAuthState(
   } catch {
     throw new Error("TIKTOK_STATE_INVALID:Authorization state payload is invalid.");
   }
+}
+
+export function validateTikTokOAuthState(
+  cookieState: string,
+  requestState: string,
+  rawKey: string,
+  input: {
+    userId: string;
+    workspaceId: string;
+    now?: number;
+  },
+): TikTokOAuthStatePayload {
+  const state = verifyTikTokOAuthState(cookieState, rawKey);
+  if (cookieState !== requestState) {
+    throw new Error("TIKTOK_STATE_INVALID:Authorization state does not match the cookie.");
+  }
+  const now = input.now ?? Date.now();
+  if (
+    state.userId !== input.userId ||
+    state.workspaceId !== input.workspaceId ||
+    state.expiresAt <= now
+  ) {
+    throw new Error("TIKTOK_STATE_INVALID:Authorization state is invalid or expired.");
+  }
+  return state;
 }
 
 export function redactTikTokSecrets(input: string): string {

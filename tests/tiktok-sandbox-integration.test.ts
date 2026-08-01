@@ -13,6 +13,10 @@ import type { TikTokConfig } from "@/features/integrations/tiktok/config";
 import { validateSystemSettingValue } from "@/features/admin/settings-rules";
 import { normalizeTikTokIntegrationMode } from "@/features/integrations/tiktok/types";
 
+vi.mock("@/features/admin/audit", () => ({
+  writeAdminAuditEvent: vi.fn(async () => undefined),
+}));
+
 const config: TikTokConfig = {
   clientKey: "client-key",
   clientSecret: "client-secret",

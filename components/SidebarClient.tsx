@@ -25,7 +25,10 @@ const baseNavigation = [
   ["/settings/integrations/tiktok", "Integrations", "⚙"],
 ] as const;
 
-const adminNavigation = ["/admin", "Admin Console", "⌘"] as const;
+const adminNavigation = [
+  ["/admin", "Admin Console", "⌘"],
+  ["/admin/tiktok", "TikTok Beta", "◎"],
+] as const;
 
 export default function SidebarClient({
   primaryAccountName,
@@ -34,7 +37,7 @@ export default function SidebarClient({
 }: SidebarClientProps) {
   const pathname = usePathname();
   const navigation = showAdminConsole
-    ? [...baseNavigation, adminNavigation]
+    ? [...baseNavigation, ...adminNavigation]
     : baseNavigation;
 
   return (
