@@ -42,7 +42,7 @@ export default function MarketingScoreCard(props: {
   );
 
   return (
-    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
+    <section data-help="dashboard-score" className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Marketing Score</p>

@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import HelpRoot from "@/components/help/HelpRoot";
+import { loadHelpPreference } from "@/features/help/server";
+import { getViewerContext } from "@/lib/auth/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,14 +22,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [viewer, preference] = await Promise.all([
+    getViewerContext(),
+    loadHelpPreference(),
+  ]);
+
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <HelpRoot
+          initialPreference={preference}
+          initialIsSuperAdmin={viewer.isSuperAdmin}
+        >
+          {children}
+        </HelpRoot>
+      </body>
     </html>
   );
 }

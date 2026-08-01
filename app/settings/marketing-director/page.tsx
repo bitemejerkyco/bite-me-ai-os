@@ -1,4 +1,5 @@
 import Sidebar from "@/components/Sidebar";
+import PageHelpPanel from "@/components/help/PageHelpPanel";
 import { getMarketingModeSettings } from "@/features/marketing-director/modes";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import { saveMarketingDirectorSettingsAction } from "@/app/settings/marketing-director/actions";
@@ -11,6 +12,7 @@ export default async function MarketingDirectorSettingsPage() {
     <div className="flex min-h-screen flex-col bg-white text-slate-900 md:flex-row">
       <Sidebar />
       <div className="flex-1 p-5 md:p-10">
+        <PageHelpPanel />
         <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-6">
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Marketing Director settings</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Operating mode and approvals</h1>

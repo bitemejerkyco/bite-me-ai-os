@@ -1,14 +1,11 @@
 import Link from "next/link";
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
 
 export default function AnalyticsIndexPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-white text-slate-900 md:flex-row">
-      <Sidebar />
-      <main className="flex-1 p-8">
+    <AppShell title="Analytics" eyebrow="Performance intelligence">
+      <main>
         <div className="pm-glass mx-auto max-w-4xl rounded-[2rem] p-8">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-600">Performance intelligence</p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight">Analytics</h1>
           <p className="mt-3 text-slate-600">
             Explore channel performance dashboards in sandbox mode.
           </p>
@@ -20,6 +17,6 @@ export default function AnalyticsIndexPage() {
           </Link>
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }

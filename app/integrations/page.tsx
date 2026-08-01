@@ -46,11 +46,11 @@ export default async function IntegrationsPage() {
           Connect data sources to improve Marketing Score confidence, revenue visibility, and action recommendations.
         </p>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div data-help="integrations-provider-grid" className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => {
             const route = SETTINGS_ROUTE[card.providerId] || null;
             return (
-              <article key={card.providerId} className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+              <article data-help="integrations-provider-card" key={card.providerId} className="rounded-2xl border border-slate-200 bg-white/85 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{card.label}</p>
                   <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${STATE_CLASSNAMES[card.state] || STATE_CLASSNAMES.not_configured}`}>

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import GuidedEmptyState from "@/components/help/GuidedEmptyState";
+import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
 import {
   createCloudFolder,
   loadCloudDrafts,
@@ -99,7 +101,7 @@ export default function ContentLibrary() {
       );
       setFolderFilter(folder.id);
       setNewFolderName("");
-      setMessage(`Folder “${folder.name}” created.`);
+      setMessage(`Folder “${folder.name}” created. Recommended next step: move related drafts into this folder.`);
     } catch (caught) {
       setMessage(
         caught instanceof Error ? caught.message : "Unable to create folder.",
@@ -197,7 +199,7 @@ export default function ContentLibrary() {
         title: selected.title.trim(),
         copy: selected.copy.trim(),
       },
-      "Changes saved.",
+      `${SUCCESS_MESSAGES.contentSaved().title} ${SUCCESS_MESSAGES.contentSaved().detail}`,
     ).catch(() => undefined);
   };
 
@@ -214,7 +216,7 @@ export default function ContentLibrary() {
       status: "APPROVED" as const,
     };
     try {
-      await persist(prepared, "Saved and ready to publish.");
+      await persist(prepared, `${SUCCESS_MESSAGES.contentApproved().title} ${SUCCESS_MESSAGES.contentApproved().detail}`);
       saveLocal(STORAGE_KEYS.calendarPrefill, prepared);
       window.location.assign("/calendar");
     } catch {
@@ -224,7 +226,7 @@ export default function ContentLibrary() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
+      <section data-help="content-folders" className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <div>
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-bold">Folders</h2>
@@ -316,7 +318,7 @@ export default function ContentLibrary() {
             </button>
           ))}
         </div>
-        <div className="mt-5 space-y-3">
+        <div data-help="content-draft-list" className="mt-5 space-y-3">
           {visible.length ? (
             visible.map((draft) => (
               <button
@@ -349,17 +351,15 @@ export default function ContentLibrary() {
               </button>
             ))
           ) : (
-            <p className="text-sm text-slate-500">
-              No content matches this filter.
-            </p>
+            <GuidedEmptyState title="No content yet." description="Generate or create content first, then review and approve it here before scheduling." estimatedTime="3 minutes" primaryAction={{ label: "Generate Content", href: "/studio" }} secondaryAction={{ label: "Learn the content flow", href: "/help" }} />
           )}
         </div>
         {message ? <p className="mt-4 text-sm text-rose-700">{message}</p> : null}
       </section>
 
-      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
+      <section data-help="content-editor" className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
         {!selected ? (
-          <p className="text-slate-500">Select a content record to preview it.</p>
+          <GuidedEmptyState title="No draft selected." description="Choose a draft from the library to review copy, organize it, and prepare it for approval or scheduling." primaryAction={{ label: "Open AI Studio", href: "/studio" }} secondaryAction={{ label: "Open Help Center", href: "/help" }} />
         ) : (
           <div>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -425,6 +425,7 @@ export default function ContentLibrary() {
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <button
+                data-help="content-schedule"
                 disabled={working}
                 onClick={() => void openCalendar()}
                 className="rounded-xl bg-violet-600 px-5 py-2.5 font-semibold text-white hover:bg-violet-500 disabled:opacity-60"

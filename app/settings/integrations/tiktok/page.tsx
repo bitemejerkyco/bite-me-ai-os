@@ -1,4 +1,5 @@
 import Sidebar from "@/components/Sidebar";
+import PageHelpPanel from "@/components/help/PageHelpPanel";
 import TikTokIntegrationSettings from "@/components/integrations/TikTokIntegrationSettings";
 import { resolveTikTokActor } from "@/app/api/integrations/tiktok/_lib";
 import { getTikTokBetaAccessSnapshot } from "@/features/integrations/tiktok/beta";
@@ -44,6 +45,9 @@ export default async function TikTokIntegrationSettingsPage({
     <div className="flex min-h-screen flex-col bg-white text-slate-900 md:flex-row">
       <Sidebar />
       <div className="flex-1">
+        <div className="px-5 pt-5 md:px-10">
+          <PageHelpPanel />
+        </div>
         <TikTokIntegrationSettings
           initialView={initialView}
           initialMessage={initialMessage}

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import GuidedEmptyState from "@/components/help/GuidedEmptyState";
+import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
 import {
   loadLocal,
   saveLocal,
@@ -92,7 +94,7 @@ export default function MediaLibrary() {
       );
       setFolderFilter(folder.id);
       setNewFolderName("");
-      setMessage(`Folder “${folder.name}” created.`);
+      setMessage(`Folder “${folder.name}” created. Recommended next step: move matching assets into it.`);
     } catch (caught) {
       setMessage(
         caught instanceof Error ? caught.message : "Unable to create folder.",
@@ -154,7 +156,8 @@ export default function MediaLibrary() {
       const next = [...added, ...assets];
       setAssets(next);
       saveLocal(STORAGE_KEYS.media, next);
-      setMessage(`${added.length} asset${added.length === 1 ? "" : "s"} uploaded, organized, and tagged.`);
+      const success = SUCCESS_MESSAGES.mediaUploaded();
+      setMessage(`${success.title} ${success.detail}`);
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Upload failed.");
     } finally {
@@ -169,7 +172,7 @@ export default function MediaLibrary() {
       const next = assets.filter((item) => item.id !== asset.id);
       setAssets(next);
       saveLocal(STORAGE_KEYS.media, next);
-      setMessage("Asset removed.");
+      setMessage("Asset removed. Recommended next step: confirm the remaining asset set still supports your next draft or campaign.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to remove asset.");
     }
@@ -177,7 +180,7 @@ export default function MediaLibrary() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-3xl border border-dashed border-violet-300 bg-violet-50 p-6 text-center">
+      <section data-help="media-upload-zone" className="rounded-3xl border border-dashed border-violet-300 bg-violet-50 p-6 text-center">
         <h2 className="text-xl font-bold">Upload branded media</h2>
         <p className="mt-2 text-sm text-slate-500">Photos, videos, logos, graphics, and licensed audio.</p>
         <label className={`mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 font-semibold hover:bg-violet-500 ${uploading ? "cursor-wait opacity-60" : "cursor-pointer"}`}>
@@ -202,7 +205,7 @@ export default function MediaLibrary() {
         ) : null}
       </section>
 
-      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
+      <section data-help="media-folders" className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <div className="mb-5 grid gap-4 border-b border-slate-200/70 pb-5 lg:grid-cols-[260px_1fr]">
           <div>
             <h2 className="font-bold">Folders</h2>
@@ -285,11 +288,9 @@ export default function MediaLibrary() {
           />
         </div>
         {filtered.length === 0 ? (
-          <p className="mt-6 rounded-2xl border border-slate-200/60 bg-white/70 p-6 text-center text-slate-500">
-            Upload your first brand asset to begin.
-          </p>
+          <div className="mt-6"><GuidedEmptyState title="No media assets yet." description="Upload logos, product photos, and brand assets first so content creation has something real to work with." estimatedTime="2 minutes" primaryAction={{ label: "Upload Media", href: "/media" }} secondaryAction={{ label: "Learn how Media Library works", href: "/help" }} /></div>
         ) : (
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div data-help="media-asset-grid" className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((asset) => (
               <article key={asset.id} className="rounded-2xl border border-slate-200/80 bg-white/70 p-4">
                 <div className="flex items-start justify-between gap-3">

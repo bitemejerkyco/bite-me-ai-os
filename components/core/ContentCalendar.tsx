@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import GuidedEmptyState from "@/components/help/GuidedEmptyState";
+import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
 import {
   cancelCloudScheduledPost,
   loadCloudDrafts,
@@ -300,10 +302,10 @@ export default function ContentCalendar() {
       } else {
         setMessage(
           entryType === "AD"
-            ? "Ad submitted for approval. No spend was authorized."
+            ? "Ad submitted for approval successfully. Recommended next step: review the approval queue before launch."
             : postNow
-              ? "Post queued for immediate publishing."
-              : "Post scheduled.",
+              ? "Post queued for immediate publishing. Recommended next step: monitor the publishing queue for handoff status."
+              : "Post scheduled successfully. Recommended next step: review the publishing queue when the scheduled time approaches.",
         );
       }
     } catch (caught) {
@@ -325,7 +327,7 @@ export default function ContentCalendar() {
         current.map((item) => (item.id === post.id ? approved : item)),
       );
       setSelectedPost(approved);
-      setMessage("Ad approved and added to the publishing queue.");
+      setMessage(`${SUCCESS_MESSAGES.contentApproved().title} ${SUCCESS_MESSAGES.contentApproved().detail}`);
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to approve ad.");
     }
@@ -340,7 +342,7 @@ export default function ContentCalendar() {
         ),
       );
       setSelectedPost({ ...post, status: "CANCELED" });
-      setMessage("Scheduled item canceled.");
+      setMessage("Scheduled item canceled. Recommended next step: return to the calendar and reschedule if the campaign still needs coverage.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to cancel.");
     }
@@ -611,7 +613,7 @@ export default function ContentCalendar() {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[390px_1fr]">
-        <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
+        <section data-help="calendar-form" className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
           <h2 className="text-xl font-bold">Create scheduled content</h2>
           <div className="mt-5 space-y-4">
             <label className="block text-sm text-slate-700">Use AI Studio draft
@@ -689,7 +691,7 @@ export default function ContentCalendar() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-4 md:p-5">
+        <section data-help="calendar-grid" className="rounded-3xl border border-slate-200/80 bg-white/80 p-4 md:p-5">
           <div className="flex items-center justify-between gap-3">
             <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded-xl border border-slate-200/80 px-3 py-2">←</button>
             <h2 className="text-xl font-bold">{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
@@ -802,7 +804,7 @@ export default function ContentCalendar() {
       ) : null}
 
       {selectedPost ? (
-        <section ref={detailsRef} className="scroll-mt-6 rounded-3xl border border-slate-200/80 bg-white/80 p-5">
+        <section data-help="calendar-details" ref={detailsRef} className="scroll-mt-6 rounded-3xl border border-slate-200/80 bg-white/80 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -928,7 +930,7 @@ export default function ContentCalendar() {
         </div>
         <div className="mt-4 space-y-3">
           {scorecards.length === 0 ? (
-            <p className="text-slate-500">Scorecards will appear after connected channels return performance data.</p>
+            <GuidedEmptyState title="No analytics scorecards yet." description="Scorecards appear after connected channels return performance data for scheduled or published content." estimatedTime="After first published result" primaryAction={{ label: "Open Integrations", href: "/integrations" }} secondaryAction={{ label: "Learn how scheduling works", href: "/help" }} />
           ) : scorecards.map(({ post, snapshot, score }) => {
             const savedToKnowledge = knowledge.some(
               (item) => item.scheduledPostId === post.id,
@@ -963,7 +965,7 @@ export default function ContentCalendar() {
       <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <h2 className="text-xl font-bold">Publishing queue</h2>
         <div className="mt-4 space-y-3">
-          {posts.length === 0 ? <p className="text-slate-500">Nothing scheduled yet.</p> : posts.map((post) => (
+          {posts.length === 0 ? <GuidedEmptyState title="Nothing in the publishing queue yet." description="Review scheduled content first, then posts and ads will appear here as they move toward publishing." estimatedTime="2 minutes" primaryAction={{ label: "Open Calendar", href: "/calendar" }} secondaryAction={{ label: "Learn the publishing flow", href: "/help" }} /> : posts.map((post) => (
             <article key={post.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">

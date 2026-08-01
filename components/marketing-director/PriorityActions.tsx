@@ -21,7 +21,7 @@ export default function PriorityActions({
   urgency: BriefUrgency;
 }) {
   return (
-    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
+    <section data-help="dashboard-priority-actions" className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Top Actions Today</p>
         <p className="text-xs text-slate-500">{urgency.summary}</p>

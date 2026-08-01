@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import OnboardingChecklist from "@/components/help/OnboardingChecklist";
+import PageHelpPanel from "@/components/help/PageHelpPanel";
 import Sidebar from "@/components/Sidebar";
 
 export default function AppShell({
@@ -18,9 +20,13 @@ export default function AppShell({
           <div className="relative z-10">
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">{eyebrow}</p>
             <h1 className="mt-2 text-3xl font-black tracking-[-0.035em] text-slate-900 md:text-5xl">{title}</h1>
+            <PageHelpPanel />
           </div>
         </header>
-        <main className="pm-content mx-auto max-w-7xl p-4 md:p-8 lg:p-10">{children}</main>
+        <main className="pm-content mx-auto max-w-7xl space-y-5 p-4 md:p-8 lg:p-10">
+          <OnboardingChecklist />
+          {children}
+        </main>
       </div>
     </div>
   );

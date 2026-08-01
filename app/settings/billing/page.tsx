@@ -1,4 +1,5 @@
 import Sidebar from "@/components/Sidebar";
+import PageHelpPanel from "@/components/help/PageHelpPanel";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import { markBillingReviewCompleteAction, openBillingPortalAction, startCheckoutAction } from "@/app/settings/billing/actions";
 
@@ -101,6 +102,7 @@ export default async function BillingSettingsPage() {
     <div className="flex min-h-screen flex-col bg-white text-slate-900 md:flex-row">
       <Sidebar />
       <div className="flex-1 p-5 md:p-10">
+        <PageHelpPanel />
         <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-6">
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Billing</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Subscription, invoices, and credits</h1>
@@ -109,7 +111,7 @@ export default async function BillingSettingsPage() {
           </p>
         </section>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section data-help="billing-summary" className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Current plan</p>
             <p className="mt-2 text-xl font-semibold text-slate-900">{subscription?.plan_key || "trial"}</p>
@@ -131,7 +133,7 @@ export default async function BillingSettingsPage() {
           </div>
         </section>
 
-        <section className="mt-6 rounded-[2rem] border border-slate-200/90 bg-white/90 p-6">
+        <section data-help="billing-plan-grid" className="mt-6 rounded-[2rem] border border-slate-200/90 bg-white/90 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-black tracking-tight text-slate-900">Plan upgrade</h2>

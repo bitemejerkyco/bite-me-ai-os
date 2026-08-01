@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import PageHelpPanel from "@/components/help/PageHelpPanel";
 import Sidebar from "@/components/Sidebar";
 import { requireSuperAdmin } from "@/lib/auth/server";
 
@@ -12,6 +13,7 @@ const adminLinks = [
   ["/admin/integrations", "Integrations"],
   ["/admin/operations", "Operations"],
   ["/admin/costs", "AI Costs"],
+  ["/admin/feedback", "Feedback"],
   ["/admin/system", "System Health"],
   ["/admin/settings", "Settings"],
   ["/admin/audit", "Audit Log"],
@@ -59,6 +61,7 @@ export default async function AdminLayout({
           </div>
         </header>
         <main className="pm-content mx-auto max-w-7xl p-4 md:p-8 lg:p-10">
+          <PageHelpPanel />
           {children}
         </main>
       </div>

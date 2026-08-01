@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import GuidedEmptyState from "@/components/help/GuidedEmptyState";
+import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
 import { loadLocal, saveLocal, STORAGE_KEYS, type CampaignPlan } from "@/features/core/local-os";
 import {
   loadCloudCampaigns,
@@ -44,7 +46,8 @@ export default function MarketingWorkspace() {
       setCampaigns(next);
       saveLocal(STORAGE_KEYS.campaigns, next);
       setName("");
-      setMessage("Campaign saved securely.");
+      const success = SUCCESS_MESSAGES.campaignCreated();
+      setMessage(`${success.title} ${success.detail}`);
       if (continueToStudio) {
         const params = new URLSearchParams({
           campaign: campaign.name,
@@ -68,7 +71,7 @@ export default function MarketingWorkspace() {
       await saveCloudCampaign(changed);
       setCampaigns(next);
       saveLocal(STORAGE_KEYS.campaigns, next);
-      setMessage("Campaign status saved.");
+      setMessage("Campaign updated successfully. Recommended next step: review whether the current status still matches the active content plan.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to update campaign.");
     }
@@ -76,7 +79,7 @@ export default function MarketingWorkspace() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[390px_1fr]">
-      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
+      <section data-help="campaign-create-form" className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <h2 className="text-xl font-bold">Create campaign plan</h2>
         <div className="mt-5 space-y-4">
           <label className="block text-sm text-slate-700">Campaign name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Summer DTC push" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" /></label>
@@ -95,9 +98,9 @@ export default function MarketingWorkspace() {
           {message ? <p className="text-sm text-slate-700">{message}</p> : null}
         </div>
       </section>
-      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
+      <section data-help="campaign-list" className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <div className="flex items-center justify-between"><div><h2 className="text-xl font-bold">Campaign command center</h2><p className="text-sm text-slate-500">{campaigns.length} campaign plans</p></div></div>
-        {campaigns.length === 0 ? <p className="mt-6 rounded-2xl bg-white/70 p-8 text-center text-slate-500">Create your first campaign plan.</p> : (
+        {campaigns.length === 0 ? <div className="mt-6"><GuidedEmptyState title="No campaigns yet." description="Create your first AI-powered campaign to organize strategy, content, approval, and scheduling." estimatedTime="2 minutes" primaryAction={{ label: "Create Campaign", href: "/marketing/campaigns" }} secondaryAction={{ label: "Learn how campaigns work", href: "/help" }} /></div> : (
           <div className="mt-5 space-y-3">
             {campaigns.map((campaign) => (
               <article key={campaign.id} className="grid gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 md:grid-cols-[1fr_auto] md:items-center">

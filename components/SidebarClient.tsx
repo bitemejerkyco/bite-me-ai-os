@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import SignOutButton from "@/components/auth/SignOutButton";
+import HelpModeToggle from "@/components/help/HelpModeToggle";
 
 type SidebarClientProps = {
   primaryAccountName: string | null;
@@ -26,6 +27,8 @@ const baseNavigation = [
   ["/settings/branding", "Branding Settings", "◍"],
   ["/settings/marketing-director", "Director Settings", "◈"],
   ["/integrations", "Integrations", "⚙"],
+  ["/help", "Help & Academy", "?"],
+  ["/academy", "Academy", "▣"],
 ] as const;
 
 const adminNavigation = [
@@ -106,6 +109,14 @@ export default function SidebarClient({
         <p className="mt-1 text-xs text-slate-500">
           {viewerEmail || "Signed-in user"}
         </p>
+        <div className="mt-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+            Help Mode
+          </p>
+          <div className="mt-2">
+            <HelpModeToggle />
+          </div>
+        </div>
         <p className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           Secure demo-account switching is deferred to the next phase so browser
           state cannot grant elevated access.

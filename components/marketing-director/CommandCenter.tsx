@@ -642,7 +642,7 @@ export default function CommandCenter(props: { modeLabel: string }) {
   };
 
   return (
-    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-4" aria-label="Marketing Director conversation panel">
+    <section data-help="dashboard-command-center" className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-4" aria-label="Marketing Director conversation panel">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Executive Command Center</p>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
