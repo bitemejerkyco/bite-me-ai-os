@@ -42,6 +42,21 @@ export default async function MarketingDirectorSettingsPage() {
             </p>
           </div>
 
+          <label className="block text-sm font-semibold text-slate-800">
+            Autonomy level (1-5)
+            <select
+              name="autonomyLevel"
+              defaultValue={String(settings.autonomyLevel)}
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800"
+            >
+              <option value="1">1 - Recommendations only</option>
+              <option value="2">2 - Draft assistance with strict approval</option>
+              <option value="3">3 - Balanced copilot execution</option>
+              <option value="4">4 - High autonomy with approval checkpoints</option>
+              <option value="5">5 - Full autopilot within policy limits</option>
+            </select>
+          </label>
+
           <div className="grid gap-3 md:grid-cols-2">
             <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
               <input type="checkbox" name="approvalRequiredForContent" defaultChecked={settings.approvalRequiredForContent} />

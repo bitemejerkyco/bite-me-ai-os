@@ -15,6 +15,13 @@ import {
   type RecommendationActionKind,
   type RecommendationWorkflowStatus,
 } from "@/features/marketing-director/recommendation-workflows";
+import {
+  enqueueNotification,
+  EXECUTION_ERROR_CODES,
+  recordExecutionEvent,
+  upsertApprovalItem,
+  upsertForecast,
+} from "@/features/marketing-director/execution-engine";
 
 type RecommendationActionBody = {
   planId?: unknown;
@@ -91,6 +98,21 @@ function asIsoDateOrNull(value: unknown): string | null {
   return parsed.toISOString();
 }
 
+function toWorkflowCode(code: string):
+  | "INVALID_WORKFLOW"
+  | "APPROVAL_REQUIRED"
+  | "MODE_RESTRICTED"
+  | "ENTITLEMENT_REQUIRED"
+  | "INTEGRATION_NOT_CONNECTED"
+  | "WORKFLOW_BLOCKED" {
+  if (code === "APPROVAL_REQUIRED") return EXECUTION_ERROR_CODES.APPROVAL_REQUIRED;
+  if (code === "MODE_RESTRICTED") return EXECUTION_ERROR_CODES.MODE_RESTRICTED;
+  if (code === "ENTITLEMENT_REQUIRED") return EXECUTION_ERROR_CODES.ENTITLEMENT_REQUIRED;
+  if (code === "INTEGRATION_NOT_AVAILABLE") return EXECUTION_ERROR_CODES.INTEGRATION_NOT_CONNECTED;
+  if (code === "MISSING_TARGET_RECORD") return EXECUTION_ERROR_CODES.WORKFLOW_BLOCKED;
+  return EXECUTION_ERROR_CODES.INVALID_WORKFLOW;
+}
+
 export async function POST(request: Request) {
   try {
     const context = await requireWorkspaceContext();
@@ -104,7 +126,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          code: "ACTION_NOT_ALLOWED",
+          code: EXECUTION_ERROR_CODES.INVALID_WORKFLOW,
           error: "planId, actionId, and actionKind are required.",
         },
         { status: 400 },
@@ -123,7 +145,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          code: "INVALID_WORKFLOW_TRANSITION",
+          code: EXECUTION_ERROR_CODES.INVALID_WORKFLOW,
           error: "Unable to load recommendation context.",
         },
         { status: 400 },
@@ -142,7 +164,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          code: "MISSING_TARGET_RECORD",
+          code: EXECUTION_ERROR_CODES.WORKFLOW_BLOCKED,
           error: "Plan not found for this workspace.",
         },
         { status: 404 },
@@ -154,7 +176,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          code: "MISSING_TARGET_RECORD",
+          code: EXECUTION_ERROR_CODES.WORKFLOW_BLOCKED,
           error: "Recommendation action not found.",
         },
         { status: 404 },
@@ -231,14 +253,26 @@ export async function POST(request: Request) {
     });
 
     if (!transition.ok) {
+      const workflowCode = toWorkflowCode(transition.code);
       const status = transition.code === "MISSING_TARGET_RECORD" ? 404 : transition.code === "MODE_RESTRICTED" ? 403 : 400;
       return NextResponse.json(
         {
           ok: false,
-          code: transition.code,
+          code: workflowCode,
           error: transition.message,
         },
         { status },
+      );
+    }
+
+    if (actionKind === "PUBLISH_NOW" && modeSettings.approvalRequiredForPublishing && modeSettings.operatingMode === "advisor") {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: EXECUTION_ERROR_CODES.APPROVAL_REQUIRED,
+          error: "Publishing requires approval in advisor mode.",
+        },
+        { status: 403 },
       );
     }
 
@@ -247,7 +281,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          code: "ACTION_NOT_ALLOWED",
+          code: EXECUTION_ERROR_CODES.INVALID_WORKFLOW,
           error: "Action is not supported by this endpoint.",
         },
         { status: 400 },
@@ -260,7 +294,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          code: "INVALID_WORKFLOW_TRANSITION",
+          code: EXECUTION_ERROR_CODES.INVALID_WORKFLOW,
           error: "A valid deferUntil ISO date is required for defer action.",
         },
         { status: 400 },
@@ -299,6 +333,37 @@ export async function POST(request: Request) {
       throw new Error(`RECOMMENDATION_ACTION_UPDATE_FAILED:${updateError.message}`);
     }
 
+    const approvalItemId = await upsertApprovalItem({
+      workspaceId: context.workspaceId,
+      itemType: "recommendation",
+      title: action.title,
+      status: actionKind === "DISMISS" ? "CANCELLED" : actionKind === "DEFER" ? "EDIT_REQUESTED" : "APPROVED",
+      requestedBy: context.userId,
+      resolvedBy: actionKind === "PUBLISH_NOW" ? context.userId : null,
+      targetRecordType: "recommendation_action",
+      targetRecordId: action.id,
+      comment: actionKind === "DEFER" ? `Deferred until ${deferUntil}` : humanDetails(actionKind),
+      metadata: {
+        planId,
+        actionId,
+        actionKind,
+      },
+    });
+
+    await recordExecutionEvent({
+      workspaceId: context.workspaceId,
+      approvalItemId,
+      actorUserId: context.userId,
+      eventType: "recommendation_action",
+      status: nextStatus,
+      message: humanDetails(actionKind),
+      metadata: {
+        planId,
+        actionId,
+        actionKind,
+      },
+    });
+
     if (actionKind === "PUBLISH_NOW" && scheduledPost?.id) {
       await admin
         .from("scheduled_posts")
@@ -309,6 +374,43 @@ export async function POST(request: Request) {
         } as never)
         .eq("id", scheduledPost.id)
         .eq("workspace_id", context.workspaceId);
+
+      await recordExecutionEvent({
+        workspaceId: context.workspaceId,
+        actorUserId: context.userId,
+        eventType: "publishing",
+        status: "PUBLISHED",
+        message: `Scheduled post ${scheduledPost.id} published.`,
+        metadata: {
+          scheduledPostId: scheduledPost.id,
+          planId,
+          actionId,
+        },
+      });
+
+      await upsertForecast({
+        workspaceId: context.workspaceId,
+        forecastType: "campaign_completion",
+        measuredValue: 1,
+        estimatedValue: 1,
+        confidence: 0.8,
+        measured: true,
+        note: "Measured completion from publish-now execution.",
+      });
+
+      await enqueueNotification({
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        channel: "in_app",
+        triggerType: "campaign_completed",
+        title: "Campaign execution published",
+        body: `Recommendation \"${action.title}\" moved to published state.`,
+        preferenceKey: "campaignCompleted",
+        metadata: {
+          planId,
+          actionId,
+        },
+      });
     }
 
     return NextResponse.json({
@@ -324,7 +426,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        code: "INVALID_WORKFLOW_TRANSITION",
+        code: EXECUTION_ERROR_CODES.INVALID_WORKFLOW,
         error: message.startsWith("AUTH_REQUIRED:") ? "Sign in required." : "Unable to update recommendation state right now.",
       },
       { status: 400 },

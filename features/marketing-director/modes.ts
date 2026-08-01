@@ -7,6 +7,7 @@ type FeatureFlagRow = { enabled: boolean | null };
 type WorkspaceMarketingSettingsRow = {
   workspace_id: string;
   operating_mode: string | null;
+  autonomy_level: number | null;
   approval_required_for_content: boolean | null;
   approval_required_for_scheduling: boolean | null;
   approval_required_for_budget_changes: boolean | null;
@@ -19,6 +20,7 @@ type WorkspaceMarketingSettingsRow = {
 export type MarketingModeSettings = {
   workspaceId: string;
   operatingMode: MarketingDirectorMode;
+  autonomyLevel: 1 | 2 | 3 | 4 | 5;
   approvalRequiredForContent: boolean;
   approvalRequiredForScheduling: boolean;
   approvalRequiredForBudgetChanges: boolean;
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: Omit<
   "workspaceId" | "copilotAvailable" | "copilotMessage" | "autopilotAvailable" | "autopilotMessage"
 > = {
   operatingMode: "advisor",
+  autonomyLevel: 3,
   approvalRequiredForContent: true,
   approvalRequiredForScheduling: true,
   approvalRequiredForBudgetChanges: true,
@@ -65,7 +68,15 @@ async function loadAutopilotFeatureFlag(): Promise<boolean> {
   return Boolean(flag.enabled);
 }
 
-export function modeCapabilities(mode: MarketingDirectorMode): {
+function normalizeAutonomyLevel(value: unknown): 1 | 2 | 3 | 4 | 5 {
+  const parsed = Number(value || 3);
+  if (!Number.isFinite(parsed)) return 3;
+  if (parsed <= 1) return 1;
+  if (parsed >= 5) return 5;
+  return Math.round(parsed) as 1 | 2 | 3 | 4 | 5;
+}
+
+export function modeCapabilities(mode: MarketingDirectorMode, autonomyLevel = 3): {
   recommendationsOnly: boolean;
   canGenerateDrafts: boolean;
   canProposeSchedules: boolean;
@@ -91,7 +102,7 @@ export function modeCapabilities(mode: MarketingDirectorMode): {
     recommendationsOnly: false,
     canGenerateDrafts: true,
     canProposeSchedules: true,
-    unattendedPublishingEnabled: false,
+    unattendedPublishingEnabled: autonomyLevel >= 4,
   };
 }
 
@@ -100,7 +111,7 @@ export async function getMarketingModeSettings(workspaceId: string): Promise<Mar
   const stagedModesAvailable = await loadAutopilotFeatureFlag();
   const { data, error } = await admin
     .from("workspace_marketing_settings")
-    .select("workspace_id,operating_mode,approval_required_for_content,approval_required_for_scheduling,approval_required_for_budget_changes,approval_required_for_publishing,daily_brief_enabled,daily_brief_time,timezone")
+    .select("workspace_id,operating_mode,autonomy_level,approval_required_for_content,approval_required_for_scheduling,approval_required_for_budget_changes,approval_required_for_publishing,daily_brief_enabled,daily_brief_time,timezone")
     .eq("workspace_id", workspaceId)
     .maybeSingle();
 
@@ -116,6 +127,7 @@ export async function getMarketingModeSettings(workspaceId: string): Promise<Mar
   return {
     workspaceId,
     operatingMode: safeMode,
+    autonomyLevel: normalizeAutonomyLevel(settings?.autonomy_level),
     approvalRequiredForContent:
       typeof settings?.approval_required_for_content === "boolean"
         ? settings.approval_required_for_content

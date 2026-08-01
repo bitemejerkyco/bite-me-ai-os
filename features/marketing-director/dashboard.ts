@@ -27,6 +27,15 @@ import {
 } from "@/features/marketing-director/marketing-score";
 import { formatTrendIndicator } from "@/features/marketing-director/trends";
 import {
+  buildMeasuredOrEstimatedLabel,
+  loadExecutionOperationalSnapshot,
+  refreshAiHealthMetrics,
+  type PublishingQueueSummary,
+  type WorkflowSummary,
+  type ApprovalSummary,
+} from "@/features/marketing-director/execution-engine";
+import { buildDepartmentStatus, type DepartmentStatus } from "@/features/marketing-director/departments";
+import {
   type MarketingScoreResult,
   type MarketingScoreTrend,
 } from "@/features/marketing-director/marketing-score-rules";
@@ -62,6 +71,27 @@ type MediaRow = {
 type AiUsageRow = { status: string | null; created_at: string | null };
 type VideoTransactionRow = { kind: string | null; created_at: string | null };
 type LastBriefRow = { created_at: string | null };
+type ForecastRow = {
+  forecast_type: string | null;
+  measured_value: number | null;
+  estimated_value: number | null;
+  confidence: number | null;
+  note: string | null;
+  measured: boolean | null;
+  created_at: string | null;
+};
+type ExecutionEventRow = {
+  id: string;
+  event_type: string | null;
+  status: string | null;
+  message: string | null;
+  actor_user_id: string | null;
+  agent: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string | null;
+};
+type NotificationRow = { status: string | null; created_at: string | null };
+
 export type ExecutiveMetricCard = {
   id: ExecutiveMetricCardId;
   label: string;
@@ -112,6 +142,33 @@ export type MarketingDirectorDashboard = {
   dataCoverage: DataCoverageModel;
   channelHealth: ChannelHealthItem[];
   recentActivity: RecentActivityItem[];
+  autonomyLevel?: number;
+  workflowSummary?: WorkflowSummary;
+  approvalSummary?: ApprovalSummary;
+  publishingQueue?: PublishingQueueSummary;
+  forecastSummary?: Array<{
+    type: string;
+    label: string;
+    confidence: number;
+    note: string;
+  }>;
+  timeline?: Array<{
+    id: string;
+    timestamp: string;
+    type: string;
+    status: string;
+    message: string;
+    actor: string;
+  }>;
+  aiHealth?: {
+    status: "healthy" | "warning" | "critical";
+    acceptanceRate: string;
+    executionSuccessRate: string;
+    publishingSuccessRate: string;
+    forecastAccuracyRate: string;
+  };
+  pendingNotifications?: number;
+  departments?: DepartmentStatus[];
 };
 
 function metricHref(id: ExecutiveMetricCard["id"]): string {
@@ -182,6 +239,9 @@ export async function loadMarketingDirectorDashboard(input: {
     videoTransactionsResult,
     lastBriefResult,
     briefForTodayResult,
+    forecastsResult,
+    executionEventsResult,
+    notificationsResult,
   ] = await Promise.all([
     getMarketingScoreForWorkspace(input.workspaceId),
     getScoreTrend(input.workspaceId),
@@ -227,6 +287,24 @@ export async function loadMarketingDirectorDashboard(input: {
       .eq("workspace_id", input.workspaceId)
       .eq("brief_date", todayDateKey())
       .maybeSingle(),
+    admin
+      .from("marketing_forecasts")
+      .select("forecast_type,measured_value,estimated_value,confidence,note,measured,created_at")
+      .eq("workspace_id", input.workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    admin
+      .from("marketing_execution_events")
+      .select("id,event_type,status,message,actor_user_id,agent,metadata,created_at")
+      .eq("workspace_id", input.workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    admin
+      .from("marketing_notifications")
+      .select("status,created_at")
+      .eq("workspace_id", input.workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(40),
   ]);
 
   if (campaignsResult.error) throw new Error(`DASHBOARD_CAMPAIGNS_FAILED:${campaignsResult.error.message}`);
@@ -238,6 +316,9 @@ export async function loadMarketingDirectorDashboard(input: {
   if (aiUsageResult.error) throw new Error(`DASHBOARD_AI_USAGE_FAILED:${aiUsageResult.error.message}`);
   if (videoTransactionsResult.error) throw new Error(`DASHBOARD_VIDEO_TRANSACTIONS_FAILED:${videoTransactionsResult.error.message}`);
   if (briefForTodayResult.error) throw new Error(`DASHBOARD_BRIEF_FAILED:${briefForTodayResult.error.message}`);
+  if (forecastsResult.error) throw new Error(`DASHBOARD_FORECASTS_FAILED:${forecastsResult.error.message}`);
+  if (executionEventsResult.error) throw new Error(`DASHBOARD_EVENTS_FAILED:${executionEventsResult.error.message}`);
+  if (notificationsResult.error) throw new Error(`DASHBOARD_NOTIFICATIONS_FAILED:${notificationsResult.error.message}`);
 
   const campaigns = (campaignsResult.data as CampaignRow[] | null) || [];
   const drafts = (draftsResult.data as DraftRow[] | null) || [];
@@ -248,6 +329,12 @@ export async function loadMarketingDirectorDashboard(input: {
   const media = (mediaResult.data as MediaRow[] | null) || [];
   const aiUsage = (aiUsageResult.data as AiUsageRow[] | null) || [];
   const videoTransactions = (videoTransactionsResult.data as VideoTransactionRow[] | null) || [];
+  const forecasts = (forecastsResult.data as ForecastRow[] | null) || [];
+  const executionEvents = (executionEventsResult.data as ExecutionEventRow[] | null) || [];
+  const notifications = (notificationsResult.data as NotificationRow[] | null) || [];
+
+  const operationalSnapshot = await loadExecutionOperationalSnapshot(input.workspaceId);
+  const aiHealthMetrics = await refreshAiHealthMetrics({ workspaceId: input.workspaceId });
 
   const lastBrief = (lastBriefResult.data as LastBriefRow | null) || null;
 
@@ -720,6 +807,37 @@ export async function loadMarketingDirectorDashboard(input: {
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
     .slice(0, 8);
 
+  const forecastSummary = forecasts.slice(0, 6).map((row) => {
+    const label = buildMeasuredOrEstimatedLabel({
+      measured: Boolean(row.measured),
+      measuredValue: row.measured_value,
+      estimatedValue: row.estimated_value,
+      unit: row.forecast_type === "confidence" ? "%" : "count",
+    });
+    return {
+      type: String(row.forecast_type || "forecast"),
+      label,
+      confidence: Number(row.confidence || 0),
+      note: String(row.note || "No forecast note provided."),
+    };
+  });
+
+  const timeline = executionEvents.slice(0, 12).map((event) => ({
+    id: event.id,
+    timestamp: String(event.created_at || new Date().toISOString()),
+    type: String(event.event_type || "event"),
+    status: String(event.status || "unknown"),
+    message: String(event.message || "Execution event"),
+    actor: event.agent ? `agent:${event.agent}` : event.actor_user_id ? `user:${event.actor_user_id.slice(0, 8)}` : "system",
+  }));
+
+  const pendingNotifications = notifications.filter((row) => row.status === "PENDING").length;
+  const departments = buildDepartmentStatus({
+    workflowSummary: operationalSnapshot.workflowSummary,
+    publishingQueue: operationalSnapshot.publishingQueue,
+    approvalSummary: operationalSnapshot.approvalSummary,
+  });
+
   const channelHealth: ChannelHealthItem[] = [
     {
       key: "tiktok",
@@ -766,7 +884,7 @@ export async function loadMarketingDirectorDashboard(input: {
     }),
     greeting: greetingForDate(now),
     modeSettings,
-    capabilities: modeCapabilities(modeSettings.operatingMode),
+    capabilities: modeCapabilities(modeSettings.operatingMode, modeSettings.autonomyLevel),
     cards,
     score,
     scoreTrend,
@@ -778,5 +896,20 @@ export async function loadMarketingDirectorDashboard(input: {
     dataCoverage,
     channelHealth,
     recentActivity,
+    autonomyLevel: modeSettings.autonomyLevel,
+    workflowSummary: operationalSnapshot.workflowSummary,
+    approvalSummary: operationalSnapshot.approvalSummary,
+    publishingQueue: operationalSnapshot.publishingQueue,
+    forecastSummary,
+    timeline,
+    aiHealth: {
+      status: aiHealthMetrics.status,
+      acceptanceRate: formatPercent(aiHealthMetrics.acceptanceRate * 100),
+      executionSuccessRate: formatPercent(aiHealthMetrics.executionSuccessRate * 100),
+      publishingSuccessRate: formatPercent(aiHealthMetrics.publishingSuccessRate * 100),
+      forecastAccuracyRate: formatPercent(aiHealthMetrics.forecastAccuracyRate * 100),
+    },
+    pendingNotifications,
+    departments,
   };
 }

@@ -12,6 +12,14 @@ function readBoolean(formData: FormData, key: string, defaultValue: boolean) {
   return ["true", "1", "on", "yes"].includes(value);
 }
 
+function readAutonomyLevel(formData: FormData): 1 | 2 | 3 | 4 | 5 {
+  const raw = Number(String(formData.get("autonomyLevel") || "3"));
+  if (!Number.isFinite(raw)) return 3;
+  if (raw <= 1) return 1;
+  if (raw >= 5) return 5;
+  return Math.round(raw) as 1 | 2 | 3 | 4 | 5;
+}
+
 export async function saveMarketingDirectorSettingsAction(formData: FormData) {
   const context = await requireWorkspaceContext();
   const supabase = await createClient();
@@ -32,6 +40,7 @@ export async function saveMarketingDirectorSettingsAction(formData: FormData) {
   const payload = {
     workspace_id: context.workspaceId,
     operating_mode: mode,
+    autonomy_level: readAutonomyLevel(formData),
     approval_required_for_content: readBoolean(formData, "approvalRequiredForContent", true),
     approval_required_for_scheduling: readBoolean(formData, "approvalRequiredForScheduling", true),
     approval_required_for_budget_changes: readBoolean(formData, "approvalRequiredForBudgetChanges", true),
