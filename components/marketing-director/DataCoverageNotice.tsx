@@ -10,10 +10,10 @@ export default function DataCoverageNotice({ coverage }: { coverage: DataCoverag
     : "border-emerald-200 bg-emerald-50/70 text-emerald-900";
 
   return (
-    <section className={`rounded-3xl border p-4 ${tone}`}>
+    <section className={`pm-glass-premium rounded-3xl border p-4 ${tone}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em]">Data coverage</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em]">Marketing Health</p>
           <p className="mt-1 text-sm font-semibold">
             {confidencePercent}% confidence from connected workspace sources
           </p>

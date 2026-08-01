@@ -195,6 +195,13 @@ describe("marketing director customer-safe experience", () => {
     );
 
     expect(html).toContain("Welcome to PostMotive");
+    expect(html).toContain("Your AI Marketing Director reviewed your business overnight.");
+    expect(html).toContain("Today&#x27;s Focus");
+    expect(html).toContain("Review Strategy");
+    expect(html).toContain("Marketing Score");
+    expect(html).toContain("Campaigns Running");
+    expect(html).toContain("Posts Scheduled");
+    expect(html).toContain("Approvals Waiting");
     expect(html).toContain("PostMotive found:");
     expect(html).toContain("Amazon Ads not connected");
     expect(html).toContain("Product catalog empty");

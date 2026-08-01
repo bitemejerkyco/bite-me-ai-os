@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import AIThinkingProgress from "@/components/marketing-director/AIThinkingProgress";
 import type { DailyBrief } from "@/features/marketing-director/daily-brief-rules";
 
 export default function DailyBriefPanel({
@@ -44,9 +45,9 @@ export default function DailyBriefPanel({
   }
 
   return (
-    <section data-help="dashboard-executive-brief" className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
+    <section data-help="dashboard-executive-brief" className="pm-glass-premium rounded-[2rem] border border-white/90 bg-white/80 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Daily Executive Brief</p>
+        <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Executive Brief</p>
         <div className="flex items-center gap-2">
           <Link href="/analytics/executive-brief" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50">
             View full brief
@@ -57,10 +58,12 @@ export default function DailyBriefPanel({
             disabled={loading}
             className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Refreshing..." : "Refresh brief"}
+            {loading ? "Refreshing intelligence..." : "Refresh executive brief"}
           </button>
         </div>
       </div>
+
+      <AIThinkingProgress active={loading} title="Preparing your executive brief" />
 
       {error ? <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
 

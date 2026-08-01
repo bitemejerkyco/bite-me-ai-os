@@ -53,8 +53,8 @@ describe("marketing director dashboard component polish", () => {
     expect(html).toContain("Ask your AI Marketing Director anything");
     expect(html).toContain("Build my September campaign");
     expect(html).toContain("Increase Amazon sales");
-    expect(html).toContain("PostMotive will build the plan, identify approvals, and prepare the next steps");
-    expect(html).toContain("Generate proposal");
+    expect(html).toContain("PostMotive builds strategy, highlights risks, and recommends the highest-impact next move");
+    expect(html).toContain("Prepare strategy");
   });
 
   it("renders marketing score breakdown inside a collapsed details panel", () => {

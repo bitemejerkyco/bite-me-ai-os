@@ -1,16 +1,25 @@
 export default function AmazonAdsInsightsLoading() {
   return (
-    <div className="min-h-screen bg-white px-4 py-8 text-slate-900 md:px-8" aria-busy="true">
-      <div className="mx-auto max-w-7xl animate-pulse space-y-4">
-        <p className="text-sm text-slate-700">Loading Amazon Ads insights...</p>
-        <div className="h-10 w-72 rounded bg-slate-100" />
-        <div className="h-24 rounded-2xl bg-white" />
+    <div className="min-h-screen px-4 py-8 text-slate-900 md:px-8" aria-busy="true" aria-live="polite">
+      <div className="mx-auto max-w-7xl space-y-4">
+        <div className="pm-glass-premium rounded-[2rem] p-5">
+          <div className="pm-skeleton h-4 w-48" />
+          <div className="mt-3 pm-skeleton h-10 w-72" />
+          <div className="mt-3 pm-skeleton h-5 w-80" />
+        </div>
+
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           {Array.from({ length: 10 }).map((_, index) => (
-            <div key={index} className="h-20 rounded-2xl bg-white" />
+            <div key={index} className="pm-glass-premium rounded-2xl p-3">
+              <div className="pm-skeleton h-3 w-20" />
+              <div className="mt-3 pm-skeleton h-7 w-12" />
+            </div>
           ))}
         </div>
-        <div className="h-64 rounded-2xl bg-white" />
+
+        <div className="pm-glass-premium rounded-2xl p-4">
+          <div className="pm-skeleton h-64 w-full" />
+        </div>
       </div>
     </div>
   );

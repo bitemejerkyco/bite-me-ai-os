@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import CommandCenter from "@/components/marketing-director/CommandCenter";
 import AutonomousRecommendationCard from "@/components/marketing-director/AutonomousRecommendationCard";
-import DirectorActivity from "@/components/marketing-director/DirectorActivity";
 import DailyBriefPanel from "@/components/marketing-director/DailyBriefPanel";
 import ChannelHealth from "@/components/marketing-director/ChannelHealth";
 import DataCoverageNotice from "@/components/marketing-director/DataCoverageNotice";
-import ExecutiveHeader from "@/components/marketing-director/ExecutiveHeader";
 import MarketingScoreCard from "@/components/marketing-director/MarketingScoreCard";
 import MetricCard from "@/components/marketing-director/MetricCard";
 import PriorityActions from "@/components/marketing-director/PriorityActions";
@@ -21,6 +20,28 @@ const modeLabel: Record<MarketingDirectorDashboard["modeSettings"]["operatingMod
   copilot: "Copilot",
   autopilot: "Autopilot",
 };
+
+const DirectorActivity = dynamic(() => import("@/components/marketing-director/DirectorActivity"), {
+  loading: () => (
+    <section className="pm-glass-premium rounded-[2rem] border border-white/90 bg-white/80 p-4" aria-busy="true">
+      <div className="pm-skeleton h-4 w-44" />
+      <div className="mt-3 space-y-2">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="rounded-xl border border-slate-200 bg-white/85 p-3">
+            <div className="pm-skeleton h-3 w-24" />
+            <div className="mt-2 pm-skeleton h-4 w-4/5" />
+          </div>
+        ))}
+      </div>
+    </section>
+  ),
+});
+
+function metricCount(value: string | number | null | undefined): number {
+  const text = String(value || "");
+  const parsed = Number.parseInt(text.replace(/[^0-9-]/gu, ""), 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 export default function MarketingDirectorDashboardView({
   dashboard,
@@ -71,21 +92,62 @@ export default function MarketingDirectorDashboardView({
     && connectedChannels < 2
     && (productSource?.recordCount || 0) === 0;
 
+  const activeCampaigns = metricCount(dashboard.cards.find((card) => card.id === "active_campaigns")?.value);
+  const scheduledPosts = metricCount(dashboard.cards.find((card) => card.id === "scheduled_posts")?.value);
+  const approvalsWaiting = dashboard.approvalSummary?.pending || 0;
+  const marketingScore = Math.round(dashboard.score.score);
+  const todaysFocus = dashboard.brief.recommendedNextAction?.title || "Launch Labor Day Campaign";
+
   return (
     <div className="space-y-5">
-      <ExecutiveHeader
-        greeting={dashboard.greeting}
-        firstName={dashboard.firstName}
-        workspaceName={dashboard.workspaceName}
-        dateLabel={dashboard.dateLabel}
-        mode={dashboard.modeSettings}
-      />
+      <section className="pm-glass-premium rounded-[2rem] border border-white/90 bg-white/85 p-6">
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-600">{dashboard.workspaceName} · {dashboard.dateLabel}</p>
+        <h2 className="mt-2 text-3xl font-black tracking-[-0.03em] text-slate-900 md:text-4xl">{dashboard.greeting}, {dashboard.firstName}</h2>
+        <p className="mt-2 text-sm text-slate-700">Your AI Marketing Director reviewed your business overnight.</p>
 
-      <DailyBriefPanel
-        brief={dashboard.brief}
-        greeting={dashboard.greeting}
-        firstName={dashboard.firstName}
-      />
+        <div className="mt-6 rounded-2xl border border-violet-200/70 bg-violet-50/70 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Today&apos;s Focus</p>
+          <p className="mt-1 text-xl font-black text-slate-900">{todaysFocus}</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <article className="rounded-xl border border-white/80 bg-white/90 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Marketing Score</p>
+              <p className="pm-number-pop mt-1 text-2xl font-black text-slate-900">{marketingScore}</p>
+            </article>
+            <article className="rounded-xl border border-white/80 bg-white/90 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Campaigns Running</p>
+              <p className="pm-number-pop mt-1 text-2xl font-black text-slate-900">{activeCampaigns}</p>
+            </article>
+            <article className="rounded-xl border border-white/80 bg-white/90 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Posts Scheduled</p>
+              <p className="pm-number-pop mt-1 text-2xl font-black text-slate-900">{scheduledPosts}</p>
+            </article>
+            <article className="rounded-xl border border-white/80 bg-white/90 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Approvals Waiting</p>
+              <p className="pm-number-pop mt-1 text-2xl font-black text-slate-900">{approvalsWaiting}</p>
+            </article>
+          </div>
+          <div className="mt-4">
+            <Link href="#command-center" className="pm-primary-button inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-white">
+              Review Strategy
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+        <DailyBriefPanel
+          brief={dashboard.brief}
+          greeting={dashboard.greeting}
+          firstName={dashboard.firstName}
+        />
+
+        <div className="space-y-4">
+          <div data-help="dashboard-command-center">
+            <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} canViewTechnicalDetails={canViewTechnicalDetails} />
+          </div>
+          <DirectorActivity />
+        </div>
+      </section>
 
       <section data-help="dashboard-ai-value-summary" className="rounded-[2rem] border border-slate-200 bg-white/90 p-5">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">AI value summary</p>
@@ -152,12 +214,6 @@ export default function MarketingDirectorDashboardView({
           )}
         </section>
       ) : null}
-
-      <div data-help="dashboard-command-center">
-        <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} canViewTechnicalDetails={canViewTechnicalDetails} />
-      </div>
-
-      <DirectorActivity />
 
       <DataCoverageNotice coverage={dashboard.dataCoverage} />
 

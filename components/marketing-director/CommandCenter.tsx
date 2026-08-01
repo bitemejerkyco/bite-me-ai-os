@@ -5,6 +5,7 @@ import type { MarketingDirectorStructuredPlan } from "@/features/marketing-direc
 import { inferHelpRouteFromQuestion } from "@/features/help/question-routing";
 import { normalizeHelpRoute } from "@/features/help/page-help-registry";
 import RecommendationActionCard from "@/components/marketing-director/RecommendationActionCard";
+import AIThinkingProgress from "@/components/marketing-director/AIThinkingProgress";
 import {
   buildDefaultRecommendationEntitlements,
   buildRecommendationRuntime,
@@ -72,6 +73,19 @@ type GeneratedDraftState = {
 
 const STORAGE_KEY = "postmotive-marketing-director-conversation-v2";
 const LEGACY_STORAGE_KEY = "postmotive_marketing_director_conversation_v1";
+const COMMAND_SUGGESTIONS = [
+  "Build my September campaign",
+  "Launch our Labor Day promotion",
+  "Increase Amazon sales",
+  "Improve my Marketing Score",
+  "Find my biggest weakness",
+  "Prepare next week's content",
+  "Analyze Facebook performance",
+  "Create a TikTok strategy",
+  "Build a Q4 marketing plan",
+  "Generate a customer retention campaign",
+  "Review pending content",
+];
 
 function messageId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -337,22 +351,13 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
   const [generatedDraftByTask, setGeneratedDraftByTask] = useState<Record<string, GeneratedDraftState>>({});
   const endRef = useRef<HTMLDivElement | null>(null);
 
-  const suggestions = [
-    "Build my September campaign",
-    "Launch our Labor Day promotion",
-    "Increase Amazon sales",
-    "Improve my Marketing Score",
-    "Find my biggest weakness",
-    "Prepare next week's content",
-    "Analyze Facebook performance",
-    "Create a TikTok strategy",
-    "Build a Q4 marketing plan",
-    "Generate a customer retention campaign",
-    "Review pending content",
-  ];
-
   const latestDirectorMessage = useMemo(
     () => [...messages].reverse().find((message) => message.role === "director" && message.response?.proposal),
+    [messages],
+  );
+
+  const recentRequests = useMemo(
+    () => [...messages].reverse().filter((message) => message.role === "user" && message.request).slice(0, 4),
     [messages],
   );
 
@@ -650,30 +655,48 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
   };
 
   return (
-    <section data-help="dashboard-command-center" className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-4" aria-label="Marketing Director conversation panel">
+    <section data-help="dashboard-command-center" className="pm-glass-premium rounded-[2rem] border border-white/90 bg-white/85 p-5" aria-label="Marketing Director conversation panel" id="command-center">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Executive Command Center</p>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           {props.modeLabel}
         </span>
       </div>
-      <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900 md:text-2xl">Ask your AI Marketing Director anything</h2>
-      <p className="mt-2 text-sm text-slate-600">
-        Describe the result you want. PostMotive will build the plan, identify approvals, and prepare the next steps.
+      <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 md:text-3xl">Ask your AI Marketing Director anything</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        Describe the result you want. PostMotive builds strategy, highlights risks, and recommends the highest-impact next move.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Prompt suggestions">
-        {suggestions.map((suggestion) => (
+        {COMMAND_SUGGESTIONS.map((suggestion) => (
           <button
             key={suggestion}
             type="button"
             onClick={() => setPrompt(suggestion)}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            className="pm-lift rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
           >
             {suggestion}
           </button>
         ))}
       </div>
+
+      {recentRequests.length > 0 ? (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-white/80 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Recent commands</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {recentRequests.map((message) => (
+              <button
+                key={message.id}
+                type="button"
+                onClick={() => setPrompt(message.request || "")}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:border-violet-300 hover:text-violet-700"
+              >
+                {message.request}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
@@ -696,7 +719,7 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
           onClick={() => clearConversation()}
           className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
         >
-          Clear conversation
+          Clear history
         </button>
         <button
           type="button"
@@ -708,7 +731,7 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <p className="text-xs text-slate-500">Press Enter to submit the command instantly.</p>
+        <p className="text-xs text-slate-500">Press Enter to send instantly. Shift+Enter adds a new line.</p>
       </div>
 
       <input
@@ -730,10 +753,14 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
           type="button"
           onClick={() => void submit()}
           disabled={submitting}
-          className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 active:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+          className="pm-primary-button rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Generating proposal..." : "Generate proposal"}
+          {submitting ? "Preparing strategy..." : "Prepare strategy"}
         </button>
+      </div>
+
+      <div className="mt-3">
+        <AIThinkingProgress active={submitting} title="AI strategy pipeline" />
       </div>
 
       {error ? (
@@ -741,9 +768,10 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
       ) : null}
 
       {messages.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-slate-200 bg-white/85 p-3 text-sm text-slate-600">
-          Start a request to create a structured Marketing Director plan.
-        </p>
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white/85 p-4 text-sm text-slate-600">
+          <p className="font-semibold text-slate-800">Start with a specific business outcome.</p>
+          <p className="mt-1">Example: &quot;Increase Amazon revenue by 15% this month with a campaign and posting plan.&quot;</p>
+        </div>
       ) : null}
 
       <div className="mt-4 max-h-[30rem] space-y-3 overflow-y-auto pr-1" role="log" aria-live="polite" aria-label="Conversation messages">

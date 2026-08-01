@@ -7,8 +7,9 @@ import AmazonAdsInsightsError from "@/app/analytics/amazon-ads/error";
 describe("Amazon Ads insights state surfaces", () => {
   it("renders loading state content", () => {
     const html = renderToStaticMarkup(createElement(AmazonAdsInsightsLoading));
-    expect(html).toContain("Loading Amazon Ads insights...");
     expect(html).toContain("aria-busy");
+    expect(html).toContain("pm-skeleton");
+    expect(html).not.toContain("Loading Amazon Ads insights...");
   });
 
   it("renders error state with retry affordance", () => {

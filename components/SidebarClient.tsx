@@ -64,7 +64,7 @@ export function SidebarClientView({
   const visibleGroups = SIDEBAR_GROUPS.filter((group) => !group.adminOnly || showAdminSection);
 
   const asideContent = (
-    <div className={`flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden border-r border-white/80 bg-white/70 text-slate-800 shadow-[16px_0_50px_rgba(76,61,139,0.07)] backdrop-blur-2xl ${compactMode ? "w-24" : "w-72"}`}>
+    <div className={`flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden border-r border-white/80 bg-white/70 text-slate-800 shadow-[16px_0_50px_rgba(76,61,139,0.07)] backdrop-blur-2xl transition-all duration-200 ${compactMode ? "w-24" : "w-72"}`}>
       <div data-sidebar-header className="shrink-0 border-b border-white/80 px-4 pb-4 pt-5">
         <div className="flex items-start justify-between gap-3">
           <Link href="/" onClick={onCloseMobile} className="flex min-w-0 items-center gap-3">
@@ -125,7 +125,7 @@ export function SidebarClientView({
                           aria-current={active ? "page" : undefined}
                           aria-label={link.label}
                           title={link.label}
-                          className={`group flex min-h-10 items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${compactMode ? "justify-center px-2" : ""} ${
+                          className={`group flex min-h-10 items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${compactMode ? "justify-center px-2" : ""} ${
                             active
                               ? "bg-gradient-to-r from-violet-100 to-fuchsia-50 text-violet-800 shadow-sm"
                               : "text-slate-600 hover:bg-white/80 hover:text-violet-700"

@@ -42,15 +42,16 @@ export default function MarketingScoreCard(props: {
   );
 
   return (
-    <section data-help="dashboard-score" className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
+    <section data-help="dashboard-score" className="pm-glass-premium rounded-[2rem] border border-white/90 bg-white/80 p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Marketing Score</p>
-          <p className={`mt-2 text-5xl font-black tracking-[-0.04em] ${statusTone[props.score.status]}`}>
+          <p className={`pm-number-pop mt-2 text-5xl font-black tracking-[-0.04em] ${statusTone[props.score.status]}`}>
             {props.score.score.toFixed(1)}
             <span className="ml-2 text-xl text-slate-500">/ {props.score.maximumScore}</span>
           </p>
           <p className="mt-2 text-sm text-slate-600">{props.score.confidenceReason}</p>
+          <div className="mt-3 pm-sparkline max-w-xs" aria-hidden="true" />
         </div>
         {trendLabel ? (
           <p className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">

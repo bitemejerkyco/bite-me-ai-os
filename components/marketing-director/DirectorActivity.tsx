@@ -36,6 +36,13 @@ function statusLabel(status: ActivityStatus): string {
   return status.replaceAll("_", " ");
 }
 
+function statusTone(status: ActivityStatus): string {
+  if (status === "failed" || status === "rejected") return "text-rose-700 bg-rose-50 border-rose-200";
+  if (status === "approved" || status === "completed") return "text-emerald-700 bg-emerald-50 border-emerald-200";
+  if (status === "approval_requested") return "text-amber-700 bg-amber-50 border-amber-200";
+  return "text-violet-700 bg-violet-50 border-violet-200";
+}
+
 export default function DirectorActivity() {
   const [filter, setFilter] = useState<Filter>("all");
   const [items, setItems] = useState<ActivityItem[]>([]);
@@ -124,9 +131,9 @@ export default function DirectorActivity() {
   }, [filter]);
 
   return (
-    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-4" aria-label="Director Activity">
+    <section className="pm-glass-premium rounded-[2rem] border border-white/90 bg-white/80 p-4" aria-label="Director Activity">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Director Activity</p>
+        <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Recent Activity</p>
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((option) => (
             <button
@@ -149,17 +156,32 @@ export default function DirectorActivity() {
         <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>
       ) : null}
 
+      {loading && items.length === 0 ? (
+        <div className="mt-3 space-y-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="rounded-xl border border-slate-200 bg-white/85 p-3">
+              <div className="pm-skeleton h-3 w-28" />
+              <div className="mt-2 pm-skeleton h-4 w-3/4" />
+              <div className="mt-2 pm-skeleton h-3 w-1/2" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="mt-3 space-y-2">
         {items.length === 0 && !loading ? (
-          <p className="rounded-xl border border-slate-200 bg-white/85 p-3 text-sm text-slate-600">
-            No activity yet for this filter.
-          </p>
+          <div className="rounded-xl border border-slate-200 bg-white/85 p-4 text-sm text-slate-600">
+            <p className="font-semibold text-slate-800">No activity has been recorded for this filter yet.</p>
+            <p className="mt-1">As soon as AI generates plans, approvals move, or integrations sync, timeline events appear here.</p>
+          </div>
         ) : null}
 
         {items.map((item) => (
-          <article key={item.id} className="rounded-xl border border-slate-200 bg-white/85 p-3">
+          <article key={item.id} className="pm-lift relative rounded-xl border border-slate-200 bg-white/90 p-3 pl-6">
+            <span className="absolute left-2 top-5 h-2.5 w-2.5 rounded-full bg-violet-500" aria-hidden="true" />
+            <span className="absolute left-[0.82rem] top-8 h-[calc(100%-2rem)] w-px bg-slate-200" aria-hidden="true" />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{statusLabel(item.status)}</p>
+              <p className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${statusTone(item.status)}`}>{statusLabel(item.status)}</p>
               <p className="text-xs text-slate-500">{new Date(item.timestamp).toLocaleString()}</p>
             </div>
             <p className="mt-1 text-sm font-semibold text-slate-900">{item.request}</p>
@@ -170,7 +192,7 @@ export default function DirectorActivity() {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        {loading ? <p className="text-xs text-slate-500">Loading activity...</p> : <span />}
+        {loading ? <p className="text-xs text-slate-500">Refreshing your timeline...</p> : <span />}
         {hasMore ? (
           <button
             type="button"

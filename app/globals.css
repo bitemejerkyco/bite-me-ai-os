@@ -75,11 +75,12 @@ input,
 select,
 textarea {
   transition:
-    color 180ms ease,
-    background-color 180ms ease,
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
+    color 200ms ease,
+    background-color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms ease,
+    opacity 200ms ease;
 }
 
 button:not(:disabled):active,
@@ -182,6 +183,66 @@ textarea:focus {
   backdrop-filter: blur(24px);
 }
 
+.pm-glass-premium {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.9), rgba(246, 243, 255, 0.8) 52%, rgba(240, 251, 255, 0.82));
+  box-shadow:
+    0 24px 70px rgba(75, 68, 125, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px);
+}
+
+.pm-glass-premium::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0));
+  content: "";
+  pointer-events: none;
+}
+
+.pm-lift {
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.pm-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 42px rgba(54, 64, 109, 0.16);
+}
+
+.pm-number-pop {
+  animation: number-pop 220ms ease;
+}
+
+.pm-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.75), rgba(241, 245, 249, 0.96), rgba(226, 232, 240, 0.75));
+  background-size: 200% 100%;
+  animation: skeleton-wave 1.2s linear infinite;
+}
+
+.pm-sparkline {
+  height: 0.45rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(99, 102, 241, 0.22), rgba(244, 114, 182, 0.35), rgba(45, 212, 191, 0.25)),
+    repeating-linear-gradient(90deg, rgba(99, 102, 241, 0.42) 0 8px, rgba(168, 85, 247, 0.2) 8px 16px);
+}
+
+.pm-empty-illustration {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(129, 140, 248, 0.32);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.8), transparent 45%),
+    linear-gradient(145deg, rgba(129, 140, 248, 0.2), rgba(244, 114, 182, 0.2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
 .pm-scrollbar {
 }
 
@@ -221,6 +282,26 @@ textarea:focus {
   }
   50% {
     transform: translate3d(-18px, 12px, 0) rotate(7deg);
+  }
+}
+
+@keyframes skeleton-wave {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes number-pop {
+  0% {
+    transform: translateY(4px);
+    opacity: 0.72;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 
