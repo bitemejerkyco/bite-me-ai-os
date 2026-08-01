@@ -33,7 +33,7 @@ function hasAny(prompt: string, terms: string[]): boolean {
 export function classifyIntent(prompt: string): MarketingDirectorIntent {
   const value = normalizePrompt(prompt);
   if (hasAny(value, ["campaign", "launch campaign", "promotion calendar"])) return "create_campaign";
-  if (hasAny(value, ["content plan", "30 days", "content calendar", "content strategy"])) return "create_content_plan";
+  if (hasAny(value, ["content plan", "30 days", "content calendar", "content strategy", "pending content", "review pending content"])) return "create_content_plan";
   if (hasAny(value, ["improve my marketing score", "improve marketing score", "score"])) return "improve_marketing_score";
   if (hasAny(value, ["analyze", "performance", "what happened", "diagnose"])) return "analyze_performance";
   if (hasAny(value, ["launch product", "new product", "product drop"])) return "launch_product";

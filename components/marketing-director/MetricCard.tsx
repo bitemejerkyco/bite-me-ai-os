@@ -13,7 +13,7 @@ export default function MetricCard({ card }: { card: ExecutiveMetricCard }) {
     <Link
       href={card.href}
       aria-label={`Open ${card.label} details`}
-      className={`group block rounded-[1.6rem] border p-5 transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(76,61,139,0.09)] active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 ${statusClass[card.status]}`}
+      className={`group block rounded-[1.6rem] border p-4 transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(76,61,139,0.09)] active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 ${statusClass[card.status]}`}
     >
       <article>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{card.label}</p>

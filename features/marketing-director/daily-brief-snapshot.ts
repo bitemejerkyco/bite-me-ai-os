@@ -31,6 +31,7 @@ export function restoreDailyBriefFromSnapshot(row: StoredBriefRow): DailyBrief |
   return {
     workspaceId: String(row.workspace_id || ""),
     generatedAt,
+    executiveNarrative: String(dataCoverage.executiveNarrative || "Executive narrative is unavailable for this snapshot."),
     confidence: normalizeConfidence(Number(row.confidence || 0)),
     confidenceReason: String(dataCoverage.confidenceReason || "Confidence is based on current connected data."),
     dataQualityWarning: dataCoverage.warning ? String(dataCoverage.warning) : null,
@@ -47,6 +48,22 @@ export function restoreDailyBriefFromSnapshot(row: StoredBriefRow): DailyBrief |
       dataCoverage.recommendedNextAction && typeof dataCoverage.recommendedNextAction === "object"
         ? (dataCoverage.recommendedNextAction as DailyBrief["recommendedNextAction"])
         : null,
+    urgency:
+      dataCoverage.urgency && typeof dataCoverage.urgency === "object"
+        ? {
+            level: String((dataCoverage.urgency as Record<string, unknown>).level || "none") as DailyBrief["urgency"]["level"],
+            label: String((dataCoverage.urgency as Record<string, unknown>).label || "Stable"),
+            summary: String((dataCoverage.urgency as Record<string, unknown>).summary || "Stable: no urgent blockers were detected from connected workspace data."),
+            factors: asStringArray((dataCoverage.urgency as Record<string, unknown>).factors),
+            hasUrgentWork: Boolean((dataCoverage.urgency as Record<string, unknown>).hasUrgentWork),
+          }
+        : {
+            level: "none",
+            label: "Stable",
+            summary: "Stable: no urgent blockers were detected from connected workspace data.",
+            factors: [],
+            hasUrgentWork: false,
+          },
     metrics: metrics as DailyBrief["metrics"],
     priorityActions: priorityActions as DailyBrief["priorityActions"],
     recommendations: recommendations as DailyBrief["recommendations"],

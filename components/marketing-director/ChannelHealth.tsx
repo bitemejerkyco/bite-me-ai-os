@@ -9,7 +9,7 @@ const tone: Record<ChannelHealthItem["health"], string> = {
 
 export default function ChannelHealth({ channels }: { channels: ChannelHealthItem[] }) {
   return (
-    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-6">
+    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
       <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Channel Health</p>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         {channels.map((channel) => (

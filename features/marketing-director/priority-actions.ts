@@ -35,6 +35,7 @@ function makeAction(input: {
   description: string;
   metricLabel: string;
   metricValue: string;
+  supportingMetric?: string;
   ctaLabel: string;
   source: string;
   reason: string;
@@ -62,7 +63,8 @@ function makeAction(input: {
     description: input.description,
     metricLabel: input.metricLabel,
     metricValue: input.metricValue,
-    ctaLabel: input.ctaLabel,
+    supportingMetric: input.supportingMetric || `${input.metricValue} ${input.metricLabel}`.trim(),
+    ctaLabel: input.ctaLabel.trim() || "Open",
     source: input.source,
     reason: input.reason,
     status: "open",
@@ -248,6 +250,7 @@ export function buildPriorityActions(input: PriorityActionInput): PriorityAction
         description: `${input.draftsAwaitingApproval} draft(s) need review or approval before scheduling.`,
         metricLabel: "Approval queue",
         metricValue: String(input.draftsAwaitingApproval),
+        supportingMetric: `${input.draftsAwaitingApproval} draft${input.draftsAwaitingApproval === 1 ? "" : "s"} awaiting approval`,
         ctaLabel: "Open approval queue",
         source: "content_drafts",
         reason: "Drafts are pending approval.",
@@ -272,6 +275,7 @@ export function buildPriorityActions(input: PriorityActionInput): PriorityAction
         description: `${blockedScheduled} scheduled post(s) require review, publishing, or recovery.`,
         metricLabel: "Scheduled attention items",
         metricValue: String(blockedScheduled),
+        supportingMetric: `${blockedScheduled} scheduled post${blockedScheduled === 1 ? "" : "s"} need attention`,
         ctaLabel: "Open calendar",
         source: "scheduled_posts",
         reason: "Pending approvals, publishing posts, or failed posts are present.",

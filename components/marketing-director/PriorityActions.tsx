@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { PriorityAction } from "@/features/marketing-director/daily-brief-rules";
+import type { BriefUrgency, PriorityAction } from "@/features/marketing-director/daily-brief-rules";
 
 const priorityTone: Record<PriorityAction["priority"], string> = {
   critical: "border-rose-200 bg-rose-50/85",
@@ -9,12 +9,22 @@ const priorityTone: Record<PriorityAction["priority"], string> = {
   completed: "border-emerald-200 bg-emerald-50/85",
 };
 
-export default function PriorityActions({ actions }: { actions: PriorityAction[] }) {
+function hasText(value: string | null | undefined): boolean {
+  return Boolean(String(value || "").trim());
+}
+
+export default function PriorityActions({
+  actions,
+  urgency,
+}: {
+  actions: PriorityAction[];
+  urgency: BriefUrgency;
+}) {
   return (
-    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-6">
+    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Top Actions Today</p>
-        <p className="text-xs text-slate-500">Ranked by risk, revenue impact, timing, and confidence</p>
+        <p className="text-xs text-slate-500">{urgency.summary}</p>
       </div>
       <div className="mt-4 space-y-3">
         {actions.length === 0 ? (
@@ -31,24 +41,33 @@ export default function PriorityActions({ actions }: { actions: PriorityAction[]
                 </span>
               </div>
               <p className="mt-2 text-sm text-slate-700">{action.impact}</p>
-              <p className="mt-1 text-sm text-slate-700">{action.description}</p>
+              {hasText(action.supportingMetric) ? <p className="mt-1 text-sm text-slate-700">{action.supportingMetric}</p> : null}
+              {hasText(action.description) ? <p className="mt-1 text-sm text-slate-700">{action.description}</p> : null}
               <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
-                <p>
-                  <span className="font-semibold text-slate-700">{action.metricLabel}:</span> {action.metricValue}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-700">Source:</span> {action.source}
-                </p>
-                <p className="md:col-span-2">
-                  <span className="font-semibold text-slate-700">Reason:</span> {action.reason}
-                </p>
+                {hasText(action.metricLabel) && hasText(action.metricValue) ? (
+                  <p>
+                    <span className="font-semibold text-slate-700">{action.metricLabel}:</span> {action.metricValue}
+                  </p>
+                ) : null}
+                {hasText(action.source) ? (
+                  <p>
+                    <span className="font-semibold text-slate-700">Source:</span> {action.source}
+                  </p>
+                ) : null}
+                {hasText(action.reason) ? (
+                  <p className="md:col-span-2">
+                    <span className="font-semibold text-slate-700">Reason:</span> {action.reason}
+                  </p>
+                ) : null}
               </div>
-              <Link
-                href={action.href}
-                className="mt-3 inline-flex rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-              >
-                {action.ctaLabel}
-              </Link>
+              {hasText(action.href) ? (
+                <Link
+                  href={action.href}
+                  className="mt-3 inline-flex min-h-9 items-center justify-center rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-50 active:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {hasText(action.ctaLabel) ? action.ctaLabel : "Open"}
+                </Link>
+              ) : null}
             </article>
           ))
         )}

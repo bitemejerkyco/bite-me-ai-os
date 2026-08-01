@@ -21,7 +21,7 @@ export default function MarketingDirectorDashboardView({
   dashboard: MarketingDirectorDashboard;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <ExecutiveHeader
         greeting={dashboard.greeting}
         firstName={dashboard.firstName}
@@ -30,11 +30,11 @@ export default function MarketingDirectorDashboardView({
         mode={dashboard.modeSettings}
       />
 
-      <PriorityActions actions={dashboard.brief.priorityActions} />
-
-      <DailyBriefPanel brief={dashboard.brief} />
-
-      <DataCoverageNotice coverage={dashboard.dataCoverage} />
+      <DailyBriefPanel
+        brief={dashboard.brief}
+        greeting={dashboard.greeting}
+        firstName={dashboard.firstName}
+      />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {dashboard.cards.map((card) => (
@@ -44,11 +44,15 @@ export default function MarketingDirectorDashboardView({
 
       <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} />
 
-      <MarketingScoreCard score={dashboard.score} trend={dashboard.scoreTrend} />
+      <PriorityActions actions={dashboard.brief.priorityActions} urgency={dashboard.brief.urgency} />
+
+      <DataCoverageNotice coverage={dashboard.dataCoverage} />
+
+      <MarketingScoreCard score={dashboard.score} trend={dashboard.scoreTrend} collapsible />
 
       <ChannelHealth channels={dashboard.channelHealth} />
 
-      <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-6">
+      <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Recommended next steps</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {dashboard.brief.recommendations.length === 0 ? (

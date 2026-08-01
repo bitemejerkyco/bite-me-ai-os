@@ -18,6 +18,22 @@ describe("marketing director command router", () => {
     expect(plan.unavailableActions).toContain("Publish without approval");
   });
 
+  it("keeps all generated plans in proposal-only mode", () => {
+    const prompts = [
+      "Build my next 30-day campaign",
+      "Improve my Amazon advertising",
+      "Create a TikTok content plan",
+      "Review pending content",
+      "Analyze connected channel performance",
+    ];
+
+    for (const prompt of prompts) {
+      const plan = buildCommandPlan(prompt);
+      expect(plan.requiresApproval).toBe(true);
+      expect(plan.unavailableActions.length).toBeGreaterThan(0);
+    }
+  });
+
   it("rejects empty prompts", () => {
     expect(() => buildCommandPlan("   ")).toThrow("COMMAND_INVALID");
   });

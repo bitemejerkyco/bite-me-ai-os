@@ -8,6 +8,14 @@ export type DailyBriefMetric = {
   note: string;
 };
 
+export type BriefUrgency = {
+  level: "none" | "medium" | "high" | "critical";
+  label: string;
+  summary: string;
+  factors: string[];
+  hasUrgentWork: boolean;
+};
+
 export type RecommendationEvidence = {
   label: string;
   value: string;
@@ -25,6 +33,7 @@ export type MarketingRecommendation = {
   confidenceReason: string;
   evidence: RecommendationEvidence[];
   actionType: "navigate" | "review" | "connect" | "approve";
+  actionLabel: string;
   actionHref: string;
   requiresApproval: boolean;
   createdAt: string;
@@ -39,6 +48,7 @@ export type PriorityAction = {
   description: string;
   metricLabel: string;
   metricValue: string;
+  supportingMetric: string;
   ctaLabel: string;
   source: string;
   reason: string;
@@ -52,6 +62,7 @@ export type PriorityAction = {
 export type DailyBrief = {
   workspaceId: string;
   generatedAt: string;
+  executiveNarrative: string;
   confidence: number;
   confidenceReason: string;
   dataQualityWarning: string | null;
@@ -65,6 +76,7 @@ export type DailyBrief = {
   performingWell: string[];
   underperforming: string[];
   recommendedNextAction: PriorityAction | null;
+  urgency: BriefUrgency;
   metrics: DailyBriefMetric[];
   priorityActions: PriorityAction[];
   recommendations: MarketingRecommendation[];

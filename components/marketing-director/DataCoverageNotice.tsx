@@ -10,7 +10,7 @@ export default function DataCoverageNotice({ coverage }: { coverage: DataCoverag
     : "border-emerald-200 bg-emerald-50/70 text-emerald-900";
 
   return (
-    <section className={`rounded-3xl border p-4 md:p-5 ${tone}`}>
+    <section className={`rounded-3xl border p-4 ${tone}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em]">Data coverage</p>
@@ -29,7 +29,7 @@ export default function DataCoverageNotice({ coverage }: { coverage: DataCoverag
         </Link>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         <article className="rounded-2xl border border-white/80 bg-white/70 p-3.5">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Connected sources</p>
           <ul className="mt-2 space-y-1 text-sm text-slate-700">

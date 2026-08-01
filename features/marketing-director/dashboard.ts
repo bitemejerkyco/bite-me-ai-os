@@ -15,6 +15,7 @@ import {
   getMarketingScoreForWorkspace,
   getScoreTrend,
 } from "@/features/marketing-director/marketing-score";
+import { formatTrendIndicator } from "@/features/marketing-director/trends";
 import {
   type MarketingScoreResult,
   type MarketingScoreTrend,
@@ -117,12 +118,19 @@ function statusForHealth(value: number): ExecutiveMetricCard["status"] {
   return "critical";
 }
 
-function trendLabel(trend: MarketingScoreTrend): string | null {
-  if (!trend.available) return null;
-  if (trend.direction === "up") return `+${trend.delta.toFixed(1)} vs prior`;
-  if (trend.direction === "down") return `${trend.delta.toFixed(1)} vs prior`;
-  if (trend.direction === "flat") return "No change vs prior";
-  return null;
+function aiConfidenceDetail(input: DataCoverageModel): string {
+  const connected = input.sources.filter((source) => source.health === "healthy").map((source) => source.label);
+  const stale = input.sources.filter((source) => source.health === "stale").map((source) => source.label);
+  const missing = input.sources
+    .filter((source) => source.health === "missing" || source.health === "limited")
+    .map((source) => source.label);
+
+  const parts: string[] = [];
+  if (connected.length > 0) parts.push(`Connected: ${connected.slice(0, 3).join(", ")}.`);
+  if (stale.length > 0) parts.push(`Stale: ${stale.slice(0, 3).join(", ")}.`);
+  if (missing.length > 0) parts.push(`Missing or limited: ${missing.slice(0, 4).join(", ")}.`);
+
+  return parts.join(" ") || "Confidence reflects connected and recent data coverage.";
 }
 
 export async function loadMarketingDirectorDashboard(input: {
@@ -281,6 +289,61 @@ export async function loadMarketingDirectorDashboard(input: {
   const scheduledPosts = posts.filter((row) => ["SCHEDULED", "PUBLISHING", "DELIVERED_TO_INBOX"].includes(String(row.status))).length;
   const connectedChannels = [tiktokConnected, false, false].filter(Boolean).length;
 
+  const brandFoundation = score.categories.find((item) => item.key === "brandFoundation");
+  const briefInput: DailyBriefInput = {
+    workspaceId: input.workspaceId,
+    workspaceName: input.workspaceName,
+    score,
+    scoreTrend,
+    dataCoverage,
+    metrics: {
+      activeCampaigns,
+      draftsAwaitingApproval: awaitingApproval,
+      failedScheduledPosts: posts.filter((row) => row.status === "FAILED").length,
+      pendingScheduledPosts: posts.filter((row) => row.status === "PENDING_APPROVAL" || row.status === "PUBLISHING").length,
+      failedTikTokJobs: tiktokJobs.filter((row) => row.status === "failed").length,
+      scheduledPosts,
+      connectedChannels,
+      tiktokStatus,
+      tiktokInboxPending: tiktokJobs.filter((row) => row.status === "inbox_delivered").length,
+      approvedDrafts: drafts.filter((row) => row.status === "APPROVED").length,
+      mediaAssetsCount: media.length,
+      failedVideoRenders: aiUsage.filter((row) => row.status === "FAILED").length,
+      integrationErrors: [tiktokStatus === "reconnect_required" ? 1 : 0].reduce((sum, value) => sum + value, 0),
+      hasLogo: media.some((row) => {
+        const tags = Array.isArray(row.tags) ? row.tags : [];
+        return tags.includes("logo") || String(row.file_name || "").toLowerCase().includes("logo");
+      }),
+      hasBrandVoice: brandFoundation?.score ? brandFoundation.score >= 10 : false,
+      onboardingComplete: brandFoundation?.status === "excellent" || brandFoundation?.status === "healthy",
+      amazonAdsConnected: false,
+      amazonRecommendationsReady: false,
+      hasProductsTable,
+      productsCount,
+      recentDrafts24h: drafts.filter((row) => Date.now() - new Date(String(row.created_at)).getTime() <= 24 * 60 * 60 * 1000).length,
+      recentScheduledPosts24h: posts.filter((row) => Date.now() - new Date(String(row.updated_at)).getTime() <= 24 * 60 * 60 * 1000).length,
+      recentAiEvents24h: aiUsage.filter((row) => Date.now() - new Date(String(row.created_at)).getTime() <= 24 * 60 * 60 * 1000).length,
+      lastVisitAt: lastBrief?.created_at || null,
+      revenueLast30Days: revenueAvailable ? revenueLast30Days : null,
+    },
+  };
+
+  const existingBrief = briefForTodayResult.data
+    ? restoreDailyBriefFromSnapshot(briefForTodayResult.data as StoredBriefRow)
+    : null;
+  const shouldRefreshBrief = input.refreshBrief === true || !existingBrief;
+  const brief = shouldRefreshBrief ? buildDailyBrief(briefInput) : existingBrief;
+
+  if (!brief) {
+    throw new Error("DASHBOARD_BRIEF_INVALID:Unable to restore existing daily brief.");
+  }
+
+  if (shouldRefreshBrief) {
+    await saveDailyBriefSnapshot(brief);
+  }
+
+  const marketingScoreTrendLabel = formatTrendIndicator(scoreTrend);
+
   const cards: ExecutiveMetricCard[] = [
     {
       id: "marketing_score",
@@ -288,18 +351,22 @@ export async function loadMarketingDirectorDashboard(input: {
       value: `${score.score.toFixed(1)} / ${score.maximumScore}`,
       status: statusForHealth(score.score),
       trendDirection: scoreTrend.direction,
-      trendLabel: trendLabel(scoreTrend),
+      trendLabel: marketingScoreTrendLabel,
       detail: `Version ${score.scoreVersion}`,
       href: metricHref("marketing_score"),
     },
     {
       id: "marketing_health",
       label: "Marketing Health",
-      value: score.status.replaceAll("_", " "),
-      status: statusForHealth(score.score),
+      value: brief.urgency.label,
+      status: brief.urgency.level === "critical"
+        ? "critical"
+        : brief.urgency.level === "high"
+          ? "warning"
+          : statusForHealth(score.score),
       trendDirection: scoreTrend.direction,
-      trendLabel: trendLabel(scoreTrend),
-      detail: score.confidenceReason,
+      trendLabel: marketingScoreTrendLabel,
+      detail: brief.urgency.summary,
       href: metricHref("marketing_health"),
     },
     {
@@ -323,7 +390,7 @@ export async function loadMarketingDirectorDashboard(input: {
       status: confidenceScore >= 75 ? "healthy" : confidenceScore >= 45 ? "warning" : "critical",
       trendDirection: "unknown",
       trendLabel: null,
-      detail: dataCoverage.warning || "Confidence reflects connected and recent data coverage.",
+      detail: aiConfidenceDetail(dataCoverage),
       href: metricHref("ai_confidence"),
     },
     {
@@ -367,61 +434,6 @@ export async function loadMarketingDirectorDashboard(input: {
       href: metricHref("connected_channels"),
     },
   ];
-
-  const briefInput: DailyBriefInput = {
-    workspaceId: input.workspaceId,
-    workspaceName: input.workspaceName,
-    score,
-    scoreTrend,
-    dataCoverage,
-    metrics: {
-      activeCampaigns,
-      draftsAwaitingApproval: awaitingApproval,
-      failedScheduledPosts: posts.filter((row) => row.status === "FAILED").length,
-      pendingScheduledPosts: posts.filter((row) => row.status === "PENDING_APPROVAL" || row.status === "PUBLISHING").length,
-      failedTikTokJobs: tiktokJobs.filter((row) => row.status === "failed").length,
-      scheduledPosts,
-      connectedChannels,
-      tiktokStatus,
-      tiktokInboxPending: tiktokJobs.filter((row) => row.status === "inbox_delivered").length,
-      approvedDrafts: drafts.filter((row) => row.status === "APPROVED").length,
-      mediaAssetsCount: media.length,
-      failedVideoRenders: aiUsage.filter((row) => row.status === "FAILED").length,
-      integrationErrors: [tiktokStatus === "reconnect_required" ? 1 : 0].reduce((sum, value) => sum + value, 0),
-      hasLogo: media.some((row) => {
-        const tags = Array.isArray(row.tags) ? row.tags : [];
-        return tags.includes("logo") || String(row.file_name || "").toLowerCase().includes("logo");
-      }),
-      hasBrandVoice: score.categories.find((item) => item.key === "brandFoundation")?.score
-        ? score.categories.find((item) => item.key === "brandFoundation")!.score >= 10
-        : false,
-      onboardingComplete: score.categories.find((item) => item.key === "brandFoundation")?.status === "excellent" ||
-        score.categories.find((item) => item.key === "brandFoundation")?.status === "healthy",
-      amazonAdsConnected: false,
-      amazonRecommendationsReady: false,
-      hasProductsTable,
-      productsCount,
-      recentDrafts24h: drafts.filter((row) => Date.now() - new Date(String(row.created_at)).getTime() <= 24 * 60 * 60 * 1000).length,
-      recentScheduledPosts24h: posts.filter((row) => Date.now() - new Date(String(row.updated_at)).getTime() <= 24 * 60 * 60 * 1000).length,
-      recentAiEvents24h: aiUsage.filter((row) => Date.now() - new Date(String(row.created_at)).getTime() <= 24 * 60 * 60 * 1000).length,
-      lastVisitAt: lastBrief?.created_at || null,
-      revenueLast30Days: revenueAvailable ? revenueLast30Days : null,
-    },
-  };
-
-  const existingBrief = briefForTodayResult.data
-    ? restoreDailyBriefFromSnapshot(briefForTodayResult.data as StoredBriefRow)
-    : null;
-  const shouldRefreshBrief = input.refreshBrief === true || !existingBrief;
-  const brief = shouldRefreshBrief ? buildDailyBrief(briefInput) : existingBrief;
-
-  if (!brief) {
-    throw new Error("DASHBOARD_BRIEF_INVALID:Unable to restore existing daily brief.");
-  }
-
-  if (shouldRefreshBrief) {
-    await saveDailyBriefSnapshot(brief);
-  }
 
   const recentActivity: RecentActivityItem[] = [
     ...posts

@@ -4,7 +4,15 @@ import Link from "next/link";
 import { useState } from "react";
 import type { DailyBrief } from "@/features/marketing-director/daily-brief-rules";
 
-export default function DailyBriefPanel({ brief }: { brief: DailyBrief }) {
+export default function DailyBriefPanel({
+  brief,
+  greeting,
+  firstName,
+}: {
+  brief: DailyBrief;
+  greeting: string;
+  firstName: string;
+}) {
   const [currentBrief, setCurrentBrief] = useState(brief);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +44,7 @@ export default function DailyBriefPanel({ brief }: { brief: DailyBrief }) {
   }
 
   return (
-    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-6">
+    <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Daily Executive Brief</p>
         <div className="flex items-center gap-2">
@@ -62,8 +70,14 @@ export default function DailyBriefPanel({ brief }: { brief: DailyBrief }) {
         </p>
       ) : null}
 
+      <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+        <p className="text-sm font-semibold text-violet-900">{greeting}, {firstName}.</p>
+        <p className="mt-1.5 text-sm leading-6 text-violet-900">{currentBrief.executiveNarrative}</p>
+      </div>
+
       <p className="mt-2 text-sm text-slate-600">Generated {new Date(currentBrief.generatedAt).toLocaleString()}</p>
       <p className="mt-1 text-sm text-slate-600">{currentBrief.dataCoverageSummary}</p>
+      <p className="mt-1 text-sm text-slate-700">{currentBrief.urgency.summary}</p>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <article className="rounded-2xl border border-slate-200 bg-white/85 p-4">
@@ -79,7 +93,9 @@ export default function DailyBriefPanel({ brief }: { brief: DailyBrief }) {
         <article className="rounded-2xl border border-slate-200 bg-white/85 p-4">
           <h3 className="text-sm font-semibold text-slate-900">Needs attention</h3>
           <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            {currentBrief.needsAttention.length === 0 ? <li>Nothing urgent right now.</li> : currentBrief.needsAttention.map((line) => <li key={line}>{line}</li>)}
+            {currentBrief.needsAttention.length === 0
+              ? <li>No critical issues are currently flagged by connected records.</li>
+              : currentBrief.needsAttention.map((line) => <li key={line}>{line}</li>)}
             {currentBrief.recommendedNextAction ? (
               <li>
                 Next action: {currentBrief.recommendedNextAction.title}

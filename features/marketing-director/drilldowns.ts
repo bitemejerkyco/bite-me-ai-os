@@ -58,7 +58,7 @@ export function buildMetricDrilldown(
       missingSources: missingFrom(contributingSources),
       nextAction: {
         label: "Address low score categories",
-        href: "/",
+        href: "/analytics/marketing-score",
       },
     };
   }
@@ -115,12 +115,31 @@ export function buildMetricDrilldown(
 
   if (id === "ai_confidence") {
     const contributingSources = coverage;
+    const connected = coverage.filter((source) => source.health === "healthy").map((source) => source.label);
+    const stale = coverage.filter((source) => source.health === "stale").map((source) => source.label);
+    const missing = missingFrom(contributingSources).map((source) => source.label);
+    const revenueUnavailable = coverage.some((source) => source.key === "revenue_tracking" && source.health !== "healthy");
+
+    const explanationParts = [
+      connected.length > 0
+        ? `Confidence is supported by connected sources including ${connected.slice(0, 3).join(", ")}.`
+        : "Confidence is limited because few healthy sources are connected.",
+      missing.length > 0
+        ? `Missing or limited sources include ${missing.slice(0, 4).join(", ")}.`
+        : "No missing core sources were detected.",
+      stale.length > 0
+        ? `Stale sources: ${stale.slice(0, 3).join(", ")}.`
+        : "No stale source signals were detected.",
+      revenueUnavailable
+        ? "Revenue or performance contribution remains incomplete from connected data."
+        : "Revenue and performance coverage are available from connected data.",
+    ];
+
     return {
       id,
       title: "AI Confidence",
       value: card.value,
-      explanation:
-        "AI Confidence represents how much trustworthy connected data is available for recommendations and prioritization.",
+      explanation: explanationParts.join(" "),
       calculation:
         "Confidence is derived from weighted source health across profile, content, channel, analytics, and usage records.",
       contributingSources,

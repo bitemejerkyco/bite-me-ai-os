@@ -2,6 +2,8 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildPriorityActions } from "@/features/marketing-director/priority-actions";
+import { recommendationActionForCategory } from "@/features/marketing-director/score-category-routes";
+import { calculateMarketingUrgency } from "@/features/marketing-director/urgency";
 import {
   normalizeConfidence,
   type DailyBrief,
@@ -77,6 +79,7 @@ function buildRecommendations(input: DailyBriefInput): MarketingRecommendation[]
   const opportunities = getTopMarketingOpportunities(input.score);
 
   for (const opportunity of opportunities.slice(0, 3)) {
+    const action = recommendationActionForCategory(opportunity.category);
     recommendations.push({
       id: `opportunity-${opportunity.category}`,
       title: `Improve ${opportunity.title}`,
@@ -93,8 +96,9 @@ function buildRecommendations(input: DailyBriefInput): MarketingRecommendation[]
           input.score.generatedAt,
         ),
       ),
-      actionType: "review",
-      actionHref: "/",
+      actionType: "navigate",
+      actionLabel: action.label,
+      actionHref: action.href,
       requiresApproval: true,
       createdAt: generatedAt,
     });
@@ -113,6 +117,7 @@ function buildRecommendations(input: DailyBriefInput): MarketingRecommendation[]
         recommendationEvidence("Onboarding status", "Incomplete", "workspaces", generatedAt),
       ],
       actionType: "navigate",
+      actionLabel: "Complete setup",
       actionHref: "/onboarding",
       requiresApproval: false,
       createdAt: generatedAt,
@@ -132,6 +137,7 @@ function buildRecommendations(input: DailyBriefInput): MarketingRecommendation[]
         recommendationEvidence("TikTok status", "reconnect_required", "tiktok_connections", generatedAt),
       ],
       actionType: "connect",
+      actionLabel: "Reconnect TikTok",
       actionHref: "/settings/integrations/tiktok",
       requiresApproval: true,
       createdAt: generatedAt,
@@ -139,6 +145,58 @@ function buildRecommendations(input: DailyBriefInput): MarketingRecommendation[]
   }
 
   return recommendations.slice(0, 4);
+}
+
+function strongestSignal(input: DailyBriefInput): string {
+  const positive = input.score.categories
+    .slice()
+    .sort((left, right) => (right.score / right.maximumScore) - (left.score / left.maximumScore))
+    .find((category) => category.status === "excellent" || category.status === "healthy");
+
+  if (positive) {
+    return positive.label;
+  }
+
+  if (input.metrics.activeCampaigns > 0) {
+    return `${input.metrics.activeCampaigns} active campaign${input.metrics.activeCampaigns === 1 ? "" : "s"}`;
+  }
+
+  return "Brand setup context";
+}
+
+function largestWeakness(input: DailyBriefInput): string {
+  const weakest = input.score.categories
+    .slice()
+    .sort((left, right) => (left.score / left.maximumScore) - (right.score / right.maximumScore))
+    .find((category) => category.status === "critical" || category.status === "needs_attention" || category.status === "unavailable");
+
+  if (!weakest) {
+    return "no critical weakness";
+  }
+
+  if (weakest.key === "contentReadiness" && input.metrics.draftsAwaitingApproval > 0) {
+    return `Content Readiness (${input.metrics.draftsAwaitingApproval} draft${input.metrics.draftsAwaitingApproval === 1 ? "" : "s"} awaiting approval)`;
+  }
+
+  return weakest.label;
+}
+
+function unavailableDataSummary(input: DailyBriefInput): string {
+  const unavailable: string[] = [];
+  if (input.metrics.tiktokStatus !== "connected") unavailable.push("TikTok performance continuity");
+  if (!input.metrics.amazonAdsConnected) unavailable.push("Amazon Ads");
+  if (input.metrics.revenueLast30Days === null) unavailable.push("revenue tracking");
+  if (input.dataCoverage.sources.some((source) => source.key === "email_provider" && source.health !== "healthy")) {
+    unavailable.push("email provider data");
+  }
+
+  if (unavailable.length === 0) return "core data sources are connected";
+  return unavailable.join(", ");
+}
+
+function operationalImpactFromAction(action: DailyBrief["recommendedNextAction"]): string {
+  if (!action) return "Execution risk is currently moderate based on connected data.";
+  return action.impact;
 }
 
 export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
@@ -174,6 +232,18 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
   });
 
   const recommendations = buildRecommendations(input);
+
+  const urgency = calculateMarketingUrgency({
+    criticalScoreCategories: input.score.categories.filter((category) => category.status === "critical").length,
+    failedPublishingJobs: input.metrics.failedScheduledPosts + input.metrics.failedTikTokJobs,
+    approvalBacklog: input.metrics.draftsAwaitingApproval,
+    missingRequiredIntegrations: input.dataCoverage.sources.filter((source) =>
+      ["amazon_ads", "email_provider", "social_analytics", "revenue_tracking"].includes(source.key) &&
+      (source.health === "missing" || source.health === "limited"),
+    ).length,
+    scheduledWorkAtRisk: input.metrics.pendingScheduledPosts + input.metrics.failedScheduledPosts,
+    highPriorityActions: priorityActions.filter((action) => action.priority === "critical" || action.priority === "high").length,
+  });
 
   const revenueLabel =
     input.metrics.revenueLast30Days === null
@@ -222,6 +292,10 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
     .slice(0, 3)
     .map((action) => action.title);
 
+  if (needsAttention.length === 0 && urgency.level !== "none") {
+    needsAttention.push(urgency.summary);
+  }
+
   const performingWell = [
     input.metrics.activeCampaigns > 0
       ? "At least one campaign is active."
@@ -238,9 +312,25 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
 
   const recommendedNextAction = priorityActions[0] || null;
 
+  const strongest = strongestSignal(input);
+  const weakness = largestWeakness(input);
+  const unavailableData = unavailableDataSummary(input);
+  const topActionLabel = recommendedNextAction ? recommendedNextAction.title : "review connected performance signals";
+
+  const executiveNarrative = [
+    `Strongest signal: ${strongest}.`,
+    weakness === "no critical weakness"
+      ? "No critical score category is currently flagged."
+      : `Largest weakness: ${weakness}.`,
+    `Highest-priority action: ${topActionLabel}.`,
+    `Unavailable data: ${unavailableData}.`,
+    `Likely operational impact: ${operationalImpactFromAction(recommendedNextAction)}`,
+  ].join(" ");
+
   return {
     workspaceId: input.workspaceId,
     generatedAt,
+    executiveNarrative,
     confidence: normalizeConfidence((input.score.confidence + input.dataCoverage.overallConfidence) / 2),
     confidenceReason: input.dataCoverage.warning
       ? "Confidence is reduced by missing connected data sources."
@@ -258,6 +348,13 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
     performingWell,
     underperforming,
     recommendedNextAction,
+    urgency: {
+      level: urgency.level,
+      label: urgency.label,
+      summary: urgency.summary,
+      factors: urgency.factors,
+      hasUrgentWork: urgency.hasUrgentWork,
+    },
     metrics,
     priorityActions,
     recommendations,
@@ -287,6 +384,8 @@ export async function saveDailyBriefSnapshot(brief: DailyBrief): Promise<void> {
       performingWell: brief.performingWell,
       underperforming: brief.underperforming,
       recommendedNextAction: brief.recommendedNextAction,
+      executiveNarrative: brief.executiveNarrative,
+      urgency: brief.urgency,
     },
   } as never, { onConflict: "workspace_id,brief_date" });
 }

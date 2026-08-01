@@ -13,7 +13,11 @@ export default async function ExecutiveBriefPage() {
 
   return (
     <AppShell title="Daily Executive Brief" eyebrow="Marketing director">
-      <DailyBriefPanel brief={dashboard.brief} />
+      <DailyBriefPanel
+        brief={dashboard.brief}
+        greeting={dashboard.greeting}
+        firstName={dashboard.firstName}
+      />
     </AppShell>
   );
 }

@@ -93,4 +93,38 @@ describe("marketing director priority actions", () => {
 
     expect(actions.some((action) => action.id === "create-content-pipeline")).toBe(false);
   });
+
+  it("maps approval backlog action to content approval queue with non-empty CTA fields", () => {
+    const actions = buildPriorityActions({
+      workspaceId: "ws-4",
+      onboardingComplete: true,
+      hasLogo: true,
+      hasBrandVoice: true,
+      tiktokStatus: "connected",
+      tiktokInboxPending: 0,
+      draftsAwaitingApproval: 8,
+      failedScheduledPosts: 0,
+      failedVideoRenders: 0,
+      amazonAdsConnected: true,
+      amazonRecommendationsReady: false,
+      hasProductsTable: true,
+      productsCount: 5,
+      mediaAssetsCount: 2,
+      approvedDrafts: 0,
+      upcomingScheduledPosts: 0,
+      pendingScheduledPosts: 0,
+      integrationErrors: 0,
+      activeCampaigns: 0,
+      failedTikTokJobs: 0,
+      missingIntegrations: [],
+      revenueAvailable: true,
+      lowScoreCategories: [],
+    });
+
+    const approvalAction = actions.find((action) => action.id === "approve-content-drafts");
+    expect(approvalAction).toBeTruthy();
+    expect(approvalAction?.href).toBe("/content-library?status=awaiting-approval");
+    expect(approvalAction?.ctaLabel.trim().length).toBeGreaterThan(0);
+    expect(approvalAction?.supportingMetric).toContain("awaiting approval");
+  });
 });
