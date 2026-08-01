@@ -39,6 +39,33 @@ export type MarketingRecommendation = {
   createdAt: string;
 };
 
+export type AutonomousExecutiveRecommendation = {
+  id: string;
+  title: string;
+  why: string;
+  businessImpact: string;
+  confidence: number;
+  estimatedEffort: string;
+  expectedOutcome: string;
+  approvalStatus: "approval_required" | "ready_for_review" | "scheduled";
+  nextWorkflow: string;
+  roiPriority: "critical" | "high" | "medium" | "low";
+  crossChannelPlan: string[];
+  source: "trend" | "performance" | "memory" | "coverage";
+};
+
+export type ExecutiveMorningBrief = {
+  overnightChanges: string[];
+  wins: string[];
+  risks: string[];
+  urgentActions: string[];
+  opportunities: string[];
+  marketingScoreChanges: string[];
+  campaignPerformance: string[];
+  aiRecommendations: string[];
+  estimatedBusinessImpact: string;
+};
+
 export type PriorityAction = {
   id: string;
   priority: PriorityLevel;
@@ -80,6 +107,8 @@ export type DailyBrief = {
   metrics: DailyBriefMetric[];
   priorityActions: PriorityAction[];
   recommendations: MarketingRecommendation[];
+  autonomousRecommendations: AutonomousExecutiveRecommendation[];
+  morningBrief: ExecutiveMorningBrief;
 };
 
 export function priorityRank(priority: PriorityLevel): number {

@@ -330,12 +330,17 @@ export default function CommandCenter(props: { modeLabel: string }) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const suggestions = [
-    "Build my next 30-day campaign",
-    "Improve my Amazon advertising",
-    "Create a TikTok content plan",
-    "Review pending content",
+    "Build my September campaign",
+    "Launch our Labor Day promotion",
+    "Increase Amazon sales",
     "Improve my Marketing Score",
-    "Analyze connected channel performance",
+    "Find my biggest weakness",
+    "Prepare next week's content",
+    "Analyze Facebook performance",
+    "Create a TikTok strategy",
+    "Build a Q4 marketing plan",
+    "Generate a customer retention campaign",
+    "Review pending content",
   ];
 
   const latestDirectorMessage = useMemo(
@@ -639,16 +644,14 @@ export default function CommandCenter(props: { modeLabel: string }) {
   return (
     <section className="pm-glass rounded-[2rem] border border-white/90 bg-white/80 p-4" aria-label="Marketing Director conversation panel">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Command Center</p>
+        <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Executive Command Center</p>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           {props.modeLabel}
         </span>
       </div>
-      <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900 md:text-2xl">
-        What would you like your Marketing Director to do?
-      </h2>
+      <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900 md:text-2xl">What should your AI CMO do next?</h2>
       <p className="mt-2 text-sm text-slate-600">
-        Advisor mode creates a reviewable plan and does not execute automatically.
+        Enter a natural-language executive command. The AI classifies intent and builds the workflow automatically.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Prompt suggestions">
@@ -697,10 +700,10 @@ export default function CommandCenter(props: { modeLabel: string }) {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <p className="text-xs text-slate-500">Enter submits. Shift+Enter adds a new line.</p>
+        <p className="text-xs text-slate-500">Press Enter to submit the command instantly.</p>
       </div>
 
-      <textarea
+      <input
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={(event) => {
@@ -710,8 +713,8 @@ export default function CommandCenter(props: { modeLabel: string }) {
           }
         }}
         maxLength={500}
-        className="mt-3 min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-        placeholder="Example: Build a 2-week TikTok content plan for our new product launch"
+        className="mt-3 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+        placeholder="Example: Build a Q4 marketing plan focused on retention and Amazon growth"
       />
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-xs text-slate-500">{prompt.length} / 500</p>

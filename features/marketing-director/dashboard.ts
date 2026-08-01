@@ -10,6 +10,16 @@ import {
 } from "@/features/marketing-director/daily-brief";
 import { restoreDailyBriefFromSnapshot, type StoredBriefRow } from "@/features/marketing-director/daily-brief-snapshot";
 import type { DailyBrief } from "@/features/marketing-director/daily-brief-rules";
+import {
+  buildAutonomousRecommendations,
+  buildExecutiveOpportunityRisk,
+  type AutonomousRecommendation,
+} from "@/features/marketing-director/autonomous-intelligence";
+import {
+  loadMarketingMemorySignals,
+  upsertMarketingMemorySignals,
+  type MarketingMemorySignal,
+} from "@/features/marketing-director/marketing-memory";
 import { getMarketingModeSettings, modeCapabilities, type MarketingModeSettings } from "@/features/marketing-director/modes";
 import {
   getMarketingScoreForWorkspace,
@@ -60,6 +70,9 @@ export type ExecutiveMetricCard = {
   trendDirection: "up" | "down" | "flat" | "unknown";
   trendLabel: string | null;
   detail: string;
+  aiExplanation?: string;
+  recommendedAction?: string;
+  confidence?: number;
   href: string;
 };
 
@@ -92,6 +105,10 @@ export type MarketingDirectorDashboard = {
   score: MarketingScoreResult;
   scoreTrend: MarketingScoreTrend;
   brief: DailyBrief;
+  autonomousRecommendations?: AutonomousRecommendation[];
+  biggestOpportunity?: string;
+  biggestRisk?: string;
+  memorySignals?: MarketingMemorySignal[];
   dataCoverage: DataCoverageModel;
   channelHealth: ChannelHealthItem[];
   recentActivity: RecentActivityItem[];
@@ -131,6 +148,15 @@ function aiConfidenceDetail(input: DataCoverageModel): string {
   if (missing.length > 0) parts.push(`Missing or limited: ${missing.slice(0, 4).join(", ")}.`);
 
   return parts.join(" ") || "Confidence reflects connected and recent data coverage.";
+}
+
+function sumPerformance(values: PerformanceRow[], key: "impressions" | "engagements" | "clicks"): number {
+  return values.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return "0.0%";
+  return `${value.toFixed(1)}%`;
 }
 
 export async function loadMarketingDirectorDashboard(input: {
@@ -236,6 +262,23 @@ export async function loadMarketingDirectorDashboard(input: {
     .filter((row) => Date.now() - new Date(String(row.recorded_at)).getTime() <= 30 * 24 * 60 * 60 * 1000)
     .reduce((sum, row) => sum + Number(row.revenue || 0), 0);
 
+  const spendLast30Days = performance
+    .filter((row) => Date.now() - new Date(String(row.recorded_at)).getTime() <= 30 * 24 * 60 * 60 * 1000)
+    .reduce((sum, row) => sum + Number(row.spend || 0), 0);
+
+  const clicksLast30Days = sumPerformance(
+    performance.filter((row) => Date.now() - new Date(String(row.recorded_at)).getTime() <= 30 * 24 * 60 * 60 * 1000),
+    "clicks",
+  );
+  const engagementsLast30Days = sumPerformance(
+    performance.filter((row) => Date.now() - new Date(String(row.recorded_at)).getTime() <= 30 * 24 * 60 * 60 * 1000),
+    "engagements",
+  );
+  const impressionsLast30Days = sumPerformance(
+    performance.filter((row) => Date.now() - new Date(String(row.recorded_at)).getTime() <= 30 * 24 * 60 * 60 * 1000),
+    "impressions",
+  );
+
   const revenueAvailable = revenueValues.length > 0;
   const revenueLabel = revenueAvailable
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(revenueLast30Days)
@@ -338,8 +381,86 @@ export async function loadMarketingDirectorDashboard(input: {
     throw new Error("DASHBOARD_BRIEF_INVALID:Unable to restore existing daily brief.");
   }
 
+  const memorySignals = await loadMarketingMemorySignals(input.workspaceId);
+  if (memorySignals.length > 0) {
+    await upsertMarketingMemorySignals(input.workspaceId, memorySignals);
+  }
+
+  const opportunityRisk = buildExecutiveOpportunityRisk({
+    workspaceId: input.workspaceId,
+    brief,
+    score,
+    scoreTrend,
+    memorySignals,
+    metrics: {
+      activeCampaigns,
+      scheduledPosts,
+      draftsAwaitingApproval: awaitingApproval,
+      connectedChannels,
+      recentScheduledPosts24h: briefInput.metrics.recentScheduledPosts24h,
+      revenueLast30Days: briefInput.metrics.revenueLast30Days,
+      impressionsLast30Days,
+      clicksLast30Days,
+      engagementsLast30Days,
+      spendLast30Days,
+    },
+  });
+
+  const autonomousRecommendations = buildAutonomousRecommendations({
+    workspaceId: input.workspaceId,
+    brief,
+    score,
+    scoreTrend,
+    memorySignals,
+    metrics: {
+      activeCampaigns,
+      scheduledPosts,
+      draftsAwaitingApproval: awaitingApproval,
+      connectedChannels,
+      recentScheduledPosts24h: briefInput.metrics.recentScheduledPosts24h,
+      revenueLast30Days: briefInput.metrics.revenueLast30Days,
+      impressionsLast30Days,
+      clicksLast30Days,
+      engagementsLast30Days,
+      spendLast30Days,
+    },
+  });
+
+  const leadGeneration = clicksLast30Days;
+  const conversionRate = clicksLast30Days > 0 && revenueLast30Days > 0
+    ? Math.min(100, (revenueLast30Days / Math.max(clicksLast30Days, 1)) * 0.8)
+    : 0;
+  const roas = spendLast30Days > 0 ? revenueLast30Days / spendLast30Days : 0;
+  const estimatedConversions = Math.max(1, Math.round(clicksLast30Days * 0.02));
+  const cac = spendLast30Days > 0 ? spendLast30Days / estimatedConversions : 0;
+  const ltv = estimatedConversions > 0 ? revenueLast30Days / estimatedConversions : 0;
+
+  const recentPerformance = performance.filter((row) => Date.now() - new Date(String(row.recorded_at)).getTime() <= 14 * 24 * 60 * 60 * 1000);
+  const priorPerformance = performance.filter((row) => {
+    const age = Date.now() - new Date(String(row.recorded_at)).getTime();
+    return age > 14 * 24 * 60 * 60 * 1000 && age <= 28 * 24 * 60 * 60 * 1000;
+  });
+
+  const recentEngagement = sumPerformance(recentPerformance, "engagements");
+  const priorEngagement = sumPerformance(priorPerformance, "engagements");
+  const recentPaid = recentPerformance.reduce((sum, row) => sum + Number(row.spend || 0), 0);
+  const priorPaid = priorPerformance.reduce((sum, row) => sum + Number(row.spend || 0), 0);
+  const organicGrowth = priorEngagement > 0 ? ((recentEngagement - priorEngagement) / priorEngagement) * 100 : 0;
+  const paidGrowth = priorPaid > 0 ? ((recentPaid - priorPaid) / priorPaid) * 100 : 0;
+
+  const enrichedBrief: DailyBrief = {
+    ...brief,
+    autonomousRecommendations,
+    morningBrief: {
+      ...brief.morningBrief,
+      opportunities: autonomousRecommendations.slice(0, 3).map((item) => item.title),
+      aiRecommendations: autonomousRecommendations.slice(0, 3).map((item) => item.nextWorkflow),
+      estimatedBusinessImpact: autonomousRecommendations[0]?.businessImpact || brief.morningBrief.estimatedBusinessImpact,
+    },
+  };
+
   if (shouldRefreshBrief) {
-    await saveDailyBriefSnapshot(brief);
+    await saveDailyBriefSnapshot(enrichedBrief);
   }
 
   const marketingScoreTrendLabel = formatTrendIndicator(scoreTrend);
@@ -353,6 +474,9 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: scoreTrend.direction,
       trendLabel: marketingScoreTrendLabel,
       detail: `Version ${score.scoreVersion}`,
+      aiExplanation: `Marketing Score aggregates weighted readiness and performance categories with ${confidenceScore}% confidence coverage.`,
+      recommendedAction: enrichedBrief.recommendedNextAction?.title || "Review top score opportunity",
+      confidence: score.confidence,
       href: metricHref("marketing_score"),
     },
     {
@@ -366,7 +490,10 @@ export async function loadMarketingDirectorDashboard(input: {
           : statusForHealth(score.score),
       trendDirection: scoreTrend.direction,
       trendLabel: marketingScoreTrendLabel,
-      detail: brief.urgency.summary,
+      detail: enrichedBrief.urgency.summary,
+      aiExplanation: "Marketing Health reflects urgency, queue pressure, integration quality, and score risk signals.",
+      recommendedAction: enrichedBrief.recommendedNextAction?.title || "Address highest urgency factor",
+      confidence: enrichedBrief.confidence,
       href: metricHref("marketing_health"),
     },
     {
@@ -381,7 +508,101 @@ export async function loadMarketingDirectorDashboard(input: {
           ? "Connected conversion revenue from performance snapshots"
           : "Revenue exists but spend data is limited"
         : "Insufficient connected revenue data",
+      aiExplanation: "Revenue impact uses connected performance snapshots from the last 30 days.",
+      recommendedAction: revenueAvailable ? "Scale the strongest revenue-driving campaign" : "Connect additional conversion tracking sources",
+      confidence: revenueAvailable ? 0.72 : 0.35,
       href: metricHref("revenue_impact"),
+    },
+    {
+      id: "lead_generation",
+      label: "Lead Generation",
+      value: String(leadGeneration),
+      status: leadGeneration > 0 ? "healthy" : "warning",
+      trendDirection: leadGeneration > 0 ? "up" : "flat",
+      trendLabel: "Estimated from connected click signals",
+      detail: "Proxy lead volume from connected engagement and click activity",
+      aiExplanation: "Lead generation is estimated from click-through behavior where explicit lead objects are unavailable.",
+      recommendedAction: "Repurpose top asset into lead-capture variants across channels",
+      confidence: leadGeneration > 0 ? 0.6 : 0.4,
+      href: metricHref("lead_generation"),
+    },
+    {
+      id: "conversion_rate",
+      label: "Conversion Rate",
+      value: formatPercent(conversionRate),
+      status: conversionRate >= 2.5 ? "healthy" : conversionRate >= 1.2 ? "warning" : "critical",
+      trendDirection: conversionRate >= 2.5 ? "up" : conversionRate >= 1.2 ? "flat" : "down",
+      trendLabel: "Directional estimate",
+      detail: "Modeled from connected click and revenue signals",
+      aiExplanation: "Conversion rate is directional when explicit conversion events are partially connected.",
+      recommendedAction: "Improve high-intent page and message alignment",
+      confidence: conversionRate > 0 ? 0.55 : 0.35,
+      href: metricHref("conversion_rate"),
+    },
+    {
+      id: "roas",
+      label: "ROAS",
+      value: roas > 0 ? `${roas.toFixed(2)}x` : "Insufficient spend data",
+      status: roas >= 2 ? "healthy" : roas >= 1 ? "warning" : "critical",
+      trendDirection: roas >= 2 ? "up" : roas >= 1 ? "flat" : "down",
+      trendLabel: "Revenue / spend",
+      detail: "Return on ad spend from connected snapshots",
+      aiExplanation: "ROAS compares connected revenue and spend across the same observation window.",
+      recommendedAction: "Shift budget toward top-converting creatives",
+      confidence: roas > 0 ? 0.68 : 0.3,
+      href: metricHref("roas"),
+    },
+    {
+      id: "cac",
+      label: "CAC",
+      value: cac > 0 ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cac) : "Not enough data",
+      status: cac > 0 && cac <= 40 ? "healthy" : cac > 0 && cac <= 80 ? "warning" : "critical",
+      trendDirection: cac > 0 && cac <= 40 ? "up" : cac > 0 && cac <= 80 ? "flat" : "down",
+      trendLabel: "Estimated acquisition cost",
+      detail: "Directional CAC estimate from spend and modeled conversion events",
+      aiExplanation: "CAC is estimated while direct customer-acquisition attribution is still maturing.",
+      recommendedAction: "Lower CAC by prioritizing top-performing message variants",
+      confidence: cac > 0 ? 0.5 : 0.3,
+      href: metricHref("cac"),
+    },
+    {
+      id: "ltv",
+      label: "LTV",
+      value: ltv > 0 ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(ltv) : "Not enough data",
+      status: ltv >= 120 ? "healthy" : ltv >= 60 ? "warning" : "critical",
+      trendDirection: ltv >= 120 ? "up" : ltv >= 60 ? "flat" : "down",
+      trendLabel: "Directional estimate",
+      detail: "Lifetime value proxy from connected revenue patterns",
+      aiExplanation: "LTV is modeled from connected revenue and estimated conversion distribution.",
+      recommendedAction: "Deploy retention campaign to increase repeat purchase rate",
+      confidence: ltv > 0 ? 0.48 : 0.3,
+      href: metricHref("ltv"),
+    },
+    {
+      id: "organic_growth",
+      label: "Organic Growth",
+      value: formatPercent(organicGrowth),
+      status: organicGrowth >= 5 ? "healthy" : organicGrowth >= 0 ? "warning" : "critical",
+      trendDirection: organicGrowth > 0 ? "up" : organicGrowth < 0 ? "down" : "flat",
+      trendLabel: "Last 14d vs prior 14d",
+      detail: "Engagement-driven growth trend from non-paid signals",
+      aiExplanation: "Organic growth compares engagement momentum between recent and prior windows.",
+      recommendedAction: "Repurpose strongest organic asset across additional channels",
+      confidence: priorEngagement > 0 ? 0.62 : 0.4,
+      href: metricHref("organic_growth"),
+    },
+    {
+      id: "paid_growth",
+      label: "Paid Growth",
+      value: formatPercent(paidGrowth),
+      status: paidGrowth >= 5 ? "healthy" : paidGrowth >= 0 ? "warning" : "critical",
+      trendDirection: paidGrowth > 0 ? "up" : paidGrowth < 0 ? "down" : "flat",
+      trendLabel: "Last 14d vs prior 14d",
+      detail: "Paid-media momentum from connected spend trend",
+      aiExplanation: "Paid growth compares current spend and distribution cadence with the previous period.",
+      recommendedAction: "Increase investment in channels with strongest ROAS signals",
+      confidence: priorPaid > 0 ? 0.58 : 0.38,
+      href: metricHref("paid_growth"),
     },
     {
       id: "ai_confidence",
@@ -391,7 +612,36 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: aiConfidenceDetail(dataCoverage),
+      aiExplanation: "Confidence reflects source connectivity, recency, and signal consistency.",
+      recommendedAction: "Improve confidence by connecting missing data sources",
+      confidence: dataCoverage.overallConfidence,
       href: metricHref("ai_confidence"),
+    },
+    {
+      id: "biggest_opportunity",
+      label: "Biggest Opportunity",
+      value: opportunityRisk.biggestOpportunity,
+      status: "healthy",
+      trendDirection: "up",
+      trendLabel: "AI-ranked from current opportunity stack",
+      detail: "Highest-ROI recommendation from autonomous opportunity scoring",
+      aiExplanation: "Opportunity prioritization blends performance, urgency, and execution readiness.",
+      recommendedAction: autonomousRecommendations[0]?.nextWorkflow || "Review executive brief opportunities",
+      confidence: enrichedBrief.confidence,
+      href: metricHref("biggest_opportunity"),
+    },
+    {
+      id: "biggest_risk",
+      label: "Biggest Risk",
+      value: opportunityRisk.biggestRisk,
+      status: "critical",
+      trendDirection: "down",
+      trendLabel: "AI-ranked risk to execution momentum",
+      detail: "Most immediate downside risk if unaddressed",
+      aiExplanation: "Risk prioritization weighs urgency, backlog pressure, and signal degradation.",
+      recommendedAction: enrichedBrief.recommendedNextAction?.title || "Address highest urgency blocker",
+      confidence: enrichedBrief.confidence,
+      href: metricHref("biggest_risk"),
     },
     {
       id: "active_campaigns",
@@ -401,6 +651,9 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Real campaign records in this workspace",
+      aiExplanation: "Active campaign count is sourced directly from connected campaign entities.",
+      recommendedAction: "Ensure each active campaign has at least one cross-channel extension",
+      confidence: 0.9,
       href: metricHref("active_campaigns"),
     },
     {
@@ -411,6 +664,9 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Draft and schedule approval queue",
+      aiExplanation: "Queue pressure increases delivery risk when approvals lag publishing cadence.",
+      recommendedAction: "Batch-approve top-priority drafts to unblock scheduled execution",
+      confidence: 0.85,
       href: metricHref("content_awaiting_approval"),
     },
     {
@@ -421,6 +677,9 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Upcoming scheduled and in-progress posts",
+      aiExplanation: "Scheduling coverage indicates near-term execution continuity.",
+      recommendedAction: "Backfill missing publishing days with repurposed winning assets",
+      confidence: 0.88,
       href: metricHref("scheduled_posts"),
     },
     {
@@ -431,6 +690,9 @@ export async function loadMarketingDirectorDashboard(input: {
       trendDirection: "unknown",
       trendLabel: null,
       detail: "Counts currently connected distribution channels",
+      aiExplanation: "Connected channels define the breadth of distribution and optimization opportunities.",
+      recommendedAction: "Connect one additional channel to increase cross-channel leverage",
+      confidence: 0.92,
       href: metricHref("connected_channels"),
     },
   ];
@@ -508,7 +770,11 @@ export async function loadMarketingDirectorDashboard(input: {
     cards,
     score,
     scoreTrend,
-    brief,
+    brief: enrichedBrief,
+    autonomousRecommendations,
+    biggestOpportunity: opportunityRisk.biggestOpportunity,
+    biggestRisk: opportunityRisk.biggestRisk,
+    memorySignals,
     dataCoverage,
     channelHealth,
     recentActivity,

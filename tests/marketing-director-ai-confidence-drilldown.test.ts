@@ -97,6 +97,18 @@ function dashboardFixture(): MarketingDirectorDashboard {
       metrics: [],
       priorityActions: [],
       recommendations: [],
+      autonomousRecommendations: [],
+      morningBrief: {
+        overnightChanges: [],
+        wins: [],
+        risks: [],
+        urgentActions: [],
+        opportunities: [],
+        marketingScoreChanges: [],
+        campaignPerformance: [],
+        aiRecommendations: [],
+        estimatedBusinessImpact: "",
+      },
     },
     dataCoverage: {
       workspaceId: "ws-1",

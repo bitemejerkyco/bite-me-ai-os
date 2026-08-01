@@ -9,6 +9,15 @@ describe("marketing director command router", () => {
   it("classifies campaign requests", () => {
     expect(classifyIntent("Create a launch campaign for spring"))
       .toBe("create_campaign");
+    expect(classifyIntent("Build a Q4 marketing plan")).toBe("create_campaign");
+    expect(classifyIntent("Launch our Labor Day promotion")).toBe("create_campaign");
+  });
+
+  it("classifies executive command phrases without manual workflow selection", () => {
+    expect(classifyIntent("Increase Amazon sales")).toBe("amazon_growth");
+    expect(classifyIntent("Find my biggest weakness")).toBe("improve_marketing_score");
+    expect(classifyIntent("Prepare next week's content")).toBe("plan_content");
+    expect(classifyIntent("Analyze Facebook performance")).toBe("analyze_channels");
   });
 
   it("builds proposal-only plans", () => {

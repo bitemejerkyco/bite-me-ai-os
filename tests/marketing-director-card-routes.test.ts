@@ -6,7 +6,16 @@ describe("marketing director card routes", () => {
     expect(EXECUTIVE_CARD_DESTINATIONS.marketing_score).toBe("/analytics/marketing-score");
     expect(EXECUTIVE_CARD_DESTINATIONS.marketing_health).toBe("/analytics/marketing-health");
     expect(EXECUTIVE_CARD_DESTINATIONS.revenue_impact).toBe("/analytics/revenue");
+    expect(EXECUTIVE_CARD_DESTINATIONS.lead_generation).toBe("/analytics/marketing-health");
+    expect(EXECUTIVE_CARD_DESTINATIONS.conversion_rate).toBe("/analytics/revenue");
+    expect(EXECUTIVE_CARD_DESTINATIONS.roas).toBe("/analytics/revenue");
+    expect(EXECUTIVE_CARD_DESTINATIONS.cac).toBe("/analytics/revenue");
+    expect(EXECUTIVE_CARD_DESTINATIONS.ltv).toBe("/analytics/revenue");
+    expect(EXECUTIVE_CARD_DESTINATIONS.organic_growth).toBe("/analytics/marketing-health");
+    expect(EXECUTIVE_CARD_DESTINATIONS.paid_growth).toBe("/analytics/revenue");
     expect(EXECUTIVE_CARD_DESTINATIONS.ai_confidence).toBe("/analytics/ai-confidence");
+    expect(EXECUTIVE_CARD_DESTINATIONS.biggest_opportunity).toBe("/analytics/executive-brief");
+    expect(EXECUTIVE_CARD_DESTINATIONS.biggest_risk).toBe("/analytics/executive-brief");
     expect(EXECUTIVE_CARD_DESTINATIONS.active_campaigns).toBe("/marketing/campaigns");
     expect(EXECUTIVE_CARD_DESTINATIONS.content_awaiting_approval).toBe("/content-library?status=awaiting-approval");
     expect(EXECUTIVE_CARD_DESTINATIONS.scheduled_posts).toBe("/calendar?view=scheduled");

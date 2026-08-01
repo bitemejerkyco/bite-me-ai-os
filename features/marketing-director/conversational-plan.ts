@@ -87,14 +87,14 @@ function includesAny(value: string, terms: string[]): boolean {
 export function classifyMarketingDirectorRequest(prompt: string): MarketingDirectorRequestClass {
   const value = normalizePrompt(prompt);
 
-  if (includesAny(value, ["improve my marketing score", "marketing score", "score improvement"])) return "SCORE_IMPROVEMENT";
-  if (includesAny(value, ["30-day campaign", "campaign", "launch campaign", "campaign brief"])) return "CAMPAIGN_PLANNING";
-  if (includesAny(value, ["content plan", "content calendar", "create content", "content strategy"])) return "CONTENT_PLANNING";
+  if (includesAny(value, ["improve my marketing score", "marketing score", "score improvement", "find my biggest weakness"])) return "SCORE_IMPROVEMENT";
+  if (includesAny(value, ["30-day campaign", "campaign", "launch campaign", "campaign brief", "q4 marketing plan", "retention campaign", "labor day promotion"])) return "CAMPAIGN_PLANNING";
+  if (includesAny(value, ["content plan", "content calendar", "create content", "content strategy", "prepare next week's content", "create a tiktok strategy"])) return "CONTENT_PLANNING";
   if (includesAny(value, ["review pending content", "pending approval", "approve drafts", "approval queue"])) return "CONTENT_APPROVAL";
-  if (includesAny(value, ["analyze connected channel", "channel performance", "channel analysis", "performance analysis"])) return "CHANNEL_ANALYSIS";
-  if (includesAny(value, ["amazon growth", "amazon advertising", "amazon ads", "roas", "acos", "ppc"])) return "AMAZON_GROWTH";
+  if (includesAny(value, ["analyze connected channel", "channel performance", "channel analysis", "performance analysis", "analyze facebook performance"])) return "CHANNEL_ANALYSIS";
+  if (includesAny(value, ["amazon growth", "amazon advertising", "amazon ads", "roas", "acos", "ppc", "increase amazon sales"])) return "AMAZON_GROWTH";
   if (includesAny(value, ["connect integration", "integrations", "connect tiktok", "connect email", "connect amazon"])) return "INTEGRATION_SETUP";
-  if (includesAny(value, ["executive summary", "brief summary", "daily brief", "summary"])) return "EXECUTIVE_SUMMARY";
+  if (includesAny(value, ["executive summary", "brief summary", "daily brief", "summary", "biggest opportunity", "biggest risk"])) return "EXECUTIVE_SUMMARY";
 
   return "GENERAL_MARKETING_REQUEST";
 }

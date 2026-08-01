@@ -119,6 +119,35 @@ export default function DailyBriefPanel({
             ))}
           </ul>
       </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <article className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Executive morning brief</p>
+          <ul className="mt-2 space-y-1 text-sm text-slate-600">
+            {currentBrief.morningBrief.overnightChanges.slice(0, 3).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+            {currentBrief.morningBrief.wins.slice(0, 2).map((line) => (
+              <li key={line}>Win: {line}</li>
+            ))}
+            {currentBrief.morningBrief.risks.slice(0, 2).map((line) => (
+              <li key={line}>Risk: {line}</li>
+            ))}
+          </ul>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">AI guidance</p>
+          <ul className="mt-2 space-y-1 text-sm text-slate-600">
+            {currentBrief.morningBrief.urgentActions.slice(0, 2).map((line) => (
+              <li key={line}>Urgent: {line}</li>
+            ))}
+            {currentBrief.morningBrief.opportunities.slice(0, 2).map((line) => (
+              <li key={line}>Opportunity: {line}</li>
+            ))}
+            <li>{currentBrief.morningBrief.estimatedBusinessImpact}</li>
+          </ul>
+        </article>
+      </div>
     </section>
   );
 }

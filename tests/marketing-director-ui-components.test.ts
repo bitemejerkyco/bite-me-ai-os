@@ -50,10 +50,10 @@ describe("marketing director dashboard component polish", () => {
   it("renders command center heading, suggestion chips, and advisor safety helper text", () => {
     const html = renderToStaticMarkup(createElement(CommandCenter, { modeLabel: "Advisor" }));
 
-    expect(html).toContain("What would you like your Marketing Director to do?");
-    expect(html).toContain("Build my next 30-day campaign");
-    expect(html).toContain("Improve my Amazon advertising");
-    expect(html).toContain("Advisor mode creates a reviewable plan");
+    expect(html).toContain("What should your AI CMO do next?");
+    expect(html).toContain("Build my September campaign");
+    expect(html).toContain("Increase Amazon sales");
+    expect(html).toContain("The AI classifies intent and builds the workflow automatically");
     expect(html).toContain("Generate proposal");
   });
 

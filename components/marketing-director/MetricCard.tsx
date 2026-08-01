@@ -19,6 +19,9 @@ export default function MetricCard({ card }: { card: ExecutiveMetricCard }) {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{card.label}</p>
         <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">{card.value}</p>
         <p className="mt-2 text-sm text-slate-600">{card.detail}</p>
+        {card.aiExplanation ? <p className="mt-2 text-xs text-slate-600">AI: {card.aiExplanation}</p> : null}
+        {card.recommendedAction ? <p className="mt-1 text-xs font-semibold text-slate-700">Recommended action: {card.recommendedAction}</p> : null}
+        {typeof card.confidence === "number" ? <p className="mt-1 text-xs text-slate-500">Confidence: {Math.round(card.confidence * 100)}%</p> : null}
         {card.trendLabel ? <p className="mt-3 text-xs font-semibold text-slate-500">{card.trendLabel}</p> : null}
         <p className="mt-3 text-xs font-semibold text-violet-700 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
           View details

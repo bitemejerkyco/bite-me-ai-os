@@ -6,6 +6,7 @@ import { recommendationActionForCategory } from "@/features/marketing-director/s
 import { calculateMarketingUrgency } from "@/features/marketing-director/urgency";
 import {
   normalizeConfidence,
+  type AutonomousExecutiveRecommendation,
   type DailyBrief,
   type MarketingRecommendation,
   type RecommendationEvidence,
@@ -199,6 +200,87 @@ function operationalImpactFromAction(action: DailyBrief["recommendedNextAction"]
   return action.impact;
 }
 
+function safeList(values: string[], fallback: string): string {
+  if (values.length === 0) return fallback;
+  return values.join(", ");
+}
+
+function buildExecutiveNarrative(input: {
+  strongest: string;
+  weakness: string;
+  topActionLabel: string;
+  unavailableData: string;
+  impact: string;
+  scoreValue: number;
+  scoreMax: number;
+  confidencePercent: number;
+  revenueAvailability: "available" | "unavailable";
+  revenueLabel: string;
+  urgencySummary: string;
+  needsAttention: string[];
+  performingWell: string[];
+}): string {
+  const weaknessSentence = input.weakness === "no critical weakness"
+    ? "No critical score category is currently flagged, so momentum can come from disciplined execution."
+    : `Largest weakness: ${input.weakness}.`;
+
+  return [
+    `Today, Marketing Score is ${input.scoreValue.toFixed(1)} of ${input.scoreMax}, with ${input.confidencePercent}% data confidence across connected sources.`,
+    `Strongest signal: ${input.strongest}.`,
+    weaknessSentence,
+    `Highest-priority action: ${input.topActionLabel}, because it addresses the most immediate execution risk in the current queue.`,
+    `Urgency context: ${input.urgencySummary}`,
+    `Performance strength to protect: ${safeList(input.performingWell.slice(0, 2), "No verified performance strength is available yet from connected records")}.`,
+    `Immediate risks: ${safeList(input.needsAttention.slice(0, 2), "No critical operational blocker is currently flagged")}.`,
+    `Data limitation focus: ${input.unavailableData}.`,
+    input.revenueAvailability === "available"
+      ? `Connected revenue signal in the last 30 days is ${input.revenueLabel}, which should guide pacing and prioritization decisions.`
+      : "Revenue impact remains unavailable from connected sources, so financial prioritization should be treated as directional until coverage improves.",
+    `Expected operational impact if the top priority is completed today: ${input.impact}`,
+  ].join(" ");
+}
+
+function buildMorningBrief(input: {
+  scoreDeltaLabel: string;
+  performingWell: string[];
+  needsAttention: string[];
+  opportunities: string[];
+  recentDrafts24h: number;
+  recentScheduledPosts24h: number;
+  recentAiEvents24h: number;
+  recommendedNextActionTitle: string | null;
+  bestPerformanceSignal: string;
+  revenueLabel: string;
+  revenueAvailable: boolean;
+}): DailyBrief["morningBrief"] {
+  return {
+    overnightChanges: [
+      `${input.recentDrafts24h} new draft(s) were created in the last 24 hours.`,
+      `${input.recentScheduledPosts24h} scheduled-post update(s) were recorded in the last 24 hours.`,
+      `${input.recentAiEvents24h} AI event(s) were recorded overnight.`,
+    ],
+    wins: input.performingWell.length > 0 ? input.performingWell.slice(0, 3) : ["No confirmed wins were recorded from connected sources yet."],
+    risks: input.needsAttention.length > 0 ? input.needsAttention.slice(0, 3) : ["No immediate critical risks are currently flagged."],
+    urgentActions: input.recommendedNextActionTitle ? [input.recommendedNextActionTitle] : ["Review top priority actions and confirm the next safe execution step."],
+    opportunities: input.opportunities.length > 0 ? input.opportunities.slice(0, 3) : ["Repurpose strongest available content across connected channels."],
+    marketingScoreChanges: [input.scoreDeltaLabel],
+    campaignPerformance: [
+      input.bestPerformanceSignal,
+      input.revenueAvailable
+        ? `Connected revenue signal: ${input.revenueLabel}.`
+        : "Revenue signal is unavailable and should be treated as directional.",
+    ],
+    aiRecommendations: [
+      "Prioritize highest-ROI recommendation first.",
+      "Preserve approval gates before scheduling or publishing.",
+      "Reuse top-performing assets across multiple connected channels.",
+    ],
+    estimatedBusinessImpact: input.revenueAvailable
+      ? "Expected impact: protect short-term revenue momentum while increasing execution consistency."
+      : "Expected impact: improve marketing execution readiness and confidence coverage in the next cycle.",
+  };
+}
+
 export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
   const generatedAt = new Date().toISOString();
   const priorityActions = buildPriorityActions({
@@ -232,6 +314,7 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
   });
 
   const recommendations = buildRecommendations(input);
+  const autonomousRecommendations: AutonomousExecutiveRecommendation[] = [];
 
   const urgency = calculateMarketingUrgency({
     criticalScoreCategories: input.score.categories.filter((category) => category.status === "critical").length,
@@ -316,16 +399,37 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
   const weakness = largestWeakness(input);
   const unavailableData = unavailableDataSummary(input);
   const topActionLabel = recommendedNextAction ? recommendedNextAction.title : "review connected performance signals";
+  const confidencePercent = Math.round(normalizeConfidence((input.score.confidence + input.dataCoverage.overallConfidence) / 2) * 100);
 
-  const executiveNarrative = [
-    `Strongest signal: ${strongest}.`,
-    weakness === "no critical weakness"
-      ? "No critical score category is currently flagged."
-      : `Largest weakness: ${weakness}.`,
-    `Highest-priority action: ${topActionLabel}.`,
-    `Unavailable data: ${unavailableData}.`,
-    `Likely operational impact: ${operationalImpactFromAction(recommendedNextAction)}`,
-  ].join(" ");
+  const executiveNarrative = buildExecutiveNarrative({
+    strongest,
+    weakness,
+    topActionLabel,
+    unavailableData,
+    impact: operationalImpactFromAction(recommendedNextAction),
+    scoreValue: input.score.score,
+    scoreMax: input.score.maximumScore,
+    confidencePercent,
+    revenueAvailability: input.metrics.revenueLast30Days === null ? "unavailable" : "available",
+    revenueLabel,
+    urgencySummary: urgency.summary,
+    needsAttention,
+    performingWell,
+  });
+
+  const morningBrief = buildMorningBrief({
+    scoreDeltaLabel: scoreDeltaLabel(input.scoreTrend),
+    performingWell,
+    needsAttention,
+    opportunities: recommendations.map((item) => item.title),
+    recentDrafts24h: input.metrics.recentDrafts24h,
+    recentScheduledPosts24h: input.metrics.recentScheduledPosts24h,
+    recentAiEvents24h: input.metrics.recentAiEvents24h,
+    recommendedNextActionTitle: recommendedNextAction?.title || null,
+    bestPerformanceSignal: bestPerformanceSignal(input),
+    revenueLabel,
+    revenueAvailable: input.metrics.revenueLast30Days !== null,
+  });
 
   return {
     workspaceId: input.workspaceId,
@@ -358,6 +462,8 @@ export function buildDailyBrief(input: DailyBriefInput): DailyBrief {
     metrics,
     priorityActions,
     recommendations,
+    autonomousRecommendations,
+    morningBrief,
   };
 }
 
@@ -386,6 +492,8 @@ export async function saveDailyBriefSnapshot(brief: DailyBrief): Promise<void> {
       recommendedNextAction: brief.recommendedNextAction,
       executiveNarrative: brief.executiveNarrative,
       urgency: brief.urgency,
+      morningBrief: brief.morningBrief,
+      autonomousRecommendations: brief.autonomousRecommendations,
     },
   } as never, { onConflict: "workspace_id,brief_date" });
 }
