@@ -8,42 +8,50 @@ export type SuccessMessage = {
 export const SUCCESS_MESSAGES = {
   campaignCreated(): SuccessMessage {
     return {
-      title: "Campaign created successfully.",
-      detail: "Recommended next step: generate content from this plan.",
+      title: "Campaign created",
+      detail: "Next step: Generate content for the campaign.",
       nextActionLabel: "Generate content",
       nextActionHref: "/studio",
     };
   },
   contentSaved(): SuccessMessage {
     return {
-      title: "Content saved successfully.",
-      detail: "Recommended next step: review the draft and move it into scheduling when ready.",
-      nextActionLabel: "Open calendar",
+      title: "Content saved",
+      detail: "Next step: Review the draft and move it into scheduling when ready.",
+      nextActionLabel: "Open Calendar",
       nextActionHref: "/calendar",
     };
   },
   contentApproved(): SuccessMessage {
     return {
-      title: "Draft approved successfully.",
-      detail: "Recommended next step: schedule it in the publishing calendar.",
-      nextActionLabel: "Schedule content",
+      title: "Draft approved",
+      detail: "Next step: Schedule it for publishing.",
+      nextActionLabel: "Open Calendar",
       nextActionHref: "/calendar",
     };
   },
   mediaUploaded(): SuccessMessage {
     return {
-      title: "Media uploaded successfully.",
-      detail: "Recommended next step: use it in a new draft or video project.",
-      nextActionLabel: "Open AI Studio",
-      nextActionHref: "/studio",
+      title: "Logo uploaded",
+      detail: "Next step: Use it in your first campaign.",
+      nextActionLabel: "Create Campaign",
+      nextActionHref: "/marketing/campaigns",
     };
   },
   billingUpdated(): SuccessMessage {
     return {
-      title: "Billing details updated.",
-      detail: "Recommended next step: return to usage and credits to confirm your workspace is ready.",
-      nextActionLabel: "Open billing",
-      nextActionHref: "/settings/billing",
+      title: "Integration connected",
+      detail: "Next step: Test the connection and run your first sync.",
+      nextActionLabel: "Test Connection",
+      nextActionHref: "/integrations",
+    };
+  },
+  businessProfileSaved(): SuccessMessage {
+    return {
+      title: "Business profile saved",
+      detail: "Next step: Upload your logo and brand assets.",
+      nextActionLabel: "Open Media Library",
+      nextActionHref: "/media",
     };
   },
 };

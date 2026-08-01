@@ -45,7 +45,7 @@ function buildSnapshotNarrative(input: {
     `Primary strength to protect: ${topStrength}`,
     input.revenueAvailability === "available"
       ? "Revenue impact is connected and can be used for prioritization decisions today."
-      : "Revenue impact is still unavailable from connected sources, so financial guidance should be treated as directional.",
+      : "Revenue tracking is not connected yet, so financial guidance is directional until data coverage improves.",
     `Integration coverage focus: ${missing}.`,
     `Recommended next step is to ${nextAction}.`,
     `Recent activity context: ${recentShift}`,
@@ -63,10 +63,10 @@ export function restoreDailyBriefFromSnapshot(row: StoredBriefRow): DailyBrief |
   if (metrics.length === 0) return null;
 
   const generatedAt = String(dataCoverage.generatedAt || row.updated_at || row.created_at || new Date().toISOString());
-  const dataCoverageSummary = String(dataCoverage.dataCoverageSummary || "Coverage summary unavailable.");
+  const dataCoverageSummary = String(dataCoverage.dataCoverageSummary || "Connect more marketing channels to improve PostMotive recommendations.");
   const scoreDeltaLabel = String(dataCoverage.scoreDeltaLabel || "No prior Marketing Score snapshot is available yet.");
   const revenueAvailability = String(dataCoverage.revenueAvailability || "unavailable") === "available" ? "available" : "unavailable";
-  const bestPerformanceSignal = String(dataCoverage.bestPerformanceSignal || "No strong performance signal is available yet from connected analytics sources.");
+  const bestPerformanceSignal = String(dataCoverage.bestPerformanceSignal || "PostMotive needs more connected analytics data before it can identify stronger performance signals.");
   const missingIntegrations = asStringArray(dataCoverage.missingIntegrations);
   const sinceLastVisit = asStringArray(dataCoverage.sinceLastVisit);
   const needsAttention = asStringArray(dataCoverage.needsAttention);

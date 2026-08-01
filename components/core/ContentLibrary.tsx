@@ -351,7 +351,7 @@ export default function ContentLibrary() {
               </button>
             ))
           ) : (
-            <GuidedEmptyState title="No content yet." description="Generate or create content first, then review and approve it here before scheduling." estimatedTime="3 minutes" primaryAction={{ label: "Generate Content", href: "/studio" }} secondaryAction={{ label: "Learn the content flow", href: "/help" }} />
+            <GuidedEmptyState title="No content yet" description="Generate your first campaign or create a draft manually." estimatedTime="3 minutes" primaryAction={{ label: "Generate Content", href: "/studio" }} secondaryAction={{ label: "Learn How Content Works", href: "/help" }} />
           )}
         </div>
         {message ? <p className="mt-4 text-sm text-rose-700">{message}</p> : null}

@@ -110,7 +110,7 @@ describe("marketing director dashboard component polish", () => {
 
     expect(html).toContain("<details");
     expect(html).toContain("Marketing Score category breakdown");
-    expect(html).toContain("No prior snapshot available");
+    expect(html).toContain("Baseline snapshot will appear after more activity is recorded.");
     expect(html).toContain("href=\"/onboarding\"");
   });
 

@@ -8,6 +8,18 @@ import { getPageHelp } from "@/features/help/page-help-registry";
 import { loadOnboardingChecklist } from "@/features/help/onboarding-checklist";
 import type { HelpMode } from "@/features/help/types";
 
+async function loadBetaTesterModeEnabled(): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("feature_flags")
+    .select("enabled")
+    .eq("key", "beta_tester_mode")
+    .maybeSingle();
+
+  if (error || !data) return false;
+  return Boolean((data as { enabled?: boolean | null }).enabled);
+}
+
 export async function loadHelpPreference() {
   const viewer = await getViewerContext();
   if (!viewer.userId) {
@@ -65,6 +77,8 @@ export async function loadHelpContext(route: string) {
   const viewer = await getViewerContext();
   const preference = await loadHelpPreference();
   const pageHelp = getPageHelp(route);
+  const betaTesterMode = await loadBetaTesterModeEnabled();
+  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 
   if (!viewer.userId) {
     return {
@@ -74,6 +88,8 @@ export async function loadHelpContext(route: string) {
       onboarding: null,
       integrations: [],
       workflow: null,
+      betaTesterMode,
+      appVersion,
     };
   }
 
@@ -101,6 +117,8 @@ export async function loadHelpContext(route: string) {
         pendingNotifications: Number(notificationsResult.count || 0),
         pendingApprovals: Number(approvalsResult.count || 0),
       },
+      betaTesterMode,
+      appVersion,
     };
   } catch {
     return {
@@ -110,6 +128,8 @@ export async function loadHelpContext(route: string) {
       onboarding: null,
       integrations: [],
       workflow: null,
+      betaTesterMode,
+      appVersion,
     };
   }
 }

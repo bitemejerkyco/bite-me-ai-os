@@ -52,6 +52,8 @@ type HelpContextPayload = {
     pendingApprovals: number;
     connectedIntegrations: number;
     isSuperAdmin: boolean;
+    betaTesterMode: boolean;
+    appVersion: string;
   };
 };
 
@@ -105,6 +107,8 @@ export function HelpProvider({
     pendingApprovals: 0,
     connectedIntegrations: 0,
     isSuperAdmin: initialIsSuperAdmin,
+    betaTesterMode: false,
+    appVersion: "dev",
   });
   const [activeWalkthrough, setActiveWalkthrough] = useState<WalkthroughDefinition | null>(null);
   const [walkthroughStepIndex, setWalkthroughStepIndex] = useState(0);
@@ -156,6 +160,8 @@ export function HelpProvider({
           pendingApprovals,
           connectedIntegrations,
           isSuperAdmin: Boolean(payload.data?.viewer?.isSuperAdmin || initialIsSuperAdmin),
+          betaTesterMode: Boolean(payload.data?.betaTesterMode),
+          appVersion: String(payload.data?.appVersion || "dev"),
         });
         if (payload.data?.preference) {
           setPreference({

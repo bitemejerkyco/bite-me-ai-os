@@ -288,7 +288,7 @@ export default function MediaLibrary() {
           />
         </div>
         {filtered.length === 0 ? (
-          <div className="mt-6"><GuidedEmptyState title="No media assets yet." description="Upload logos, product photos, and brand assets first so content creation has something real to work with." estimatedTime="2 minutes" primaryAction={{ label: "Upload Media", href: "/media" }} secondaryAction={{ label: "Learn how Media Library works", href: "/help" }} /></div>
+          <div className="mt-6"><GuidedEmptyState title="Your Media Library is empty" description="Upload your logo, product photos, videos, and brand assets so PostMotive can create more accurate branded content." estimatedTime="2-4 minutes" primaryAction={{ label: "Upload Media", href: "/media" }} secondaryAction={{ label: "Create Folder", href: "/media" }} /></div>
         ) : (
           <div data-help="media-asset-grid" className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((asset) => (

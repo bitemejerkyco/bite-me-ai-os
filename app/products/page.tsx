@@ -24,10 +24,10 @@ export default async function ProductsPage() {
               <p className="text-sm font-semibold text-slate-900">Available product records</p>
               <p className="mt-1 text-2xl font-black text-slate-900">{count}</p>
             </div>
-            {count === 0 ? <GuidedEmptyState title="No products yet." description="Product-aware recommendations stay limited until records are available in this workspace." estimatedTime="When product data is added" primaryAction={{ label: "Open Help Center", href: "/help" }} secondaryAction={{ label: "Return to Campaigns", href: "/marketing/campaigns" }} /> : null}
+            {count === 0 ? <GuidedEmptyState title="No products or services added" description="Add products so PostMotive can generate product-specific campaigns, promotions, and content." estimatedTime="3-5 minutes" primaryAction={{ label: "Add Product", href: "/products" }} secondaryAction={{ label: "Import CSV", href: "/help" }} /> : null}
           </div>
         ) : (
-          <GuidedEmptyState title="Product catalog support is limited here." description="This environment does not expose a products table yet, so product-specific guidance is intentionally marked as limited instead of pretending the feature is available." estimatedTime="Coming soon" primaryAction={{ label: "Open Help Center", href: "/help" }} secondaryAction={{ label: "Open Campaigns", href: "/marketing/campaigns" }} />
+          <GuidedEmptyState title="No products or services added" description="Add products so PostMotive can generate product-specific campaigns, promotions, and content." estimatedTime="3-5 minutes" primaryAction={{ label: "Add Product", href: "/products" }} secondaryAction={{ label: "Import CSV", href: "/help" }} />
         )}
       </section>
     </AppShell>

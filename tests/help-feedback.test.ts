@@ -9,4 +9,14 @@ describe("feedback redaction", () => {
     expect(result).not.toContain("sk_live_secret");
     expect(result).not.toContain("pk_test_public");
   });
+
+  it("redacts api_key, token, and password query values", () => {
+    const result = redactFeedbackDescription("https://example.test?api_key=my-key&token=my-token&password=my-pass");
+    expect(result).toContain("api_key=[redacted]");
+    expect(result).toContain("token=[redacted]");
+    expect(result).toContain("password=[redacted]");
+    expect(result).not.toContain("my-key");
+    expect(result).not.toContain("my-token");
+    expect(result).not.toContain("my-pass");
+  });
 });

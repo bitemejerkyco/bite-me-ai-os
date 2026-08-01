@@ -19,7 +19,7 @@ export default async function PublishingQueuePage() {
     <AppShell title="Publishing Queue" eyebrow="Execution state after scheduling">
       <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-6">
         {items.length === 0 ? (
-          <GuidedEmptyState title="Nothing in the queue yet." description="Review scheduled content first, then items will appear here as they move toward publishing or retry." estimatedTime="2 minutes" primaryAction={{ label: "Open Calendar", href: "/calendar" }} secondaryAction={{ label: "Learn the publishing flow", href: "/help" }} />
+          <GuidedEmptyState title="Nothing is waiting to publish" description="Approved and scheduled content will appear here." estimatedTime="2 minutes" primaryAction={{ label: "Open Calendar", href: "/calendar" }} secondaryAction={{ label: "Learn the publishing flow", href: "/help" }} />
         ) : (
           <div className="space-y-3">
             {items.map((item) => (

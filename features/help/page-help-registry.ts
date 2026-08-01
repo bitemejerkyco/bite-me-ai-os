@@ -167,6 +167,35 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
     academyLessonId: "schedule-first-post",
   },
   {
+    id: "marketing-command-center",
+    route: "/marketing",
+    title: "Marketing",
+    shortDescription: "Plan campaigns, define objectives, and move from strategy into content execution.",
+    purpose: "This page is the campaign planning workspace where goals become concrete marketing plans.",
+    whyItMatters: "A clear plan keeps AI output focused and improves approval and scheduling quality.",
+    recommendedFirstAction: "Create your first campaign plan with one objective and one primary channel.",
+    estimatedTime: "2-4 minutes",
+    quickStartSteps: [
+      { id: "marketing-start-1", title: "Create a campaign", description: "Save a campaign name, objective, and channel.", route: "/marketing" },
+      { id: "marketing-start-2", title: "Review the campaign", description: "Confirm objective and timing before generating content.", route: "/marketing" },
+      { id: "marketing-start-3", title: "Generate content", description: "Open AI Studio with campaign context and create a draft.", route: "/studio" },
+    ],
+    tips: [
+      "Start small: one campaign with one clear objective is easier to execute.",
+      "Use saved campaign context before generating content.",
+    ],
+    terminology: terms("Workflow", "Content Readiness", "Approval"),
+    commonQuestions: [
+      { question: "What should I do first?", answer: "Create a campaign plan with a clear objective and channel." },
+      { question: "Where do I generate content?", answer: "After saving a campaign, open AI Studio to generate drafts." },
+    ],
+    relatedPages: [
+      { label: "AI Studio", href: "/studio" },
+      { label: "Content Library", href: "/content" },
+    ],
+    academyLessonId: "generate-first-plan",
+  },
+  {
     id: "campaigns",
     route: "/marketing/campaigns",
     title: "Campaigns",
@@ -343,6 +372,35 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
       { label: "Integrations", href: "/integrations" },
     ],
     academyLessonId: "complete-business-setup",
+  },
+  {
+    id: "pricing",
+    route: "/pricing",
+    title: "Pricing",
+    shortDescription: "Review available plans and choose the subscription level that fits your workspace needs.",
+    purpose: "This page presents plan options and the next step into secure checkout.",
+    whyItMatters: "Plan and credit readiness determine how smoothly your team can scale content and publishing workflows.",
+    recommendedFirstAction: "Compare plan tiers and confirm the right fit for your expected usage.",
+    estimatedTime: "2-4 minutes",
+    quickStartSteps: [
+      { id: "pricing-start-1", title: "Review plan options", description: "Compare available plan tiers and included capabilities.", route: "/pricing" },
+      { id: "pricing-start-2", title: "Confirm billing readiness", description: "Check billing settings before final checkout decisions.", route: "/settings/billing" },
+      { id: "pricing-start-3", title: "Continue to billing", description: "Open Billing Settings to manage subscription and invoices.", route: "/settings/billing" },
+    ],
+    tips: [
+      "Use Billing Settings for invoice and credit visibility.",
+      "If plan data is limited, keep your current setup and retry later.",
+    ],
+    terminology: terms("Credits", "AI Credits", "Video Credits"),
+    commonQuestions: [
+      { question: "Where do I manage invoices?", answer: "Open Billing Settings for invoice history and plan details." },
+      { question: "How do credits relate to plans?", answer: "Plans define included capabilities, while credits track available usage." },
+    ],
+    relatedPages: [
+      { label: "Billing Settings", href: "/settings/billing" },
+      { label: "Help Center", href: "/help" },
+    ],
+    academyLessonId: "manage-credits-and-billing",
   },
   {
     id: "billing",

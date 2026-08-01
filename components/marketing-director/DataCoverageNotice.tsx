@@ -34,7 +34,7 @@ export default function DataCoverageNotice({ coverage }: { coverage: DataCoverag
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Connected sources</p>
           <ul className="mt-2 space-y-1 text-sm text-slate-700">
             {connected.length === 0 ? (
-              <li>No healthy sources connected yet.</li>
+              <li>Connect more marketing channels to improve PostMotive recommendations.</li>
             ) : (
               connected.slice(0, 5).map((source) => <li key={source.key}>{source.label}</li>)
             )}

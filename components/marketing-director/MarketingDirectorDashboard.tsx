@@ -1,6 +1,10 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
 import CommandCenter from "@/components/marketing-director/CommandCenter";
 import AutonomousRecommendationCard from "@/components/marketing-director/AutonomousRecommendationCard";
-import DirectorActivity from import DirectorActivity from "@/components/marketing-director/DirectorActivity";
+import DirectorActivity from "@/components/marketing-director/DirectorActivity";
 import DailyBriefPanel from "@/components/marketing-director/DailyBriefPanel";
 import ChannelHealth from "@/components/marketing-director/ChannelHealth";
 import DataCoverageNotice from "@/components/marketing-director/DataCoverageNotice";
@@ -9,6 +13,7 @@ import MarketingScoreCard from "@/components/marketing-director/MarketingScoreCa
 import MetricCard from "@/components/marketing-director/MetricCard";
 import PriorityActions from "@/components/marketing-director/PriorityActions";
 import RecommendationCard from "@/components/marketing-director/RecommendationCard";
+import { useHelp } from "@/components/help/HelpContext";
 import type { MarketingDirectorDashboard } from "@/features/marketing-director/dashboard";
 
 const modeLabel: Record<MarketingDirectorDashboard["modeSettings"]["operatingMode"], string> = {
@@ -24,8 +29,44 @@ export default function MarketingDirectorDashboardView({
   dashboard: MarketingDirectorDashboard;
   canViewTechnicalDetails: boolean;
 }) {
+  const { walkthrough, setAssistantOpen } = useHelp();
   const connectedChannels = dashboard.channelHealth.filter((channel) => channel.connected).length;
   const productSource = dashboard.dataCoverage.sources.find((source) => source.key === "products") || null;
+
+  const welcomeStorageKey = useMemo(() => `postmotive-welcome-state:${dashboard.workspaceName}`, [dashboard.workspaceName]);
+
+  const [welcomeStateStorage, setWelcomeStateStorage] = useState<{ collapsed: boolean; dismissed: boolean }>(() => {
+    if (typeof window === "undefined") {
+      return { collapsed: false, dismissed: false };
+    }
+    try {
+      const saved = window.localStorage.getItem(welcomeStorageKey);
+      if (!saved) return { collapsed: false, dismissed: false };
+      const parsed = JSON.parse(saved) as { collapsed?: boolean; dismissed?: boolean };
+      return {
+        collapsed: Boolean(parsed.collapsed),
+        dismissed: Boolean(parsed.dismissed),
+      };
+    } catch {
+      return { collapsed: false, dismissed: false };
+    }
+  });
+
+  const welcomeCollapsed = welcomeStateStorage.collapsed;
+  const welcomeDismissed = welcomeStateStorage.dismissed;
+
+  function persistWelcomeState(next: { collapsed?: boolean; dismissed?: boolean }) {
+    const value = {
+      collapsed: next.collapsed ?? welcomeCollapsed,
+      dismissed: next.dismissed ?? welcomeDismissed,
+    };
+    setWelcomeStateStorage({
+      collapsed: Boolean(value.collapsed),
+      dismissed: Boolean(value.dismissed),
+    });
+    window.localStorage.setItem(welcomeStorageKey, JSON.stringify(value));
+  }
+
   const welcomeState = dashboard.dataCoverage.sources.some((source) => !source.configured)
     && connectedChannels < 2
     && (productSource?.recordCount || 0) === 0;
@@ -46,7 +87,7 @@ export default function MarketingDirectorDashboardView({
         firstName={dashboard.firstName}
       />
 
-      <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-5">
+      <section data-help="dashboard-ai-value-summary" className="rounded-[2rem] border border-slate-200 bg-white/90 p-5">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">AI value summary</p>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">{dashboard.greeting}, {dashboard.firstName}.</h2>
         <p className="mt-2 text-sm text-slate-700">PostMotive found:</p>
@@ -62,31 +103,59 @@ export default function MarketingDirectorDashboardView({
         </p>
       </section>
 
-      {welcomeState ? (
-        <section className="rounded-[2rem] border border-violet-200 bg-violet-50/80 p-5">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">Welcome to PostMotive</p>
-          <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">Your AI Marketing Director is ready to help</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
-            Start with a goal and PostMotive will help you plan, create, approve, schedule, and improve your marketing without hiding the real blockers.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {[
-              "Grow my business",
-              "Launch a campaign",
-              "Increase Amazon sales",
-              "Build a content calendar",
-              "Improve my Marketing Score",
-              "Connect my first channel",
-            ].map((goal) => (
-              <span key={goal} className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700">
-                {goal}
-              </span>
-            ))}
+      {welcomeState && !welcomeDismissed ? (
+        <section data-help="dashboard-welcome" className="rounded-[2rem] border border-violet-200 bg-violet-50/80 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">Welcome to PostMotive</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">Your AI Marketing Director helps you move from setup to execution.</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+                Your AI Marketing Director helps you plan campaigns, create content, organize approvals, schedule publishing, and improve performance.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => persistWelcomeState({ collapsed: !welcomeCollapsed })} className="rounded-xl border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700">
+                {welcomeCollapsed ? "Expand" : "Collapse"}
+              </button>
+              <button type="button" onClick={() => persistWelcomeState({ dismissed: true })} className="rounded-xl border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700">
+                Dismiss
+              </button>
+            </div>
           </div>
+
+          {!welcomeCollapsed ? (
+            <>
+              <div className="mt-4 rounded-2xl border border-violet-200 bg-white/90 p-4">
+                <p className="text-sm font-semibold text-slate-900">Recommended setup:</p>
+                <ol className="mt-2 space-y-1 text-sm text-slate-700">
+                  <li>1. Complete your business profile</li>
+                  <li>2. Upload your logo and brand assets</li>
+                  <li>3. Add products or services</li>
+                  <li>4. Connect your first marketing channel</li>
+                  <li>5. Generate your first marketing plan</li>
+                </ol>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/onboarding" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500">
+                  Start Setup
+                </Link>
+                <button type="button" onClick={() => void walkthrough.start("dashboard-overview")} className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">
+                  Take a 2-Minute Tour
+                </button>
+                <button type="button" onClick={() => setAssistantOpen(true)} className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">
+                  Ask PostMotive
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-slate-700">Continue setup from the onboarding checklist or reopen this panel any time.</p>
+          )}
         </section>
       ) : null}
 
-      <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} canViewTechnicalDetails={canViewTechnicalDetails} />
+      <div data-help="dashboard-command-center">
+        <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} canViewTechnicalDetails={canViewTechnicalDetails} />
+      </div>
 
       <DirectorActivity />
 

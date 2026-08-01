@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import GuidedEmptyState from "@/components/help/GuidedEmptyState";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import { loadWorkspaceIntegrationDiagnostics } from "@/features/integrations/core/diagnostics";
 
@@ -37,6 +38,7 @@ const SETTINGS_ROUTE: Record<string, string | null> = {
 export default async function IntegrationsPage() {
   const context = await requireWorkspaceContext();
   const cards = await loadWorkspaceIntegrationDiagnostics(context.workspaceId);
+  const connectedCount = cards.filter((card) => card.state === "connected").length;
 
   return (
     <AppShell title="Integrations" eyebrow="Connected channels and data sources">
@@ -85,6 +87,18 @@ export default async function IntegrationsPage() {
             );
           })}
         </div>
+
+        {connectedCount === 0 ? (
+          <div className="mt-5">
+            <GuidedEmptyState
+              title="No integrations connected"
+              description="Connect your first marketing channel to unlock publishing and performance insights."
+              estimatedTime="2-4 minutes"
+              primaryAction={{ label: "Connect a Channel", href: "/settings/integrations/tiktok" }}
+              secondaryAction={{ label: "Send Beta Feedback", href: "/help" }}
+            />
+          </div>
+        ) : null}
       </section>
     </AppShell>
   );

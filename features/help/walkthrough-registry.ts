@@ -4,13 +4,17 @@ export const WALKTHROUGH_REGISTRY: WalkthroughDefinition[] = [
   {
     id: "dashboard-overview",
     route: "/",
-    version: "1",
+    version: "2",
     title: "Marketing Director dashboard walkthrough",
     steps: [
-      { id: "dash-1", title: "Executive brief", description: "Start here to see the current priority summary and recommended next actions.", targetSelector: '[data-help="dashboard-executive-brief"]' },
-      { id: "dash-2", title: "Command center", description: "Submit a request here when you want a plan, content direction, or approval-aware next step.", targetSelector: '[data-help="dashboard-command-center"]' },
-      { id: "dash-3", title: "Priority actions", description: "Use these links when you need to jump directly into the most urgent workflow.", targetSelector: '[data-help="dashboard-priority-actions"]' },
-      { id: "dash-4", title: "Marketing score and health", description: "Review these cards to understand confidence, risk, and data coverage before acting.", targetSelector: '[data-help="dashboard-score"]' },
+      { id: "dash-1", title: "Welcome to PostMotive", description: "This dashboard is your executive overview for marketing priorities and progress.", targetSelector: '[data-help="dashboard-welcome"]' },
+      { id: "dash-2", title: "Executive Brief", description: "Use the brief to understand current status, blockers, and recommended next action.", targetSelector: '[data-help="dashboard-executive-brief"]' },
+      { id: "dash-3", title: "AI Value Summary", description: "This summary uses real workspace records to show setup and workflow readiness.", targetSelector: '[data-help="dashboard-ai-value-summary"]' },
+      { id: "dash-4", title: "Top Actions", description: "Actions are ranked by urgency and expected impact so you can act quickly.", targetSelector: '[data-help="dashboard-priority-actions"]' },
+      { id: "dash-5", title: "AI Marketing Director Command Center", description: "Describe your goal in plain language and PostMotive will map the next workflow steps.", targetSelector: '[data-help="dashboard-command-center"]' },
+      { id: "dash-6", title: "Marketing Score", description: "Your score reflects setup quality, activity, and connected data confidence.", targetSelector: '[data-help="dashboard-score"]' },
+      { id: "dash-7", title: "Navigation", description: "Use Content Library, Media Library, Calendar, Analytics, and Integrations to execute each step.", targetSelector: '[aria-label="Sidebar navigation"]' },
+      { id: "dash-8", title: "Ask PostMotive", description: "Use contextual help any time to ask what to do next on your current page.", targetSelector: '[data-help="ask-postmotive"]' },
     ],
   },
   {

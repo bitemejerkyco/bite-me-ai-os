@@ -21,6 +21,8 @@ describe("help registry coverage", () => {
       "/notifications",
       "/help",
       "/academy",
+      "/marketing",
+      "/pricing",
     ].forEach((route) => expect(routes.has(route)).toBe(true));
   });
 
@@ -46,6 +48,16 @@ describe("help registry coverage", () => {
     const walkthroughRoutes = new Set(WALKTHROUGH_REGISTRY.map((item) => item.route));
     ["/", "/content", "/integrations"].forEach((route) => {
       expect(walkthroughRoutes.has(route)).toBe(true);
+    });
+  });
+
+  it("uses the expanded 8-step dashboard walkthrough with explicit help targets", () => {
+    const dashboardWalkthrough = WALKTHROUGH_REGISTRY.find((entry) => entry.id === "dashboard-overview");
+    expect(dashboardWalkthrough?.version).toBe("2");
+    expect(dashboardWalkthrough?.steps.length).toBe(8);
+    expect(dashboardWalkthrough?.steps.some((step) => step.title === "Ask PostMotive")).toBe(true);
+    dashboardWalkthrough?.steps.forEach((step) => {
+      expect(step.targetSelector.length).toBeGreaterThan(0);
     });
   });
 });

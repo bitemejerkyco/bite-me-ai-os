@@ -73,6 +73,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     links: [
       { href: "/admin", label: "Admin Console", icon: "⌘" },
       { href: "/admin/integrations", label: "Integration Operations", icon: "◎" },
+      { href: "/admin/tester-checklist", label: "Tester Checklist", icon: "☑" },
       { href: "/admin/feedback", label: "Feedback", icon: "✉" },
     ],
   },

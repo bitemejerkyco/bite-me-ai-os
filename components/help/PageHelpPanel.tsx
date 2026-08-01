@@ -35,6 +35,11 @@ export default function PageHelpPanel() {
         <div className="mt-4 grid gap-5 lg:grid-cols-[1.4fr_1fr]">
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <p className="text-sm font-semibold text-slate-900">What this page does</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{pageHelp.purpose}</p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
               <p className="text-sm font-semibold text-slate-900">Why this page matters</p>
               <p className="mt-2 text-sm leading-6 text-slate-700">{pageHelp.whyItMatters}</p>
               <p className="mt-3 text-sm text-slate-700"><span className="font-semibold">Recommended first action:</span> {pageHelp.recommendedFirstAction}</p>
@@ -87,6 +92,16 @@ export default function PageHelpPanel() {
                     Watch walkthrough
                   </Link>
                 ) : null}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {pageHelp.relatedPages.slice(0, 3).map((related) => (
+                  <Link key={related.href} href={related.href} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-violet-300 hover:text-violet-700">
+                    {related.label}
+                  </Link>
+                ))}
+                <Link href="/academy" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-violet-300 hover:text-violet-700">
+                  Academy
+                </Link>
               </div>
             </div>
           </div>

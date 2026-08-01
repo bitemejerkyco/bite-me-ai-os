@@ -24,7 +24,7 @@ export default async function ApprovalsPage() {
       </section>
       <section data-help="approvals-list" className="rounded-[2rem] border border-slate-200 bg-white/90 p-6">
         {items.length === 0 ? (
-          <GuidedEmptyState title="No approvals waiting." description="Approvals will appear here when drafts, schedules, or recommendations require human review." estimatedTime="When new review work arrives" primaryAction={{ label: "Open Content Library", href: "/content" }} secondaryAction={{ label: "Learn the approval flow", href: "/help" }} />
+          <GuidedEmptyState title="No approvals waiting" description="You are caught up. New content requiring review will appear here." estimatedTime="When new review work arrives" primaryAction={{ label: "Generate Content", href: "/studio" }} secondaryAction={{ label: "Learn the approval flow", href: "/help" }} />
         ) : (
           <div className="space-y-3">
             {items.map((item) => (

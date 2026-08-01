@@ -1,5 +1,7 @@
 export function inferHelpRouteFromQuestion(question: string) {
   const text = question.toLowerCase();
+  if (text.includes("what is this page") || text.includes("what should i do next")) return null;
+  if (text.includes("create content")) return "/studio";
   if (text.includes("connect tiktok")) return "/settings/integrations/tiktok";
   if (text.includes("connect amazon")) return "/settings/integrations/amazon-ads";
   if (text.includes("approve") || text.includes("approval")) return "/approvals";

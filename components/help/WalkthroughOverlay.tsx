@@ -51,8 +51,8 @@ export default function WalkthroughOverlay() {
           <button type="button" onClick={() => void walkthrough.next()} className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">
             {walkthrough.stepIndex >= walkthrough.active.steps.length - 1 ? "Finish" : "Next"}
           </button>
-          <button type="button" onClick={() => void walkthrough.skip()} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
-            Skip
+          <button type="button" aria-label="Skip this walkthrough for now and resume later" onClick={() => void walkthrough.skip()} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+            Skip / Resume later
           </button>
           <button type="button" onClick={() => void walkthrough.restart()} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
             Restart

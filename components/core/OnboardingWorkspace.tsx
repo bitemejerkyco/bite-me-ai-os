@@ -13,6 +13,7 @@ import {
   loadCloudWorkspace,
   saveCloudWorkspace,
 } from "@/features/core/cloud-store";
+import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
 
 const empty: WorkspaceProfile = {
   businessName: "",
@@ -27,6 +28,7 @@ const empty: WorkspaceProfile = {
 export default function OnboardingWorkspace() {
   const [profile, setProfile] = useState(empty);
   const [saved, setSaved] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -52,6 +54,7 @@ export default function OnboardingWorkspace() {
   ) => {
     setSaving(true);
     setError("");
+    setSuccessMessage("");
     try {
       const completed = {
         ...nextProfile,
@@ -61,6 +64,8 @@ export default function OnboardingWorkspace() {
       setProfile(cloud);
       saveLocal(STORAGE_KEYS.workspace, cloud);
       setSaved(true);
+      const success = SUCCESS_MESSAGES.businessProfileSaved();
+      setSuccessMessage(`${success.title}. ${success.detail}`);
       if (continueToStudio) {
         window.location.assign("/studio");
       }
@@ -128,7 +133,7 @@ export default function OnboardingWorkspace() {
             Use demo & continue
           </button>
         </div>
-        {saved ? <p className="mt-3 text-sm text-emerald-400">Business setup saved.</p> : null}
+        {saved ? <p className="mt-3 text-sm text-emerald-700">{successMessage || "Business profile saved."}</p> : null}
         {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
       </section>
       <aside className="rounded-3xl border border-amber-500/20 bg-amber-500/5 p-5">

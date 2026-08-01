@@ -930,7 +930,7 @@ export default function ContentCalendar() {
         </div>
         <div className="mt-4 space-y-3">
           {scorecards.length === 0 ? (
-            <GuidedEmptyState title="No analytics scorecards yet." description="Scorecards appear after connected channels return performance data for scheduled or published content." estimatedTime="After first published result" primaryAction={{ label: "Open Integrations", href: "/integrations" }} secondaryAction={{ label: "Learn how scheduling works", href: "/help" }} />
+            <GuidedEmptyState title="Analytics are not available yet" description="Connect a marketing or analytics provider to begin collecting performance data." estimatedTime="After first published result" primaryAction={{ label: "Manage Integrations", href: "/integrations" }} secondaryAction={{ label: "Learn About Analytics", href: "/help" }} />
           ) : scorecards.map(({ post, snapshot, score }) => {
             const savedToKnowledge = knowledge.some(
               (item) => item.scheduledPostId === post.id,
@@ -965,7 +965,7 @@ export default function ContentCalendar() {
       <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <h2 className="text-xl font-bold">Publishing queue</h2>
         <div className="mt-4 space-y-3">
-          {posts.length === 0 ? <GuidedEmptyState title="Nothing in the publishing queue yet." description="Review scheduled content first, then posts and ads will appear here as they move toward publishing." estimatedTime="2 minutes" primaryAction={{ label: "Open Calendar", href: "/calendar" }} secondaryAction={{ label: "Learn the publishing flow", href: "/help" }} /> : posts.map((post) => (
+          {posts.length === 0 ? <GuidedEmptyState title="Nothing scheduled yet" description="Approve content and schedule your first post." estimatedTime="2 minutes" primaryAction={{ label: "Open Approved Content", href: "/content?status=APPROVED" }} secondaryAction={{ label: "Create Campaign", href: "/marketing/campaigns" }} /> : posts.map((post) => (
             <article key={post.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">

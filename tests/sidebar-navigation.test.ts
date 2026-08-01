@@ -43,6 +43,7 @@ describe("sidebar navigation", () => {
     );
     expect(adminHtml).toContain("Admin Console");
     expect(adminHtml).toContain("Integration Operations");
+    expect(adminHtml).toContain("Tester Checklist");
     expect(adminHtml).toContain("Feedback");
   });
 

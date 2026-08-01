@@ -1,6 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("@/components/help/HelpContext", () => ({
+  useHelp: () => ({
+    walkthrough: { start: async () => undefined },
+    setAssistantOpen: () => undefined,
+  }),
+}));
 import MarketingDirectorDashboardView from "@/components/marketing-director/MarketingDirectorDashboard";
 import RecommendationActionCard from "@/components/marketing-director/RecommendationActionCard";
 import { buildDefaultRecommendationEntitlements, resolveRecommendationActions } from "@/features/marketing-director/recommendation-workflows";

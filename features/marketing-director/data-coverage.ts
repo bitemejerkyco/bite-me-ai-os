@@ -283,7 +283,7 @@ export function buildDataCoverageModel(input: DataCoverageInput): DataCoverageMo
     .filter((item) => item.health === "missing" || item.health === "limited");
 
   const warning = missingCritical.length
-    ? "PostMotive has limited performance data. Connect TikTok Analytics and Amazon Ads to improve recommendations."
+    ? "PostMotive currently has limited connected performance data. Connect more marketing channels to improve recommendation confidence."
     : null;
 
   return {

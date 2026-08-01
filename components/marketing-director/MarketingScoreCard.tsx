@@ -57,7 +57,7 @@ export default function MarketingScoreCard(props: {
             {trendLabel}
           </p>
         ) : (
-          <p className="text-xs font-semibold text-slate-500">No prior snapshot available</p>
+          <p className="text-xs font-semibold text-slate-500">Baseline snapshot will appear after more activity is recorded.</p>
         )}
       </div>
 

@@ -66,7 +66,7 @@ export default function DailyBriefPanel({
 
       {currentBrief.metrics.length === 0 ? (
         <p className="mt-3 rounded-xl border border-slate-200 bg-white/85 p-3 text-sm text-slate-600">
-          Executive brief data is not available yet for this workspace.
+          PostMotive currently has limited connected performance data.
         </p>
       ) : null}
 
@@ -102,29 +102,43 @@ export default function DailyBriefPanel({
               </li>
             ) : null}
             {currentBrief.revenueAvailability === "unavailable" ? (
-              <li>Revenue impact is unavailable from connected data.</li>
+              <li>Revenue tracking is not connected yet.</li>
             ) : null}
             {currentBrief.missingIntegrations.length > 0 ? (
               <li>Missing integrations: {currentBrief.missingIntegrations.join(", ")}</li>
             ) : null}
           </ul>
+          {currentBrief.revenueAvailability === "unavailable" ? (
+            <Link href="/integrations" className="mt-3 inline-flex rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50">
+              Connect Revenue Source
+            </Link>
+          ) : null}
         </article>
       </div>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white/85 p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Since last visit</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Since Your Last Visit</p>
         <ul className="mt-2 space-y-1 text-sm text-slate-600">
-          {currentBrief.sinceLastVisit.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+          {currentBrief.sinceLastVisit.length === 0 || currentBrief.sinceLastVisit.every((line) => /0\s+/u.test(line)) ? (
+            <>
+              <li>No meaningful changes have been recorded yet.</li>
+              <li>PostMotive will summarize new drafts, approvals, scheduled posts, publishing results, and integration changes here.</li>
+            </>
+          ) : currentBrief.sinceLastVisit.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <article className="rounded-2xl border border-slate-200 bg-white/85 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Executive morning brief</p>
           <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            {currentBrief.morningBrief.overnightChanges.slice(0, 3).map((line) => (
+            {(currentBrief.morningBrief.overnightChanges.length > 0 ? currentBrief.morningBrief.overnightChanges : [
+              "Review pending content to keep approvals moving.",
+              "Complete product setup to unlock product-specific campaigns.",
+              "Connect Amazon Ads or another analytics-enabled channel to improve recommendations.",
+            ]).slice(0, 3).map((line) => (
               <li key={line}>{line}</li>
             ))}
             {currentBrief.morningBrief.wins.slice(0, 2).map((line) => (
@@ -138,14 +152,25 @@ export default function DailyBriefPanel({
         <article className="rounded-2xl border border-slate-200 bg-white/85 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">AI guidance</p>
           <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            {currentBrief.morningBrief.urgentActions.slice(0, 2).map((line) => (
+            {(currentBrief.morningBrief.urgentActions.length > 0 ? currentBrief.morningBrief.urgentActions : [
+              "Complete your product catalog to unlock product-specific campaigns.",
+              "Upload your logo to improve branded creative generation.",
+              "Connect Amazon Ads to unlock paid media insights.",
+              "Approve pending drafts to keep the publishing calendar moving.",
+              "Connect an analytics source to improve recommendation confidence.",
+            ]).slice(0, 2).map((line) => (
               <li key={line}>Urgent: {line}</li>
             ))}
-            {currentBrief.morningBrief.opportunities.slice(0, 2).map((line) => (
+            {(currentBrief.morningBrief.opportunities.length > 0 ? currentBrief.morningBrief.opportunities : [
+              "Connect more marketing channels to improve PostMotive recommendations.",
+            ]).slice(0, 2).map((line) => (
               <li key={line}>Opportunity: {line}</li>
             ))}
-            <li>{currentBrief.morningBrief.estimatedBusinessImpact}</li>
+            <li>{currentBrief.morningBrief.estimatedBusinessImpact || "PostMotive will update impact guidance as connected data improves."}</li>
           </ul>
+          <Link href="/integrations" className="mt-3 inline-flex rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50">
+            Manage Integrations
+          </Link>
         </article>
       </div>
     </section>
