@@ -38,6 +38,8 @@ export default function ContentLibrary() {
       );
       if (requested === "DRAFT" || requested === "APPROVED") {
         setFilter(requested);
+      } else if (requested?.toLowerCase() === "awaiting-approval") {
+        setFilter("DRAFT");
       }
       void Promise.all([loadCloudDrafts(), loadCloudFolders("CONTENT")])
         .then(([items, savedFolders]) => {

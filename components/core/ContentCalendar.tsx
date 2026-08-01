@@ -116,6 +116,7 @@ export default function ContentCalendar() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
+      const preferredView = new URLSearchParams(window.location.search).get("view")?.toLowerCase();
       void Promise.all([
         loadCloudSchedule(),
         loadCloudDrafts(),
@@ -127,8 +128,13 @@ export default function ContentCalendar() {
           setDrafts(savedDrafts);
           setPerformance(snapshots);
           setKnowledge(knowledgeItems);
+          const preferredScheduled =
+            preferredView === "scheduled"
+              ? schedule.find((item) => ["SCHEDULED", "PUBLISHING", "DELIVERED_TO_INBOX"].includes(item.status))
+              : null;
           setSelectedPost(
-            schedule.find((item) => item.status === "PENDING_APPROVAL") ||
+            preferredScheduled ||
+              schedule.find((item) => item.status === "PENDING_APPROVAL") ||
               schedule.find((item) => item.status === "SCHEDULED") ||
               schedule[0] ||
               null,

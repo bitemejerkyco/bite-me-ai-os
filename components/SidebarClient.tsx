@@ -22,7 +22,8 @@ const baseNavigation = [
   ["/media", "Media Library", "▧"],
   ["/analytics", "Analytics", "↗"],
   ["/pricing", "Pricing", "$"],
-  ["/settings/integrations/tiktok", "Integrations", "⚙"],
+  ["/settings/marketing-director", "Director Settings", "◈"],
+  ["/integrations", "Integrations", "⚙"],
 ] as const;
 
 const adminNavigation = [
