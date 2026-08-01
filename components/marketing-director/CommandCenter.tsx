@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MarketingDirectorStructuredPlan } from "@/features/marketing-director/conversational-plan";
+import RecommendationActionCard from "@/components/marketing-director/RecommendationActionCard";
+import {
+  buildDefaultRecommendationEntitlements,
+  buildRecommendationRuntime,
+  type RecommendationActionModel,
+  type RecommendationActionKind,
+} from "@/features/marketing-director/recommendation-workflows";
 
 type ResponseState = {
   ok: boolean;
@@ -51,6 +58,14 @@ type ActionRequest = {
   commandId: string;
   actionId: string;
   type: "approve" | "reject";
+};
+
+type GeneratedDraftState = {
+  draftId: string;
+  title: string;
+  status: string;
+  approvalStatus: string;
+  platform: string;
 };
 
 const STORAGE_KEY = "postmotive-marketing-director-conversation-v2";
@@ -275,8 +290,26 @@ function restoreConversationMessages(saved: string | null): ConversationMessage[
 
 export { normalizeProposalForRender, restoreConversationMessages };
 
-function actionButtonLabel(control: MarketingDirectorStructuredPlan["recommendedActions"][number]["control"]): string {
-  return control;
+function suggestedPlatformForAction(action: MarketingDirectorStructuredPlan["recommendedActions"][number]): string {
+  const text = `${action.title} ${action.description} ${action.target}`.toLowerCase();
+  if (text.includes("tiktok")) return "tiktok";
+  if (text.includes("linkedin")) return "linkedin";
+  if (text.includes("facebook")) return "facebook";
+  if (text.includes("instagram")) return "instagram";
+  if (text.includes("amazon")) return "amazon_listing";
+  if (text.includes("email")) return "email";
+  if (text.includes("sms")) return "sms";
+  if (text.includes("landing")) return "landing_page";
+  if (text.includes("blog")) return "blog";
+  if (text.includes("ad") || text.includes("campaign")) return "ad_copy";
+  return "instagram";
+}
+
+function modeFromLabel(label: string): "advisor" | "copilot" | "autopilot" {
+  const value = String(label || "").trim().toLowerCase();
+  if (value === "copilot") return "copilot";
+  if (value === "autopilot") return "autopilot";
+  return "advisor";
 }
 
 export default function CommandCenter(props: { modeLabel: string }) {
@@ -292,6 +325,8 @@ export default function CommandCenter(props: { modeLabel: string }) {
   const [error, setError] = useState<string | null>(null);
   const [lastRequest, setLastRequest] = useState("");
   const [pendingAction, setPendingAction] = useState<ActionRequest | null>(null);
+  const [pendingGenerateTaskId, setPendingGenerateTaskId] = useState<string | null>(null);
+  const [generatedDraftByTask, setGeneratedDraftByTask] = useState<Record<string, GeneratedDraftState>>({});
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const suggestions = [
@@ -483,6 +518,121 @@ export default function CommandCenter(props: { modeLabel: string }) {
       ]);
     } finally {
       setPendingAction(null);
+    }
+  };
+
+  const runRecommendationAction = async (input: {
+    proposal: ProposalForRender;
+    action: MarketingDirectorStructuredPlan["recommendedActions"][number];
+    actionKind: RecommendationActionKind;
+    deferUntil?: string;
+  }) => {
+    setPendingAction({ commandId: latestDirectorMessage?.commandId || "", actionId: input.action.id, type: "approve" });
+    setError(null);
+
+    try {
+      const response = await fetch("/api/marketing-director/recommendations/action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          planId: input.proposal.planId,
+          actionId: input.action.id,
+          actionKind: input.actionKind,
+          deferUntil: input.deferUntil,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        code?: string;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !payload?.ok) {
+        setError(payload?.error || "Unable to update recommendation.");
+        return;
+      }
+
+      setMessages((current) => [
+        ...current,
+        {
+          id: messageId("director"),
+          role: "director",
+          createdAt: new Date().toISOString(),
+          request: latestDirectorMessage?.request || lastRequest,
+          response: {
+            ok: true,
+            code: payload.code,
+            message:
+              input.actionKind === "DEFER"
+                ? "Recommendation deferred."
+                : input.actionKind === "DISMISS"
+                  ? "Recommendation dismissed."
+                  : "Recommendation updated.",
+            proposal: input.proposal as unknown as MarketingDirectorStructuredPlan,
+          },
+          commandId: latestDirectorMessage?.commandId || null,
+        },
+      ]);
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const generateContent = async (input: {
+    proposal: ProposalForRender;
+    action: MarketingDirectorStructuredPlan["recommendedActions"][number];
+    regenerate?: boolean;
+  }) => {
+    setPendingGenerateTaskId(input.action.id);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/marketing-director/generate-content", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          planId: input.proposal.planId,
+          taskId: input.action.id,
+          platform: suggestedPlatformForAction(input.action),
+          regenerate: Boolean(input.regenerate),
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        draft?: {
+          id?: string;
+          title?: string;
+          status?: string;
+          approvalStatus?: string;
+        };
+        asset?: {
+          platform?: string;
+          title?: string;
+        };
+      } | null;
+
+      if (!response.ok || !payload?.ok || !payload.draft?.id) {
+        setError(payload?.error || "Unable to generate content.");
+        return;
+      }
+
+      setGeneratedDraftByTask((current) => ({
+        ...current,
+        [input.action.id]: {
+          draftId: String(payload.draft?.id || ""),
+          title: String(payload.draft?.title || payload.asset?.title || input.action.title),
+          status: String(payload.draft?.status || "DRAFT"),
+          approvalStatus: String(payload.draft?.approvalStatus || "DRAFT"),
+          platform: String(payload.asset?.platform || suggestedPlatformForAction(input.action)),
+        },
+      }));
+    } catch {
+      setError("Unable to generate content.");
+    } finally {
+      setPendingGenerateTaskId(null);
     }
   };
 
@@ -734,42 +884,63 @@ export default function CommandCenter(props: { modeLabel: string }) {
                   <div>
                     <p className="font-semibold">Recommended actions:</p>
                     <ul className="mt-1 space-y-2">
-                      {proposal.recommendedActions.map((action) => (
-                        <li key={action.id} className="rounded-xl border border-slate-200 bg-white/85 p-2">
-                          <p className="font-semibold text-slate-900">{action.title} <span className="text-xs font-medium text-slate-500">({action.priority})</span></p>
-                          <p className="mt-1 text-slate-700">{action.description}</p>
-                          <p className="mt-1 text-xs text-slate-500">Reason: {action.supportingData}</p>
-                          <p className="mt-1 text-xs text-slate-500">Target: {action.target}</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <a
-                              href={action.target.startsWith("/") ? action.target : "#"}
-                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                            >
-                              {actionButtonLabel(action.control)}
-                            </a>
-                            {message.commandId ? (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={Boolean(pendingAction)}
-                                  onClick={() => void runAction({ commandId: message.commandId!, actionId: action.id, type: "approve" })}
-                                  className="rounded-lg border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {action.requiresApproval ? "Review and approve" : "Mark ready"}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={Boolean(pendingAction)}
-                                  onClick={() => void runAction({ commandId: message.commandId!, actionId: action.id, type: "reject" })}
-                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Reject action
-                                </button>
-                              </>
-                            ) : null}
-                          </div>
-                        </li>
-                      ))}
+                      {proposal.recommendedActions.map((action) => {
+                        const runtime = buildRecommendationRuntime({
+                          recommendation: action,
+                          route: action.target,
+                          source: action.supportingData,
+                          operatingMode: modeFromLabel(props.modeLabel),
+                          entitlements: {
+                            ...buildDefaultRecommendationEntitlements(),
+                            canPublish: modeFromLabel(props.modeLabel) !== "advisor",
+                          },
+                          draftId: generatedDraftByTask[action.id]?.draftId || null,
+                          approvalStatus: generatedDraftByTask[action.id]?.approvalStatus || null,
+                        });
+
+                        const openActionHref = (actionItem: RecommendationActionModel) => {
+                          if (!actionItem.href) return;
+                          window.location.assign(actionItem.href);
+                        };
+
+                        return (
+                          <RecommendationActionCard
+                            key={action.id}
+                            action={action}
+                            runtime={runtime}
+                            pendingGenerate={pendingGenerateTaskId === action.id}
+                            pendingAction={Boolean(pendingAction)}
+                            onGenerate={() => void generateContent({ proposal, action })}
+                            onRegenerate={() => void generateContent({ proposal, action, regenerate: true })}
+                            onApprove={() => {
+                              if (!message.commandId) return;
+                              void runAction({ commandId: message.commandId, actionId: action.id, type: "approve" });
+                            }}
+                            onReject={() => {
+                              if (!message.commandId) return;
+                              void runAction({ commandId: message.commandId, actionId: action.id, type: "reject" });
+                            }}
+                            onDismiss={() => void runRecommendationAction({ proposal, action, actionKind: "DISMISS" })}
+                            onDefer={() => {
+                              const tomorrow = new Date();
+                              tomorrow.setDate(tomorrow.getDate() + 1);
+                              void runRecommendationAction({
+                                proposal,
+                                action,
+                                actionKind: "DEFER",
+                                deferUntil: tomorrow.toISOString(),
+                              });
+                            }}
+                            onPublishNow={() => void runRecommendationAction({ proposal, action, actionKind: "PUBLISH_NOW" })}
+                            onOpenActionHref={openActionHref}
+                            generatedDraft={generatedDraftByTask[action.id] ? {
+                              draftId: generatedDraftByTask[action.id].draftId,
+                              title: generatedDraftByTask[action.id].title,
+                              approvalStatus: generatedDraftByTask[action.id].approvalStatus,
+                            } : undefined}
+                          />
+                        );
+                      })}
                     </ul>
                   </div>
                   <p><span className="font-semibold">Required approvals:</span> {proposal.requiredApprovals.join(" ")}</p>
