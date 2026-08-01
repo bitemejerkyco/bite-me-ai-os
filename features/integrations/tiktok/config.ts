@@ -1,11 +1,18 @@
-import { TIKTOK_REQUIRED_SCOPES } from "@/features/integrations/tiktok/types";
+import {
+  TIKTOK_REQUIRED_SCOPES,
+  normalizeTikTokIntegrationMode,
+  type TikTokIntegrationMode,
+} from "@/features/integrations/tiktok/types";
 
 export type TikTokConfig = {
   clientKey: string;
   clientSecret: string;
   redirectUri: string;
   encryptionKey: string;
-  sandboxEnabled: boolean;
+  postingMode: TikTokIntegrationMode;
+  webhooksEnabled: boolean;
+  mediaBaseUrl: string;
+  verifiedUrlPrefix: string;
   scopes: string[];
 };
 
@@ -19,7 +26,13 @@ export function loadTikTokConfig(): TikTokConfig {
     clientSecret: value("TIKTOK_CLIENT_SECRET"),
     redirectUri: value("TIKTOK_REDIRECT_URI"),
     encryptionKey: value("TIKTOK_TOKEN_ENCRYPTION_KEY"),
-    sandboxEnabled: value("TIKTOK_SANDBOX_ENABLED").toLowerCase() === "true",
+    postingMode: normalizeTikTokIntegrationMode(
+      value("TIKTOK_CONTENT_POSTING_MODE"),
+      "beta_upload",
+    ),
+    webhooksEnabled: value("TIKTOK_WEBHOOKS_ENABLED").toLowerCase() === "true",
+    mediaBaseUrl: value("TIKTOK_MEDIA_BASE_URL"),
+    verifiedUrlPrefix: value("TIKTOK_VERIFIED_URL_PREFIX"),
     scopes: [...TIKTOK_REQUIRED_SCOPES],
   };
 }
@@ -30,7 +43,6 @@ export function getMissingTikTokConfig(config = loadTikTokConfig()): string[] {
   if (!config.clientSecret) missing.push("TIKTOK_CLIENT_SECRET");
   if (!config.redirectUri) missing.push("TIKTOK_REDIRECT_URI");
   if (!config.encryptionKey) missing.push("TIKTOK_TOKEN_ENCRYPTION_KEY");
-  if (!config.sandboxEnabled) missing.push("TIKTOK_SANDBOX_ENABLED=true");
   return missing;
 }
 
@@ -39,7 +51,7 @@ export function assertTikTokConfigured(): TikTokConfig {
   const missing = getMissingTikTokConfig(config);
   if (missing.length > 0) {
     throw new Error(
-      `TIKTOK_SETUP_REQUIRED:Missing TikTok sandbox configuration: ${missing.join(", ")}.`,
+      `TIKTOK_SETUP_REQUIRED:Missing TikTok configuration: ${missing.join(", ")}.`,
     );
   }
   return config;

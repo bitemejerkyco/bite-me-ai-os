@@ -10,6 +10,8 @@ import {
   verifyTikTokOAuthState,
 } from "@/features/integrations/tiktok/token-crypto";
 import type { TikTokConfig } from "@/features/integrations/tiktok/config";
+import { validateSystemSettingValue } from "@/features/admin/settings-rules";
+import { normalizeTikTokIntegrationMode } from "@/features/integrations/tiktok/types";
 
 const config: TikTokConfig = {
   clientKey: "client-key",
@@ -19,7 +21,10 @@ const config: TikTokConfig = {
     "12345678901234567890123456789012",
     "utf8",
   ).toString("base64"),
-  sandboxEnabled: true,
+  postingMode: "beta_upload",
+  webhooksEnabled: false,
+  mediaBaseUrl: "https://media.postmotive.example",
+  verifiedUrlPrefix: "https://media.postmotive.example/storage/v1/object/sign/brand-media/",
   scopes: ["user.info.basic", "video.upload"],
 };
 
@@ -242,5 +247,16 @@ describe("TikTok sandbox integration", () => {
         config.encryptionKey,
       ),
     ).toThrow("TIKTOK_STATE_INVALID");
+  });
+
+  it("normalizes TikTok integration modes and validates system settings", () => {
+    expect(normalizeTikTokIntegrationMode("beta_upload")).toBe("beta_upload");
+    expect(normalizeTikTokIntegrationMode("DIRECT_POST")).toBe("direct_post");
+    expect(normalizeTikTokIntegrationMode("unknown-mode")).toBe("beta_upload");
+    expect(validateSystemSettingValue("tiktok_content_posting_mode", "sandbox")).toBe("sandbox");
+    expect(validateSystemSettingValue("tiktok_webhooks_enabled", "true")).toBe(true);
+    expect(() =>
+      validateSystemSettingValue("tiktok_content_posting_mode", "invalid"),
+    ).toThrow("SETTING_VALUE_INVALID");
   });
 });

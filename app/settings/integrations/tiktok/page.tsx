@@ -17,7 +17,7 @@ export default async function TikTokIntegrationSettingsPage({
   const parameters = await searchParams;
   let initialMessage =
     parameters.result === "connected"
-      ? "TikTok sandbox account connected successfully."
+      ? "TikTok account connected successfully."
       : parameters.result === "error"
         ? parameters.message || "TikTok authorization was not completed."
         : null;

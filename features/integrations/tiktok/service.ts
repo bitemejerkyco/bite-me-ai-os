@@ -31,11 +31,17 @@ type TikTokConnectionRow = {
   connected_by: string;
   status: "CONNECTING" | "CONNECTED" | "EXPIRED" | "ERROR";
   open_id: string;
+  tiktok_open_id?: string | null;
   scopes: string[];
   access_token_ciphertext: string;
   refresh_token_ciphertext: string;
   access_expires_at: string;
   refresh_expires_at: string;
+  encrypted_access_token?: string | null;
+  encrypted_refresh_token?: string | null;
+  granted_scopes?: string[] | null;
+  access_token_expires_at?: string | null;
+  refresh_token_expires_at?: string | null;
   creator_username: string | null;
   creator_nickname: string | null;
   creator_avatar_url: string | null;
@@ -45,6 +51,12 @@ type TikTokConnectionRow = {
   stitch_disabled: boolean;
   max_video_duration_seconds: number | null;
   last_error: string | null;
+  connected_at?: string | null;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  refreshed_at?: string | null;
+  revoked_at?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type ServiceDependencies = {
@@ -89,6 +101,12 @@ export class TikTokConnectionService {
   }
 
   getConfiguration(): { configured: boolean; message: string | null } {
+    if (this.config.postingMode === "disabled") {
+      return {
+        configured: false,
+        message: "TikTok posting is disabled in platform settings.",
+      };
+    }
     const missing = getMissingTikTokConfig(this.config);
     return {
       configured: missing.length === 0,
@@ -143,6 +161,14 @@ export class TikTokConnectionService {
       );
     }
     const creator = await this.client.queryBasicUserInfo(tokens.accessToken);
+    const creatorDetails = await this.client
+      .queryCreatorInfo(tokens.accessToken)
+      .catch(() => creator);
+    if (this.config.postingMode === "direct_post" && !grantedScopes.includes("video.publish")) {
+      throw new Error(
+        "TIKTOK_SCOPE_MISSING:Direct post requires the video.publish scope.",
+      );
+    }
     const now = this.now();
     const row = {
       workspace_id: actor.workspaceId,
@@ -150,8 +176,16 @@ export class TikTokConnectionService {
       environment: "SANDBOX",
       status: "CONNECTED",
       open_id: tokens.openId,
+      tiktok_open_id: tokens.openId,
+      display_name: creatorDetails.nickname || creator.nickname,
+      avatar_url: creatorDetails.avatarUrl || creator.avatarUrl,
       scopes: grantedScopes,
+      granted_scopes: grantedScopes,
       access_token_ciphertext: encryptTikTokToken(
+        tokens.accessToken,
+        this.config.encryptionKey,
+      ),
+      encrypted_access_token: encryptTikTokToken(
         tokens.accessToken,
         this.config.encryptionKey,
       ),
@@ -159,17 +193,28 @@ export class TikTokConnectionService {
         tokens.refreshToken,
         this.config.encryptionKey,
       ),
+      encrypted_refresh_token: encryptTikTokToken(
+        tokens.refreshToken,
+        this.config.encryptionKey,
+      ),
       access_expires_at: expiresAt(now, tokens.expiresInSeconds),
+      access_token_expires_at: expiresAt(now, tokens.expiresInSeconds),
       refresh_expires_at: expiresAt(now, tokens.refreshExpiresInSeconds),
-      creator_username: creator.username,
-      creator_nickname: creator.nickname,
-      creator_avatar_url: creator.avatarUrl,
-      privacy_level_options: creator.privacyLevelOptions,
-      comment_disabled: creator.commentDisabled,
-      duet_disabled: creator.duetDisabled,
-      stitch_disabled: creator.stitchDisabled,
-      max_video_duration_seconds: creator.maxVideoDurationSeconds,
+      refresh_token_expires_at: expiresAt(now, tokens.refreshExpiresInSeconds),
+      creator_username: creatorDetails.username || creator.username,
+      creator_nickname: creatorDetails.nickname || creator.nickname,
+      creator_avatar_url: creatorDetails.avatarUrl || creator.avatarUrl,
+      privacy_level_options: creatorDetails.privacyLevelOptions || creator.privacyLevelOptions,
+      comment_disabled: creatorDetails.commentDisabled,
+      duet_disabled: creatorDetails.duetDisabled,
+      stitch_disabled: creatorDetails.stitchDisabled,
+      max_video_duration_seconds: creatorDetails.maxVideoDurationSeconds,
       last_error: null,
+      refreshed_at: now.toISOString(),
+      revoked_at: null,
+      metadata: {
+        postingMode: this.config.postingMode,
+      },
       connected_at: now.toISOString(),
     };
     const { error } = await actor.supabase
@@ -191,16 +236,25 @@ export class TikTokConnectionService {
     if (!data) {
       return {
         configured: availability.configured,
-        sandboxMode: true,
+        sandboxMode: this.config.postingMode === "sandbox",
+        postingMode: this.config.postingMode,
         status: "disconnected",
-        message: availability.message,
+        message:
+          availability.message ||
+          (this.config.postingMode === "disabled"
+            ? "TikTok posting is currently disabled."
+            : null),
         connectionId: null,
         openId: null,
         scopes: [],
         accessExpiresAt: null,
         refreshExpiresAt: null,
         creator: null,
-        postingMode: "SANDBOX_PRIVATE_ONLY",
+        tokenHealth: this.config.postingMode === "disabled" ? "missing" : "missing",
+        directPostEnabled: this.config.postingMode === "direct_post",
+        uploadToDraftEnabled: this.config.postingMode !== "disabled",
+        verifiedMediaReady: Boolean(this.config.verifiedUrlPrefix),
+        approvalState: "unknown",
       };
     }
     const row = data as TikTokConnectionRow;
@@ -208,16 +262,19 @@ export class TikTokConnectionService {
       new Date(row.refresh_expires_at).getTime() <= this.now().getTime();
     return {
       configured: availability.configured,
-      sandboxMode: true,
+      sandboxMode: this.config.postingMode === "sandbox",
+      postingMode: this.config.postingMode,
       status: refreshExpired
-        ? "expired"
+        ? "reconnect_required"
         : row.status === "CONNECTED"
           ? "connected"
           : row.status === "CONNECTING"
             ? "connecting"
             : row.status === "ERROR"
               ? "error"
-              : "expired",
+              : row.status === "EXPIRED"
+                ? "expired"
+                : "reconnect_required",
       message: refreshExpired
         ? "TikTok authorization expired. Reconnect the account."
         : row.last_error || availability.message,
@@ -227,7 +284,15 @@ export class TikTokConnectionService {
       accessExpiresAt: row.access_expires_at,
       refreshExpiresAt: row.refresh_expires_at,
       creator: creatorFromRow(row),
-      postingMode: "SANDBOX_PRIVATE_ONLY",
+      grantedScopes: row.granted_scopes || row.scopes || [],
+      tokenHealth: refreshExpired ? "reconnect_required" : "healthy",
+      connectedAt: row.connected_at,
+      refreshedAt: row.refreshed_at || null,
+      revokedAt: row.revoked_at || null,
+      directPostEnabled: this.config.postingMode === "direct_post",
+      uploadToDraftEnabled: this.config.postingMode !== "disabled",
+      verifiedMediaReady: Boolean(this.config.verifiedUrlPrefix),
+      approvalState: this.config.postingMode === "direct_post" ? "pending" : "not_requested",
     };
   }
 
@@ -254,7 +319,11 @@ export class TikTokConnectionService {
     }
     const { error: deleteError } = await actor.supabase
       .from("tiktok_connections")
-      .delete()
+      .update({
+        status: "EXPIRED",
+        revoked_at: this.now().toISOString(),
+        last_error: warning,
+      })
       .eq("workspace_id", actor.workspaceId)
       .eq("connected_by", actor.userId);
     if (deleteError) {
@@ -300,13 +369,27 @@ export class TikTokConnectionService {
           refreshed.accessToken,
           this.config.encryptionKey,
         ),
+        encrypted_access_token: encryptTikTokToken(
+          refreshed.accessToken,
+          this.config.encryptionKey,
+        ),
         refresh_token_ciphertext: encryptTikTokToken(
           refreshed.refreshToken,
           this.config.encryptionKey,
         ),
+        encrypted_refresh_token: encryptTikTokToken(
+          refreshed.refreshToken,
+          this.config.encryptionKey,
+        ),
         access_expires_at: expiresAt(now, refreshed.expiresInSeconds),
+        access_token_expires_at: expiresAt(now, refreshed.expiresInSeconds),
         refresh_expires_at: expiresAt(now, refreshed.refreshExpiresInSeconds),
+        refresh_token_expires_at: expiresAt(now, refreshed.refreshExpiresInSeconds),
         scopes: refreshed.scope,
+        granted_scopes: refreshed.scope,
+        refreshed_at: now.toISOString(),
+        status: "CONNECTED",
+        last_error: null,
       })
       .eq("workspace_id", actor.workspaceId);
     if (refreshError) {
@@ -351,7 +434,8 @@ export class TikTokConnectionService {
       }),
       this.config.encryptionKey,
     );
-    const mediaUrl = new URL("/api/integrations/tiktok/media", this.config.redirectUri);
+    const mediaBase = this.config.mediaBaseUrl || this.config.redirectUri;
+    const mediaUrl = new URL("/api/integrations/tiktok/media", mediaBase);
     mediaUrl.searchParams.set("token", mediaToken);
     const accessToken = await this.activeAccessToken(actor);
     const publishId = await this.client.initializeInboxVideoFromUrl(

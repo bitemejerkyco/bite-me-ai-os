@@ -618,9 +618,10 @@ export async function listAdminAuditLogs(filters: {
 }
 
 export async function loadAdminFeaturesPageData() {
-  const [flags, accounts] = await Promise.all([
+  const [flags, accounts, settings] = await Promise.all([
     listFeatureFlags(),
     listAdminAccounts({ page: 1, pageSize: 200 }),
+    listSystemSettings(),
   ]);
   const admin = createAdminClient();
   const overridesResult = await admin
@@ -633,6 +634,7 @@ export async function loadAdminFeaturesPageData() {
   return {
     flags,
     accounts: accounts.items,
+    settings,
     overrides:
       (overridesResult.data as Array<{
         id: string;
