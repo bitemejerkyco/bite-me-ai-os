@@ -1,7 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth/confirm", "/terms", "/privacy"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/confirm",
+  "/terms",
+  "/privacy",
+  "/pricing",
+];
+
+const MAINTENANCE_REDIRECT_PATH = "/pricing";
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -33,6 +41,22 @@ export async function updateSession(request: NextRequest) {
   const publicPath = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
+
+  if (!publicPath && !pathname.startsWith("/api/")) {
+    const [{ data: maintenanceMode }, { data: superAdminValue }] =
+      await Promise.all([
+        supabase.rpc("get_maintenance_mode"),
+        claims ? supabase.rpc("is_super_admin") : Promise.resolve({ data: false }),
+      ]);
+
+    if (maintenanceMode && !superAdminValue) {
+      const url = request.nextUrl.clone();
+      url.pathname = MAINTENANCE_REDIRECT_PATH;
+      url.search = "";
+      url.searchParams.set("maintenance", "1");
+      return NextResponse.redirect(url);
+    }
+  }
 
   if (!claims && !publicPath && !pathname.startsWith("/api/")) {
     const url = request.nextUrl.clone();

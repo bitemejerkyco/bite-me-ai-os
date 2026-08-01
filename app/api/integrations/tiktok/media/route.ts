@@ -16,15 +16,17 @@ export async function GET(request: NextRequest) {
       decryptTikTokToken(token, config.encryptionKey),
     ) as { url?: unknown; expiresAt?: unknown };
     const sourceUrl = new URL(String(payload.url || ""));
-    const allowedHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").host;
+    const allowedPrefix = (config.verifiedUrlPrefix || config.mediaBaseUrl).trim();
     if (
       sourceUrl.protocol !== "https:" ||
-      sourceUrl.host !== allowedHost ||
-      !sourceUrl.pathname.startsWith("/storage/v1/object/sign/brand-media/") ||
+      !allowedPrefix ||
+      !sourceUrl.toString().startsWith(allowedPrefix) ||
       typeof payload.expiresAt !== "number" ||
       payload.expiresAt <= Date.now()
     ) {
-      throw new Error("TIKTOK_MEDIA_INVALID:Media token is invalid or expired.");
+      throw new Error(
+        "TIKTOK_MEDIA_INVALID:TikTok media delivery is not configured with a verified URL prefix.",
+      );
     }
     const headers = new Headers();
     const range = request.headers.get("range");

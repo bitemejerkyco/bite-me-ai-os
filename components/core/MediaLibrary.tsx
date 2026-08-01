@@ -9,6 +9,7 @@ import {
   type LibraryFolder,
   type MediaAsset,
 } from "@/features/core/local-os";
+import type { TikTokConnectionView } from "@/features/integrations/tiktok/types";
 import {
   createCloudFolder,
   loadCloudFolders,
@@ -36,6 +37,7 @@ export default function MediaLibrary() {
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [tiktokView, setTikTokView] = useState<TikTokConnectionView | null>(null);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -47,6 +49,22 @@ export default function MediaLibrary() {
         .catch(() => setAssets(loadLocal(STORAGE_KEYS.media, [])));
     });
     return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    void fetch("/api/integrations/tiktok/status", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          ok?: boolean;
+          data?: TikTokConnectionView;
+        };
+        if (response.ok && payload.ok && payload.data) {
+          setTikTokView(payload.data);
+        }
+      })
+      .catch(() => {
+        // The library remains usable even if TikTok status cannot be loaded.
+      });
   }, []);
 
   const filtered = useMemo(
@@ -284,6 +302,26 @@ export default function MediaLibrary() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   {asset.tags.map((tag) => <span key={tag} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">{tag}</span>)}
                 </div>
+                {asset.type.startsWith("video/") ? (
+                  <div className="mt-4">
+                    {tiktokView?.status === "connected" && tiktokView.uploadToDraftEnabled && tiktokView.verifiedMediaReady ? (
+                      <Link
+                        href={`/settings/integrations/tiktok?assetId=${asset.id}`}
+                        className="inline-flex rounded-xl border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                      >
+                        Send to TikTok drafts
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="inline-flex cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-400"
+                      >
+                        TikTok upload unavailable
+                      </button>
+                    )}
+                  </div>
+                ) : null}
                 <label className="mt-4 block text-xs text-slate-500">
                   Folder
                   <select

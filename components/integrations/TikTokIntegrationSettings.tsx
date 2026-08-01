@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { TikTokConnectionView } from "@/features/integrations/tiktok/types";
+import TikTokPublishPanel from "@/components/integrations/TikTokPublishPanel";
+import type { SafeTikTokPublishJob } from "@/features/integrations/tiktok/publish-jobs";
 
 type StatusResponse = {
   ok: boolean;
@@ -15,20 +17,33 @@ const statusStyles: Record<TikTokConnectionView["status"], string> = {
   connected: "border-emerald-200 bg-emerald-50 text-emerald-700",
   expired: "border-amber-200 bg-amber-50 text-amber-800",
   error: "border-rose-200 bg-rose-50 text-rose-700",
+  reconnect_required: "border-orange-200 bg-orange-50 text-orange-700",
 };
 
 function statusLabel(status: TikTokConnectionView["status"]): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function modeLabel(mode: TikTokConnectionView["postingMode"]): string {
+  return mode.replaceAll("_", " ");
+}
+
 type TikTokIntegrationSettingsProps = {
   initialView: TikTokConnectionView | null;
   initialMessage: string | null;
+  betaAllowed: boolean;
+  betaMessage: string | null;
+  initialJobs: SafeTikTokPublishJob[];
+  initialSelectedAssetId?: string | null;
 };
 
 export default function TikTokIntegrationSettings({
   initialView,
   initialMessage,
+  betaAllowed,
+  betaMessage,
+  initialJobs,
+  initialSelectedAssetId,
 }: TikTokIntegrationSettingsProps) {
   const [view, setView] = useState<TikTokConnectionView | null>(initialView);
   const [busy, setBusy] = useState(false);
@@ -93,12 +108,12 @@ export default function TikTokIntegrationSettings({
             TikTok Integration
           </h1>
           <p className="relative mt-2 text-sm text-slate-600">
-            Connect a TikTok sandbox account for secure profile discovery and
-            private-only posting tests.
+            Connect a TikTok account for controlled beta uploads, with direct
+            post kept behind explicit approval and scope checks.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-800">
-              Sandbox
+              Beta upload ready
             </span>
             <span className="rounded-full border border-blue-500/60 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-700">
               OAuth 2.0
@@ -117,13 +132,20 @@ export default function TikTokIntegrationSettings({
                 Tokens are encrypted and stored per workspace.
               </p>
             </div>
-            {view ? (
-              <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles[view.status]}`}
-              >
-                {statusLabel(view.status)}
-              </span>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {view ? (
+                <span
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles[view.status]}`}
+                >
+                  {statusLabel(view.status)}
+                </span>
+              ) : null}
+              {view?.postingMode ? (
+                <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                  {modeLabel(view.postingMode)}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {busy && !view ? (
@@ -139,7 +161,7 @@ export default function TikTokIntegrationSettings({
             <button
               type="button"
               onClick={connect}
-              disabled={busy || !view?.configured}
+              disabled={busy || !view?.configured || view?.postingMode === "disabled"}
               className="pm-primary-button rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {view?.status === "connected"
@@ -205,7 +227,7 @@ export default function TikTokIntegrationSettings({
           <div className="rounded-3xl border border-slate-200/80 bg-white/80 p-6">
             <h2 className="text-xl font-semibold">Permission checklist</h2>
             <ul className="mt-4 space-y-3 text-sm">
-              {["user.info.basic", "video.upload"].map((scope) => {
+              {["user.info.basic", "video.upload", "video.publish"].map((scope) => {
                 const granted = view?.scopes.includes(scope) ?? false;
                 return (
                   <li
@@ -224,6 +246,24 @@ export default function TikTokIntegrationSettings({
                 );
               })}
             </ul>
+            <dl className="mt-5 grid gap-3 text-sm text-slate-600 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200/80 px-3 py-2">
+                <dt className="text-xs uppercase tracking-[0.18em] text-slate-400">Token health</dt>
+                <dd className="mt-1 font-semibold text-slate-900">{view?.tokenHealth || "missing"}</dd>
+              </div>
+              <div className="rounded-xl border border-slate-200/80 px-3 py-2">
+                <dt className="text-xs uppercase tracking-[0.18em] text-slate-400">Upload-to-Draft</dt>
+                <dd className="mt-1 font-semibold text-slate-900">{view?.uploadToDraftEnabled ? "Available" : "Unavailable"}</dd>
+              </div>
+              <div className="rounded-xl border border-slate-200/80 px-3 py-2">
+                <dt className="text-xs uppercase tracking-[0.18em] text-slate-400">Direct Post</dt>
+                <dd className="mt-1 font-semibold text-slate-900">{view?.directPostEnabled ? "Available" : "Locked"}</dd>
+              </div>
+              <div className="rounded-xl border border-slate-200/80 px-3 py-2">
+                <dt className="text-xs uppercase tracking-[0.18em] text-slate-400">Verified media</dt>
+                <dd className="mt-1 font-semibold text-slate-900">{view?.verifiedMediaReady ? "Ready" : "Not configured"}</dd>
+              </div>
+            </dl>
           </div>
         </section>
 
@@ -235,6 +275,14 @@ export default function TikTokIntegrationSettings({
             TikTok approves the production integration.
           </p>
         </section>
+
+        <TikTokPublishPanel
+          view={view}
+          betaAllowed={betaAllowed}
+          betaMessage={betaMessage}
+          initialJobs={initialJobs}
+          initialSelectedAssetId={initialSelectedAssetId}
+        />
       </div>
     </main>
   );
