@@ -19,9 +19,17 @@ const modeLabel: Record<MarketingDirectorDashboard["modeSettings"]["operatingMod
 
 export default function MarketingDirectorDashboardView({
   dashboard,
+  canViewTechnicalDetails,
 }: {
   dashboard: MarketingDirectorDashboard;
+  canViewTechnicalDetails: boolean;
 }) {
+  const connectedChannels = dashboard.channelHealth.filter((channel) => channel.connected).length;
+  const productSource = dashboard.dataCoverage.sources.find((source) => source.key === "products") || null;
+  const welcomeState = dashboard.dataCoverage.sources.some((source) => !source.configured)
+    && connectedChannels < 2
+    && (productSource?.recordCount || 0) === 0;
+
   return (
     <div className="space-y-5">
       <ExecutiveHeader
@@ -38,7 +46,47 @@ export default function MarketingDirectorDashboardView({
         firstName={dashboard.firstName}
       />
 
-      <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} />
+      <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-5">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">AI value summary</p>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">{dashboard.greeting}, {dashboard.firstName}.</h2>
+        <p className="mt-2 text-sm text-slate-700">PostMotive found:</p>
+        <ul className="mt-3 space-y-1 text-sm text-slate-600">
+          <li>{dashboard.approvalSummary?.pending || 0} draft{dashboard.approvalSummary?.pending === 1 ? "" : "s"} waiting for approval</li>
+          <li>{dashboard.publishingQueue?.queued || 0} item{dashboard.publishingQueue?.queued === 1 ? "" : "s"} ready for the next scheduling step</li>
+          <li>{connectedChannels} connected channel{connectedChannels === 1 ? "" : "s"}</li>
+          <li>{dashboard.channelHealth.find((item) => item.key === "amazon_ads")?.connected ? "Amazon Ads connected" : "Amazon Ads not connected"}</li>
+          <li>{(productSource?.recordCount || 0) > 0 ? `${productSource?.recordCount || 0} products available` : "Product catalog empty"}</li>
+        </ul>
+        <p className="mt-3 text-sm text-slate-800">
+          <span className="font-semibold">Recommended first step:</span> {dashboard.brief.recommendedNextAction?.title || "Review the Executive Brief"}
+        </p>
+      </section>
+
+      {welcomeState ? (
+        <section className="rounded-[2rem] border border-violet-200 bg-violet-50/80 p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">Welcome to PostMotive</p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">Your AI Marketing Director is ready to help</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+            Start with a goal and PostMotive will help you plan, create, approve, schedule, and improve your marketing without hiding the real blockers.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[
+              "Grow my business",
+              "Launch a campaign",
+              "Increase Amazon sales",
+              "Build a content calendar",
+              "Improve my Marketing Score",
+              "Connect my first channel",
+            ].map((goal) => (
+              <span key={goal} className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700">
+                {goal}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <CommandCenter modeLabel={modeLabel[dashboard.modeSettings.operatingMode]} canViewTechnicalDetails={canViewTechnicalDetails} />
 
       <DirectorActivity />
 

@@ -3,6 +3,7 @@ import MarketingDirectorDashboardView from "@/components/marketing-director/Mark
 import { loadMarketingDirectorDashboard } from "@/features/marketing-director/dashboard";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import type { MarketingDirectorDashboard } from "@/features/marketing-director/dashboard";
+import { getViewerContext } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
 
 function mapHomeErrorToRedirect(error: unknown): string | null {
@@ -14,6 +15,7 @@ function mapHomeErrorToRedirect(error: unknown): string | null {
 
 export default async function Home() {
   let dashboard: MarketingDirectorDashboard;
+  const viewer = await getViewerContext();
   try {
     const context = await requireWorkspaceContext();
     dashboard = await loadMarketingDirectorDashboard({
@@ -31,7 +33,7 @@ export default async function Home() {
 
   return (
     <AppShell title="AI Marketing Director" eyebrow="PostMotive">
-      <MarketingDirectorDashboardView dashboard={dashboard} />
+      <MarketingDirectorDashboardView dashboard={dashboard} canViewTechnicalDetails={viewer.canViewTechnicalDetails} />
     </AppShell>
   );
 }

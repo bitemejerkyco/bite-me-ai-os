@@ -2,29 +2,31 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { buildCustomerBriefRecommendation } from "@/features/marketing-director/customer-recommendations";
 import type { MarketingRecommendation } from "@/features/marketing-director/daily-brief-rules";
 
 export default function RecommendationCard({ recommendation }: { recommendation: MarketingRecommendation }) {
   const [showWhy, setShowWhy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const card = buildCustomerBriefRecommendation(recommendation);
 
   if (dismissed) return null;
 
   return (
     <article className="rounded-3xl border border-slate-200/90 bg-white/85 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-lg font-bold text-slate-900">{recommendation.title}</h3>
+        <h3 className="text-lg font-bold text-slate-900">{card.title}</h3>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-          {recommendation.expectedImpact}
+          {card.impactLabel}
         </span>
       </div>
-      <p className="mt-2 text-sm text-slate-700">{recommendation.summary}</p>
-      <p className="mt-2 text-sm text-slate-600">{recommendation.reason}</p>
-      <p className="mt-2 text-xs text-slate-500">Confidence: {(recommendation.confidence * 100).toFixed(0)}%</p>
+      <p className="mt-2 text-sm text-slate-700">{card.summary}</p>
+      {card.whyItMatters ? <p className="mt-2 text-sm text-slate-600"><span className="font-semibold text-slate-800">Why this matters:</span> {card.whyItMatters}</p> : null}
+      {card.showConfidence ? <p className="mt-2 text-xs text-slate-500">Deterministic confidence: {(recommendation.confidence * 100).toFixed(0)}%</p> : null}
 
       {showWhy ? (
         <ul className="mt-3 space-y-1 text-xs text-slate-500">
-          {recommendation.evidence.slice(0, 3).map((item) => (
+          {(card.evidence || []).map((item) => (
             <li key={`${recommendation.id}-${item.label}`}>{item.label}: {item.value}</li>
           ))}
         </ul>

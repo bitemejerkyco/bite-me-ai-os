@@ -61,7 +61,8 @@ export default function HelpAssistant() {
         className="fixed bottom-5 right-5 z-[70] rounded-full bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-xl hover:bg-violet-500"
         aria-expanded={assistantOpen}
       >
-        Help Assistant
+        <span className="hidden sm:inline">Ask PostMotive</span>
+        <span className="sm:hidden">Need Help?</span>
       </button>
       {assistantOpen ? (
         <aside className="fixed bottom-20 right-5 z-[80] w-[min(92vw,26rem)] rounded-[2rem] border border-white/80 bg-white p-5 shadow-2xl">

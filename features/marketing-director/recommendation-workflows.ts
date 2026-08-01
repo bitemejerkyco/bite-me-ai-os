@@ -429,15 +429,15 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
         buildAction({
           recommendationId,
           kind: "OPEN_APPROVAL_QUEUE",
-          label: "Open Approval Queue",
-          href: "/content-library?status=awaiting-approval",
+          label: "Review Drafts",
+          href: "/approvals",
           primary: true,
         }),
         buildAction({
           recommendationId,
-          kind: "LEARN_MORE",
-          label: "Why blocked?",
-          href: "/analytics/marketing-score",
+          kind: "VIEW_DRAFT",
+          label: "Open Content Library",
+          href: "/content-library?status=awaiting-approval",
         }),
       );
       addDismissAndDefer();
@@ -516,7 +516,7 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
         buildAction({
           recommendationId,
           kind: "CONNECT_INTEGRATION",
-          label: "Connect",
+          label: "Connect integration",
           href: input.recommendation.route || "/integrations",
           primary: true,
           disabled: input.integrationStatus === "connected" || !input.entitlements.canConnectIntegrations,
@@ -546,6 +546,12 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
           href: "/media",
           primary: true,
         }),
+        buildAction({
+          recommendationId,
+          kind: "LEARN_MORE",
+          label: "Open Media Library",
+          href: "/media",
+        }),
       );
       addDismissAndDefer();
       break;
@@ -574,9 +580,15 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
         buildAction({
           recommendationId,
           kind: "OPEN_CAMPAIGN",
-          label: "Open Product Setup",
-          href: "/onboarding",
+          label: "Add Products",
+          href: "/products",
           primary: true,
+        }),
+        buildAction({
+          recommendationId,
+          kind: "LEARN_MORE",
+          label: "Open Product Catalog",
+          href: "/products",
         }),
       );
       addDismissAndDefer();
@@ -735,13 +747,13 @@ export function buildWorkflowProgress(input: {
 
 export function buildPriorityBadge(priority: string): {
   label: "Critical" | "High" | "Medium" | "Low";
-  icon: "!!!" | "!!" | "!" | "-";
+  icon: "▲" | "◆" | "■" | "●";
 } {
   const value = toLower(priority);
-  if (value === "critical") return { label: "Critical", icon: "!!!" };
-  if (value === "high") return { label: "High", icon: "!!" };
-  if (value === "medium") return { label: "Medium", icon: "!" };
-  return { label: "Low", icon: "-" };
+  if (value === "critical") return { label: "Critical", icon: "▲" };
+  if (value === "high") return { label: "High", icon: "◆" };
+  if (value === "medium") return { label: "Medium", icon: "■" };
+  return { label: "Low", icon: "●" };
 }
 
 export function buildDeterministicImpact(input: {

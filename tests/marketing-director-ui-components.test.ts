@@ -48,12 +48,12 @@ describe("marketing director dashboard component polish", () => {
   });
 
   it("renders command center heading, suggestion chips, and advisor safety helper text", () => {
-    const html = renderToStaticMarkup(createElement(CommandCenter, { modeLabel: "Advisor" }));
+    const html = renderToStaticMarkup(createElement(CommandCenter, { modeLabel: "Advisor", canViewTechnicalDetails: false }));
 
-    expect(html).toContain("What should your AI CMO do next?");
+    expect(html).toContain("Ask your AI Marketing Director anything");
     expect(html).toContain("Build my September campaign");
     expect(html).toContain("Increase Amazon sales");
-    expect(html).toContain("The AI classifies intent and builds the workflow automatically");
+    expect(html).toContain("PostMotive will build the plan, identify approvals, and prepare the next steps");
     expect(html).toContain("Generate proposal");
   });
 

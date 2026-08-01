@@ -11,6 +11,8 @@ export type ViewerContext = {
   userId: string | null;
   email: string | null;
   isSuperAdmin: boolean;
+  systemRole: string | null;
+  canViewTechnicalDetails: boolean;
   primaryAccountId: string | null;
   primaryAccountName: string | null;
 };
@@ -26,12 +28,14 @@ export async function getViewerContext(): Promise<ViewerContext> {
       userId: null,
       email: null,
       isSuperAdmin: false,
+      systemRole: null,
+      canViewTechnicalDetails: false,
       primaryAccountId: null,
       primaryAccountName: null,
     };
   }
 
-  const [{ data: superAdminValue }, { data: workspace }] = await Promise.all([
+  const [{ data: superAdminValue }, { data: workspace }, { data: profile }] = await Promise.all([
     supabase.rpc("is_super_admin"),
     supabase
       .from("workspaces")
@@ -39,12 +43,20 @@ export async function getViewerContext(): Promise<ViewerContext> {
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle(),
+    supabase.from("profiles").select("system_role").eq("user_id", user.id).maybeSingle(),
   ]);
+
+  const systemRole = String((profile as { system_role?: string | null } | null)?.system_role || "CUSTOMER");
+  const canViewTechnicalDetails = Boolean(superAdminValue)
+    || systemRole === "INTERNAL_ADMIN"
+    || systemRole === "SUPPORT_ADMIN";
 
   return {
     userId: user.id,
     email: user.email ?? null,
     isSuperAdmin: Boolean(superAdminValue),
+    systemRole,
+    canViewTechnicalDetails,
     primaryAccountId: workspace?.id ? String(workspace.id) : null,
     primaryAccountName: workspace?.name ? String(workspace.name) : null,
   };

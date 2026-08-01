@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MarketingDirectorStructuredPlan } from "@/features/marketing-director/conversational-plan";
+import { inferHelpRouteFromQuestion } from "@/features/help/question-routing";
+import { normalizeHelpRoute } from "@/features/help/page-help-registry";
 import RecommendationActionCard from "@/components/marketing-director/RecommendationActionCard";
 import {
   buildDefaultRecommendationEntitlements,
@@ -312,7 +314,13 @@ function modeFromLabel(label: string): "advisor" | "copilot" | "autopilot" {
   return "advisor";
 }
 
-export default function CommandCenter(props: { modeLabel: string }) {
+function normalizeActionRoute(action: MarketingDirectorStructuredPlan["recommendedActions"][number]): string {
+  const inferred = inferHelpRouteFromQuestion(`${action.title} ${action.description}`);
+  if (inferred) return inferred;
+  return normalizeHelpRoute(action.target || "/");
+}
+
+export default function CommandCenter(props: { modeLabel: string; canViewTechnicalDetails: boolean }) {
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [messages, setMessages] = useState<ConversationMessage[]>(() => {
@@ -649,9 +657,9 @@ export default function CommandCenter(props: { modeLabel: string }) {
           {props.modeLabel}
         </span>
       </div>
-      <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900 md:text-2xl">What should your AI CMO do next?</h2>
+      <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900 md:text-2xl">Ask your AI Marketing Director anything</h2>
       <p className="mt-2 text-sm text-slate-600">
-        Enter a natural-language executive command. The AI classifies intent and builds the workflow automatically.
+        Describe the result you want. PostMotive will build the plan, identify approvals, and prepare the next steps.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Prompt suggestions">
@@ -714,7 +722,7 @@ export default function CommandCenter(props: { modeLabel: string }) {
         }}
         maxLength={500}
         className="mt-3 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-        placeholder="Example: Build a Q4 marketing plan focused on retention and Amazon growth"
+        placeholder="Increase my Amazon sales this month"
       />
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-xs text-slate-500">{prompt.length} / 500</p>
@@ -890,7 +898,7 @@ export default function CommandCenter(props: { modeLabel: string }) {
                       {proposal.recommendedActions.map((action) => {
                         const runtime = buildRecommendationRuntime({
                           recommendation: action,
-                          route: action.target,
+                          route: normalizeActionRoute(action),
                           source: action.supportingData,
                           operatingMode: modeFromLabel(props.modeLabel),
                           entitlements: {
@@ -911,6 +919,7 @@ export default function CommandCenter(props: { modeLabel: string }) {
                             key={action.id}
                             action={action}
                             runtime={runtime}
+                            canViewTechnicalDetails={props.canViewTechnicalDetails}
                             pendingGenerate={pendingGenerateTaskId === action.id}
                             pendingAction={Boolean(pendingAction)}
                             onGenerate={() => void generateContent({ proposal, action })}
@@ -946,11 +955,28 @@ export default function CommandCenter(props: { modeLabel: string }) {
                       })}
                     </ul>
                   </div>
-                  <p><span className="font-semibold">Required approvals:</span> {proposal.requiredApprovals.join(" ")}</p>
-                  <p><span className="font-semibold">Expected data limitations:</span> {proposal.expectedDataLimitations.join(" ")}</p>
-                  <p><span className="font-semibold">Confidence:</span> {proposal.confidenceLevel.scorePercent}% ({proposal.confidenceLevel.label}) - {proposal.confidenceLevel.reason}</p>
                   <p><span className="font-semibold">Next best action:</span> {proposal.nextBestAction}</p>
-                  <p className="text-xs text-slate-500">Plan ID: {proposal.planId} · Generated: {new Date(proposal.generatedAt).toLocaleString()}</p>
+                  {proposal.requiredApprovals.length > 0 ? (
+                    <div>
+                      <p className="font-semibold">Required approvals:</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {proposal.requiredApprovals.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {props.canViewTechnicalDetails ? (
+                    <details className="rounded-xl border border-slate-200 bg-white/75 p-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-slate-700">Technical details</summary>
+                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                        <p>Plan ID: {proposal.planId}</p>
+                        <p>Generated: {new Date(proposal.generatedAt).toLocaleString()}</p>
+                        <p>Confidence: {proposal.confidenceLevel.scorePercent}% ({proposal.confidenceLevel.label})</p>
+                        {proposal.expectedDataLimitations.length > 0 ? <p>Expected data limitations: {proposal.expectedDataLimitations.join(" ")}</p> : null}
+                      </div>
+                    </details>
+                  ) : null}
                       </>
                     );
                   })()}
