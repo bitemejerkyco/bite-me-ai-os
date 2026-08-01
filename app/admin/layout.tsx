@@ -10,6 +10,7 @@ const adminLinks = [
   ["/admin/plans", "Plans & Pricing"],
   ["/admin/features", "Features"],
   ["/admin/integrations", "Integrations"],
+  ["/admin/operations", "Operations"],
   ["/admin/costs", "AI Costs"],
   ["/admin/system", "System Health"],
   ["/admin/settings", "Settings"],
