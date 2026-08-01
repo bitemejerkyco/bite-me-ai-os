@@ -8,7 +8,7 @@ export default async function Sidebar() {
     <SidebarClient
       primaryAccountName={viewer.primaryAccountName}
       viewerEmail={viewer.email}
-      showAdminConsole={viewer.isSuperAdmin}
+      showAdminSection={viewer.isSuperAdmin}
     />
   );
 }

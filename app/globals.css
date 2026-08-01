@@ -182,6 +182,27 @@ textarea:focus {
   backdrop-filter: blur(24px);
 }
 
+.pm-scrollbar {
+}
+
+.pm-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.pm-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.pm-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(104, 87, 245, 0.32);
+}
+
+.pm-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(104, 87, 245, 0.48);
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
