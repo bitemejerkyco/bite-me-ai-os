@@ -9,6 +9,7 @@ const adminLinks = [
   ["/admin/users", "Users"],
   ["/admin/plans", "Plans & Pricing"],
   ["/admin/features", "Features"],
+  ["/admin/integrations", "Integrations"],
   ["/admin/costs", "AI Costs"],
   ["/admin/system", "System Health"],
   ["/admin/settings", "Settings"],

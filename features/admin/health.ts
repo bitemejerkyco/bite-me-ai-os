@@ -8,6 +8,7 @@ import {
   type HealthStatus,
   type ServiceHealthCheck,
 } from "@/features/admin/health-rules";
+import { loadPlatformIntegrationProviderOverview } from "@/features/integrations/core/diagnostics";
 
 type ScheduledPostStatusRow = {
   id: string;
@@ -246,11 +247,43 @@ export async function loadPlatformHealth(): Promise<{
   checks.push(process.env.KLING_API_KEY ? configuredButUnavailable("kling", "Kling", "Configured, but no safe lightweight check is implemented.") : notConfigured("kling", "Kling"));
   checks.push(process.env.RUNWAY_API_KEY ? configuredButUnavailable("runway", "Runway", "Configured, but no safe lightweight check is implemented.") : notConfigured("runway", "Runway"));
   checks.push(process.env.VEO_API_KEY ? configuredButUnavailable("veo", "Veo", "Configured, but no safe lightweight check is implemented.") : notConfigured("veo", "Veo"));
-  checks.push(process.env.TIKTOK_CLIENT_KEY ? configuredButUnavailable("tiktok", "TikTok", "Configured, but no token-safe lightweight check is implemented.") : notConfigured("tiktok", "TikTok"));
-  checks.push(process.env.META_APP_ID ? configuredButUnavailable("meta", "Meta", "Configured, but no token-safe lightweight check is implemented.") : notConfigured("meta", "Meta"));
-  checks.push(process.env.LINKEDIN_CLIENT_ID ? configuredButUnavailable("linkedin", "LinkedIn", "Configured, but no token-safe lightweight check is implemented.") : notConfigured("linkedin", "LinkedIn"));
-  checks.push(process.env.AMAZON_ADS_CLIENT_ID ? configuredButUnavailable("amazon_ads", "Amazon Ads", "Configured, but no token-safe lightweight check is implemented.") : notConfigured("amazon_ads", "Amazon Ads"));
-  checks.push(process.env.SHOPIFY_API_KEY ? configuredButUnavailable("shopify", "Shopify", "Configured, but no token-safe lightweight check is implemented.") : notConfigured("shopify", "Shopify"));
+  try {
+    const providers = await loadPlatformIntegrationProviderOverview();
+    for (const provider of providers) {
+      checks.push({
+        key: `integration_${provider.provider}`,
+        displayName: `Integration: ${provider.provider}`,
+        status:
+          provider.status === "healthy"
+            ? "healthy"
+            : provider.status === "critical"
+              ? "critical"
+              : provider.status === "warning"
+                ? "warning"
+                : "not_configured",
+        message: `${provider.message} Connections: ${provider.configuredConnections}. Failed jobs: ${provider.failedJobs}.`,
+        checkedAt: now,
+        latencyMs: null,
+        metadata: {
+          configuredConnections: provider.configuredConnections,
+          failedJobs: provider.failedJobs,
+        },
+        source: "supabase",
+      });
+    }
+  } catch (error) {
+    checks.push({
+      key: "integrations",
+      displayName: "Integrations",
+      status: "warning",
+      message: "Integration health rollup is unavailable.",
+      checkedAt: now,
+      latencyMs: null,
+      metadata: sanitizeHealthMetadata({ error: String(error) }),
+      source: "supabase",
+    });
+  }
+
   checks.push(process.env.STRIPE_SECRET_KEY ? configuredButUnavailable("stripe", "Stripe", "Configured, but checkout synchronization is still deferred.") : notConfigured("stripe", "Stripe"));
   checks.push(configuredButUnavailable("webhooks", "Webhooks", "No webhook heartbeat source is implemented."));
 

@@ -18,6 +18,11 @@ import {
   type TikTokConnectionView,
   type TikTokCreatorInfo,
 } from "@/features/integrations/tiktok/types";
+import {
+  releaseTokenRefreshLock,
+  syncIntegrationConnection,
+  tryAcquireTokenRefreshLock,
+} from "@/features/integrations/core/connection-store";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -70,6 +75,7 @@ type ServiceDependencies = {
 const STATE_TTL_MILLISECONDS = 10 * 60 * 1000;
 const TOKEN_REFRESH_MARGIN_MILLISECONDS = 5 * 60 * 1000;
 const MEDIA_URL_TTL_SECONDS = 60 * 60;
+const TIKTOK_PROVIDER = "tiktok";
 
 function expiresAt(now: Date, seconds: number): string {
   return new Date(now.getTime() + seconds * 1000).toISOString();
@@ -236,6 +242,21 @@ export class TikTokConnectionService {
         openId: tokens.openId,
       },
     });
+    await syncIntegrationConnection({
+      supabase: actor.supabase,
+      workspaceId: actor.workspaceId,
+      provider: TIKTOK_PROVIDER,
+      externalAccountId: tokens.openId,
+      accountName: creatorDetails.nickname || creator.nickname,
+      status: "CONNECTED",
+      scopes: grantedScopes,
+      tokenExpiresAt: expiresAt(now, tokens.expiresInSeconds),
+      refreshExpiresAt: expiresAt(now, tokens.refreshExpiresInSeconds),
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      lastHealthCheckAt: now.toISOString(),
+      lastSuccessfulSyncAt: now.toISOString(),
+    });
   }
 
   async getStatus(actor: TikTokActor): Promise<TikTokConnectionView> {
@@ -352,6 +373,15 @@ export class TikTokConnectionService {
       resourceId: actor.workspaceId,
       newValue: { revoked: true, warning },
     });
+    await syncIntegrationConnection({
+      supabase: actor.supabase,
+      workspaceId: actor.workspaceId,
+      provider: TIKTOK_PROVIDER,
+      status: "DISCONNECTED",
+      lastErrorCode: warning ? "revoke_warning" : null,
+      lastErrorMessage: warning,
+      lastHealthCheckAt: this.now().toISOString(),
+    });
     return warning;
   }
 
@@ -390,6 +420,31 @@ export class TikTokConnectionService {
       String(data.refresh_token_ciphertext),
       this.config.encryptionKey,
     );
+    const lockOwner = `tiktok-refresh:${actor.userId}:${Date.now()}`;
+    const lockAcquired = await tryAcquireTokenRefreshLock({
+      supabase: actor.supabase,
+      workspaceId: actor.workspaceId,
+      provider: TIKTOK_PROVIDER,
+      owner: lockOwner,
+      ttlSeconds: 120,
+    });
+    if (!lockAcquired) {
+      const latest = await actor.supabase
+        .from("tiktok_connections")
+        .select("access_token_ciphertext,access_expires_at")
+        .eq("workspace_id", actor.workspaceId)
+        .maybeSingle();
+      if (!latest.error && latest.data) {
+        const latestExpiresAt = new Date(String(latest.data.access_expires_at)).getTime();
+        if (latestExpiresAt > this.now().getTime()) {
+          return decryptTikTokToken(
+            String(latest.data.access_token_ciphertext),
+            this.config.encryptionKey,
+          );
+        }
+      }
+      throw new Error("TIKTOK_AUTH_RECONNECT_REQUIRED:TikTok refresh is in progress. Retry in a moment.");
+    }
     try {
       const refreshed = await this.client.refreshToken(refreshToken);
       const now = this.now();
@@ -437,6 +492,19 @@ export class TikTokConnectionService {
           refreshExpiresAt: expiresAt(now, refreshed.refreshExpiresInSeconds),
         },
       });
+      await syncIntegrationConnection({
+        supabase: actor.supabase,
+        workspaceId: actor.workspaceId,
+        provider: TIKTOK_PROVIDER,
+        status: "CONNECTED",
+        scopes: refreshed.scope,
+        tokenExpiresAt: expiresAt(now, refreshed.expiresInSeconds),
+        refreshExpiresAt: expiresAt(now, refreshed.refreshExpiresInSeconds),
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        lastHealthCheckAt: now.toISOString(),
+        lastSuccessfulSyncAt: now.toISOString(),
+      });
       return refreshed.accessToken;
     } catch (error) {
       const safeMessage = redactTikTokSecrets(
@@ -460,7 +528,23 @@ export class TikTokConnectionService {
         resourceId: actor.workspaceId,
         newValue: { lastError: safeMessage },
       });
+      await syncIntegrationConnection({
+        supabase: actor.supabase,
+        workspaceId: actor.workspaceId,
+        provider: TIKTOK_PROVIDER,
+        status: "RECONNECT_REQUIRED",
+        lastErrorCode: "token_refresh_failed",
+        lastErrorMessage: safeMessage,
+        lastHealthCheckAt: this.now().toISOString(),
+      });
       throw new Error("TIKTOK_AUTH_RECONNECT_REQUIRED:TikTok authorization must be refreshed.");
+    } finally {
+      await releaseTokenRefreshLock({
+        supabase: actor.supabase,
+        workspaceId: actor.workspaceId,
+        provider: TIKTOK_PROVIDER,
+        owner: lockOwner,
+      });
     }
   }
 
