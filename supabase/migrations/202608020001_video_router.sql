@@ -10,12 +10,6 @@ alter table public.video_projects
 alter table public.video_projects
   drop constraint if exists video_projects_duration_seconds_check;
 
--- Legacy rows may still include previously supported 16/20-second durations.
-alter table public.video_projects
-  add constraint video_projects_duration_seconds_check
-  check (duration_seconds between 8 and 15)
-  not valid;
-
 alter table public.video_projects
   drop constraint if exists video_projects_channel_check;
 
@@ -39,6 +33,12 @@ update public.video_projects
 set
   routing_tier = coalesce(routing_tier, 'BALANCED'),
   provider_model = coalesce(provider_model, 'sora-2');
+
+-- Legacy rows may still include previously supported 16/20-second durations.
+alter table public.video_projects
+  add constraint video_projects_duration_seconds_check
+  check (duration_seconds between 8 and 15)
+  not valid;
 
 insert into public.system_settings (
   key,
