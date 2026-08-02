@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import GuidedEmptyState from "@/components/help/GuidedEmptyState";
 import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
+import {
+  buildCalendarDraftUrl,
+  buildContentLibraryLocation,
+  parseContentLibraryLocation,
+} from "@/features/content/content-navigation";
 import {
   createCloudFolder,
   loadCloudDrafts,
@@ -14,9 +19,6 @@ import {
   saveCloudDraft,
 } from "@/features/core/cloud-store";
 import {
-  loadLocal,
-  saveLocal,
-  STORAGE_KEYS,
   type ContentDraft,
   type LibraryFolder,
 } from "@/features/core/local-os";
@@ -33,23 +35,72 @@ export default function ContentLibrary() {
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
 
+  const firstVisibleDraft = useCallback(
+    (
+      items: ContentDraft[],
+      nextFilter: typeof filter,
+      nextFolderFilter: string,
+    ): ContentDraft | null => {
+      const statusMatches =
+        nextFilter === "ALL"
+          ? items
+          : items.filter((draft) => draft.status === nextFilter);
+      if (nextFolderFilter === "ALL") return statusMatches[0] || null;
+      if (nextFolderFilter === "UNFILED") {
+        return statusMatches.find((draft) => !draft.folderId) || null;
+      }
+      return (
+        statusMatches.find((draft) => draft.folderId === nextFolderFilter) ||
+        null
+      );
+    },
+    [],
+  );
+
+  const syncLocation = useCallback(
+    (next: {
+      status: typeof filter;
+      folderId: string;
+      draftId?: string;
+      editMode?: boolean;
+      replace?: boolean;
+    }) => {
+      const query = buildContentLibraryLocation(next);
+      const nextUrl = `${window.location.pathname}${query}`;
+      if (next.replace) {
+        window.history.replaceState({}, "", nextUrl);
+        return;
+      }
+      window.history.pushState({}, "", nextUrl);
+    },
+    [],
+  );
+
+  const applyLocation = useCallback(
+    (search: string, items: ContentDraft[]) => {
+      const location = parseContentLibraryLocation(search);
+      const selectedDraft = location.draftId
+        ? items.find((draft) => draft.id === location.draftId) || firstVisibleDraft(items, location.status, location.folderId)
+        : firstVisibleDraft(items, location.status, location.folderId);
+
+      setFilter(location.status);
+      setFolderFilter(location.folderId);
+      setSelected(selectedDraft);
+    },
+    [firstVisibleDraft],
+  );
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      const requested = new URLSearchParams(window.location.search).get(
-        "status",
-      );
-      if (requested === "DRAFT" || requested === "APPROVED") {
-        setFilter(requested);
-      } else if (requested?.toLowerCase() === "awaiting-approval") {
-        setFilter("DRAFT");
-      }
       void Promise.all([loadCloudDrafts(), loadCloudFolders("CONTENT")])
         .then(([items, savedFolders]) => {
           setDrafts(items);
           setFolders(savedFolders);
-          const first =
-            items.find((item) => item.status === requested) || items[0] || null;
-          setSelected(first);
+          applyLocation(window.location.search, items);
+          syncLocation({
+            ...parseContentLibraryLocation(window.location.search),
+            replace: true,
+          });
         })
         .catch((caught: unknown) =>
           setMessage(
@@ -60,7 +111,17 @@ export default function ContentLibrary() {
         );
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [applyLocation, syncLocation]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (!drafts.length) return;
+      applyLocation(window.location.search, drafts);
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [applyLocation, drafts]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -100,6 +161,7 @@ export default function ContentLibrary() {
         [...current, folder].sort((a, b) => a.name.localeCompare(b.name)),
       );
       setFolderFilter(folder.id);
+      syncLocation({ status: filter, folderId: folder.id, draftId: selected?.id, editMode: true });
       setNewFolderName("");
       setMessage(`Folder “${folder.name}” created. Recommended next step: move related drafts into this folder.`);
     } catch (caught) {
@@ -143,6 +205,7 @@ export default function ContentLibrary() {
         current.map((draft) => (draft.id === next.id ? next : draft)),
       );
       setSelected(next);
+      syncLocation({ status: filter, folderId: folderFilter, draftId: next.id, editMode: true });
       setMessage(
         folderId
           ? `Moved to ${folders.find((folder) => folder.id === folderId)?.name || "folder"}.`
@@ -169,13 +232,6 @@ export default function ContentLibrary() {
         current.map((item) => (item.id === draft.id ? draft : item)),
       );
       setSelected(draft);
-      const localDrafts = loadLocal<ContentDraft[]>(STORAGE_KEYS.drafts, []);
-      saveLocal(
-        STORAGE_KEYS.drafts,
-        localDrafts.some((item) => item.id === draft.id)
-          ? localDrafts.map((item) => (item.id === draft.id ? draft : item))
-          : [draft, ...localDrafts],
-      );
       setMessage(successMessage);
     } catch (caught) {
       setMessage(
@@ -217,8 +273,7 @@ export default function ContentLibrary() {
     };
     try {
       await persist(prepared, `${SUCCESS_MESSAGES.contentApproved().title} ${SUCCESS_MESSAGES.contentApproved().detail}`);
-      saveLocal(STORAGE_KEYS.calendarPrefill, prepared);
-      window.location.assign("/calendar");
+      window.location.assign(buildCalendarDraftUrl(prepared.id));
     } catch {
       // persist displays the actionable error.
     }
@@ -261,7 +316,12 @@ export default function ContentLibrary() {
             ].map((folder) => (
               <button
                 key={folder.id}
-                onClick={() => setFolderFilter(folder.id)}
+                onClick={() => {
+                  setFolderFilter(folder.id);
+                  const nextSelected = firstVisibleDraft(drafts, filter, folder.id);
+                  setSelected(nextSelected);
+                  syncLocation({ status: filter, folderId: folder.id, draftId: nextSelected?.id, editMode: Boolean(nextSelected) });
+                }}
                 className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm ${
                   folderFilter === folder.id
                     ? "bg-violet-100 font-semibold text-violet-700"
@@ -275,7 +335,12 @@ export default function ContentLibrary() {
             {folders.map((folder) => (
               <div key={folder.id} className="flex items-center gap-1">
                 <button
-                  onClick={() => setFolderFilter(folder.id)}
+                  onClick={() => {
+                    setFolderFilter(folder.id);
+                    const nextSelected = firstVisibleDraft(drafts, filter, folder.id);
+                    setSelected(nextSelected);
+                    syncLocation({ status: filter, folderId: folder.id, draftId: nextSelected?.id, editMode: Boolean(nextSelected) });
+                  }}
                   className={`flex min-w-0 flex-1 items-center justify-between rounded-xl px-3 py-2 text-left text-sm ${
                     folderFilter === folder.id
                       ? "bg-violet-100 font-semibold text-violet-700"
@@ -303,7 +368,12 @@ export default function ContentLibrary() {
           {(["ALL", "DRAFT", "APPROVED"] as const).map((status) => (
             <button
               key={status}
-              onClick={() => setFilter(status)}
+              onClick={() => {
+                setFilter(status);
+                const nextSelected = firstVisibleDraft(drafts, status, folderFilter);
+                setSelected(nextSelected);
+                syncLocation({ status, folderId: folderFilter, draftId: nextSelected?.id, editMode: Boolean(nextSelected) });
+              }}
               className={`rounded-xl px-3 py-2 text-sm ${
                 filter === status
                   ? "bg-violet-600 text-white"
@@ -323,7 +393,10 @@ export default function ContentLibrary() {
             visible.map((draft) => (
               <button
                 key={draft.id}
-                onClick={() => setSelected(draft)}
+                onClick={() => {
+                  setSelected(draft);
+                  syncLocation({ status: filter, folderId: folderFilter, draftId: draft.id, editMode: true });
+                }}
                 className={`block w-full rounded-2xl border p-4 text-left ${
                   selected?.id === draft.id
                     ? "border-rose-300 bg-violet-50"

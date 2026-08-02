@@ -1,6 +1,8 @@
 import type { WorkspaceProfile } from "@/features/core/local-os";
 
 export const VIDEO_PROMPT_VERSION = "postmotive-video-v1";
+export const DEFAULT_VIDEO_DURATION_SECONDS = 12;
+export const VIDEO_DURATION_OPTIONS = [8, 9, 10, 11, 12, 13, 14, 15] as const;
 export const VIDEO_VOICES = [
   "marin",
   "cedar",
@@ -11,7 +13,8 @@ export const VIDEO_VOICES = [
 
 export type VideoVoice = (typeof VIDEO_VOICES)[number];
 export type VideoMusicMode = "GENERATED_AMBIENT" | "LICENSED_LIBRARY" | "NONE";
-export type VideoProvider = "OPENAI_SORA_TEMPORARY";
+export type VideoProvider = "OPENAI" | "OPENAI_SORA_TEMPORARY";
+export type VideoRenderTier = "ECONOMY" | "BALANCED" | "PREMIUM";
 export type VideoStatus =
   | "DRAFT"
   | "GENERATING"
@@ -25,25 +28,32 @@ export type VideoScene = {
   visual: string;
   narration: string;
   onScreenText: string;
+  mediaStoragePath?: string;
+  mediaAssetId?: string;
 };
 
 export type VideoProject = {
   id: string;
   contentDraftId?: string;
+  workflowKey?: string;
   title: string;
-  channel: "TikTok" | "Instagram Reels" | "YouTube Shorts";
+  channel: "TikTok" | "Instagram Reels" | "Facebook Reels" | "YouTube Shorts";
   objective: string;
   prompt: string;
   script: string;
   caption: string;
+  hashtags: string[];
+  callToAction: string;
   scenes: VideoScene[];
-  durationSeconds: 8 | 16 | 20;
+  durationSeconds: (typeof VIDEO_DURATION_OPTIONS)[number];
   aspectRatio: "9:16";
   voice: VideoVoice;
   voiceDisclosure: boolean;
   musicMode: VideoMusicMode;
   licensedMusicAssetId?: string;
   provider: VideoProvider;
+  routingTier?: VideoRenderTier;
+  providerModel?: string;
   providerJobId?: string;
   providerProgress?: number;
   videoStoragePath?: string;
@@ -93,6 +103,7 @@ export function parseVideoPlanInput(value: unknown): VideoPlanInput | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Partial<VideoPlanInput>;
   const workspace = input.workspace;
+  const durationSeconds = Number(input.durationSeconds);
   if (
     !workspace ||
     typeof workspace.businessName !== "string" ||
@@ -100,10 +111,10 @@ export function parseVideoPlanInput(value: unknown): VideoPlanInput | null {
     typeof input.objective !== "string" ||
     typeof input.message !== "string" ||
     typeof input.callToAction !== "string" ||
-    !["TikTok", "Instagram Reels", "YouTube Shorts"].includes(
+    !["TikTok", "Instagram Reels", "Facebook Reels", "YouTube Shorts"].includes(
       String(input.channel),
     ) ||
-    ![8, 16, 20].includes(Number(input.durationSeconds)) ||
+    !VIDEO_DURATION_OPTIONS.includes(durationSeconds as (typeof VIDEO_DURATION_OPTIONS)[number]) ||
     !isVideoVoice(input.voice) ||
     !isVideoMusicMode(input.musicMode)
   ) {
@@ -126,7 +137,7 @@ export function buildVideoPlanningPrompt(input: VideoPlanInput): string {
     `Call to action: ${input.callToAction}`,
     `Total duration: ${input.durationSeconds} seconds`,
     `Music mode: ${input.musicMode}`,
-    "Return only JSON with: title, script, caption, renderPrompt, complianceNote, and scenes.",
+    "Return only JSON with: title, script, caption, renderPrompt, complianceNote, hashtags, callToAction, and scenes.",
     "scenes must be an array of 2-5 objects with order, seconds, visual, narration, and onScreenText.",
     "Scene seconds must total the requested duration.",
     "Keep on-screen text brief and readable. Include burned-in caption wording in the scene plan.",
@@ -142,6 +153,8 @@ export function parseVideoPlanResponse(value: string): {
   caption: string;
   renderPrompt: string;
   complianceNote: string;
+  hashtags: string[];
+  callToAction: string;
   scenes: VideoScene[];
 } | null {
   try {
@@ -157,6 +170,8 @@ export function parseVideoPlanResponse(value: string): {
       typeof parsed.caption !== "string" ||
       typeof parsed.renderPrompt !== "string" ||
       typeof parsed.complianceNote !== "string" ||
+      typeof parsed.callToAction !== "string" ||
+      !Array.isArray(parsed.hashtags) ||
       !Array.isArray(parsed.scenes)
     ) {
       return null;
@@ -169,6 +184,8 @@ export function parseVideoPlanResponse(value: string): {
         visual: String(item.visual || ""),
         narration: String(item.narration || ""),
         onScreenText: String(item.onScreenText || ""),
+        mediaStoragePath: typeof item.mediaStoragePath === "string" ? item.mediaStoragePath : undefined,
+        mediaAssetId: typeof item.mediaAssetId === "string" ? item.mediaAssetId : undefined,
       };
     });
     if (!scenes.length || scenes.some((scene) => !scene.visual)) return null;
@@ -178,6 +195,8 @@ export function parseVideoPlanResponse(value: string): {
       caption: parsed.caption,
       renderPrompt: parsed.renderPrompt,
       complianceNote: parsed.complianceNote,
+      hashtags: parsed.hashtags.map((item) => String(item).trim()).filter(Boolean),
+      callToAction: parsed.callToAction,
       scenes,
     };
   } catch {

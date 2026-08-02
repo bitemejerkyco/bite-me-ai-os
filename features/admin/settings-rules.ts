@@ -9,6 +9,16 @@ export const SYSTEM_SETTING_KEYS = [
   "default_onboarding_flow",
   "ai_daily_spend_limit_cents",
   "video_daily_spend_limit_cents",
+  "video_generation_mode",
+  "video_router_default_tier",
+  "video_router_economy_model",
+  "video_router_balanced_model",
+  "video_router_premium_model",
+  "video_router_economy_cost_cents_per_second",
+  "video_router_balanced_cost_cents_per_second",
+  "video_router_premium_cost_cents_per_second",
+  "video_router_max_retries",
+  "video_router_emergency_disabled",
   "storage_warning_percentage",
   "storage_critical_percentage",
   "tiktok_content_posting_mode",
@@ -60,6 +70,26 @@ function parseTikTokMode(rawValue: string): string {
   return value;
 }
 
+function parseVideoGenerationMode(rawValue: string): string {
+  const value = rawValue.trim().toLowerCase();
+  if (!["auto", "economy", "balanced", "premium", "disabled"].includes(value)) {
+    throw new Error(
+      "SETTING_VALUE_INVALID:Video generation mode must be auto, economy, balanced, premium, or disabled.",
+    );
+  }
+  return value;
+}
+
+function parseVideoTier(rawValue: string): string {
+  const value = rawValue.trim().toLowerCase();
+  if (!["economy", "balanced", "premium"].includes(value)) {
+    throw new Error(
+      "SETTING_VALUE_INVALID:Video tier must be economy, balanced, or premium.",
+    );
+  }
+  return value;
+}
+
 function parseHttpsUrl(rawValue: string, allowEmpty = false): string {
   const value = rawValue.trim();
   if (!value) {
@@ -86,20 +116,37 @@ export function validateSystemSettingValue(
     case "maximum_upload_size_bytes":
     case "ai_daily_spend_limit_cents":
     case "video_daily_spend_limit_cents":
+    case "video_router_economy_cost_cents_per_second":
+    case "video_router_balanced_cost_cents_per_second":
+    case "video_router_premium_cost_cents_per_second":
     case "tiktok_daily_upload_limit_per_workspace":
     case "tiktok_max_pending_jobs_per_user":
       return parseInteger(value, 0);
+    case "video_router_max_retries":
+      return parseInteger(value, 0, 10);
     case "storage_warning_percentage":
     case "storage_critical_percentage":
       return parseInteger(value, 0, 100);
+    case "video_generation_mode":
+      return parseVideoGenerationMode(value);
+    case "video_router_default_tier":
+      return parseVideoTier(value);
     case "tiktok_content_posting_mode":
       return parseTikTokMode(value);
     case "tiktok_webhooks_enabled":
     case "tiktok_beta_emergency_disabled":
+    case "video_router_emergency_disabled":
       if (!["true", "false"].includes(value.toLowerCase())) {
         throw new Error("SETTING_VALUE_INVALID:Expected true or false.");
       }
       return value.toLowerCase() === "true";
+    case "video_router_economy_model":
+    case "video_router_balanced_model":
+    case "video_router_premium_model":
+      if (!value) {
+        throw new Error("SETTING_VALUE_INVALID:Model name cannot be empty.");
+      }
+      return value;
     case "tiktok_media_base_url":
     case "tiktok_verified_url_prefix":
       return parseHttpsUrl(value, true);

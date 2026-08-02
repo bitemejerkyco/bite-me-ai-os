@@ -15,10 +15,14 @@ import {
   loadLocal,
   saveLocal,
   STORAGE_KEYS,
+  workspaceStorageKey,
   type ContentDraft,
   type WorkspaceProfile,
 } from "@/features/core/local-os";
+import { buildCalendarDraftUrl } from "@/features/content/content-navigation";
 import {
+  DEFAULT_VIDEO_DURATION_SECONDS,
+  VIDEO_DURATION_OPTIONS,
   VIDEO_VOICES,
   type CreativeVersion,
   type VideoMusicMode,
@@ -70,7 +74,7 @@ export default function VideoStudio({
   const [message, setMessage] = useState("");
   const [cta, setCta] = useState("Shop now");
   const [duration, setDuration] =
-    useState<VideoProject["durationSeconds"]>(16);
+    useState<VideoProject["durationSeconds"]>(DEFAULT_VIDEO_DURATION_SECONDS);
   const [voice, setVoice] = useState<VideoVoice>("marin");
   const [musicMode, setMusicMode] =
     useState<VideoMusicMode>("GENERATED_AMBIENT");
@@ -106,7 +110,7 @@ export default function VideoStudio({
             setVoice(resumed.voice);
             if (resumed.status === "GENERATING") {
               setNotice(
-                `Resumed video render at ${resumed.providerProgress || 0}%. PostMotive will keep checking automatically.`,
+                `Resumed video render at ${resumed.providerProgress || 0}%. Motive will keep checking automatically.`,
               );
             }
           }
@@ -254,6 +258,71 @@ export default function VideoStudio({
     setVersions((current) => [version, ...current]);
   };
 
+  const refreshVideoProjects = async (preferredId?: string) => {
+    const items = await loadCloudVideoProjects();
+    setProjects(items);
+    const nextProject =
+      items.find((item) => item.id === preferredId) ||
+      items.find((item) => item.status === "GENERATING") ||
+      items.find((item) => item.status === "READY") ||
+      items[0] ||
+      null;
+    if (nextProject) {
+      setProject(nextProject);
+      setVoice(nextProject.voice);
+      if (nextProject.status === "GENERATING") {
+        setNotice(
+          `Resumed video render at ${nextProject.providerProgress || 0}%. Motive will keep checking automatically.`,
+        );
+      }
+    }
+  };
+
+  const startWorkflow = async () => {
+    setWorking("workflow");
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/ai/video-workflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel,
+          objective,
+          message,
+          callToAction: cta,
+          durationSeconds: duration,
+          voice,
+          musicMode,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        projectId?: string;
+        draftId?: string;
+        workflowKey?: string;
+      } | null;
+      if (!response.ok || !payload?.ok || !payload.projectId) {
+        throw new Error(payload?.error || "Video generation could not start.");
+      }
+      await refreshVideoProjects(payload.projectId);
+      setNotice(
+        payload.workflowKey
+          ? "Video workflow started. Motive reserved credits, created the draft, and began rendering."
+          : "Video workflow started.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Video generation could not start.",
+      );
+    } finally {
+      setWorking("");
+    }
+  };
+
   const generatePlan = async () => {
     setWorking("plan");
     setError("");
@@ -293,6 +362,8 @@ export default function VideoStudio({
         prompt: payload.renderPrompt,
         script: payload.script,
         caption: payload.caption,
+        hashtags: [],
+        callToAction: cta,
         scenes: payload.scenes,
         durationSeconds: duration,
         aspectRatio: "9:16",
@@ -437,9 +508,13 @@ export default function VideoStudio({
     }
   };
 
-  const startRevision = async (mode: "edit" | "fresh" = "edit") => {
+  const startRevision = async (
+    mode: "edit" | "fresh" = "edit",
+    requestOverride?: string,
+  ) => {
     if (!project?.videoStoragePath) return;
-    if (!revisionRequest.trim()) {
+    const requestedChange = (requestOverride || revisionRequest).trim();
+    if (!requestedChange) {
       setError("Describe the video change you want first.");
       return;
     }
@@ -486,7 +561,7 @@ export default function VideoStudio({
         body: JSON.stringify({
           sourceVideoId: mode === "edit" ? sourceVideoId : undefined,
           prompt: [
-            `Requested revision: ${revisionRequest.trim()}`,
+            `Requested revision: ${requestedChange}`,
             composeRenderPrompt(project),
           ].join("\n"),
           seconds: project.durationSeconds,
@@ -523,6 +598,7 @@ export default function VideoStudio({
           ? "Targeted video revision is queued at the provider. The current version remains saved."
           : "Fresh revised video is queued at the provider. The current version remains saved.",
       );
+      if (!requestOverride) setRevisionRequest("");
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -632,10 +708,9 @@ export default function VideoStudio({
         status: "READY",
         updatedAt: new Date().toISOString(),
       });
-      setRevisionRequest("");
       setProviderStatus("completed");
       setNotice(
-        `Video version ${videoVersion.versionNumber} is ready and saved in PostMotive.`,
+        `Video version ${videoVersion.versionNumber} is ready and saved in Motive.`,
       );
     } catch (caught) {
       setError(
@@ -705,6 +780,68 @@ export default function VideoStudio({
     } finally {
       setWorking("");
     }
+  };
+
+  const moveScene = async (sceneIndex: number, direction: -1 | 1) => {
+    if (!project) return;
+    const nextIndex = sceneIndex + direction;
+    if (nextIndex < 0 || nextIndex >= project.scenes.length) return;
+    const nextScenes = [...project.scenes];
+    const [scene] = nextScenes.splice(sceneIndex, 1);
+    nextScenes.splice(nextIndex, 0, scene);
+    await updateProject({
+      ...project,
+      scenes: nextScenes.map((item, index) => ({ ...item, order: index + 1 })),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const trimScene = async (sceneIndex: number, direction: -1 | 1) => {
+    if (!project) return;
+    const nextScenes = project.scenes.map((item, index) =>
+      index === sceneIndex
+        ? {
+            ...item,
+            seconds: Math.max(1, Math.min(15, item.seconds + direction)),
+          }
+        : item,
+    );
+    const nextTotal = nextScenes.reduce((sum, scene) => sum + scene.seconds, 0);
+    if (nextTotal > project.durationSeconds) {
+      setError("Scene timing cannot exceed the total video length.");
+      return;
+    }
+    await updateProject({
+      ...project,
+      scenes: nextScenes,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const replaceSceneMedia = async (sceneIndex: number, mediaStoragePath: string) => {
+    if (!project) return;
+    await updateProject({
+      ...project,
+      scenes: project.scenes.map((item, index) =>
+        index === sceneIndex
+          ? {
+              ...item,
+              mediaStoragePath: mediaStoragePath || undefined,
+            }
+          : item,
+      ),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const regenerateScene = async (sceneIndex: number) => {
+    if (!project) return;
+    const scene = project.scenes[sceneIndex];
+    if (!scene) return;
+    await startRevision(
+      "edit",
+      `Regenerate scene ${scene.order}: ${scene.visual}. Keep the duration at ${scene.seconds} seconds and preserve the overall message.`,
+    );
   };
 
   const restoreVersion = async (version: CreativeVersion) => {
@@ -815,13 +952,12 @@ export default function VideoStudio({
         status: "APPROVED",
         updatedAt: new Date().toISOString(),
       });
-      const localDrafts = loadLocal<ContentDraft[]>(STORAGE_KEYS.drafts, []);
-      saveLocal(STORAGE_KEYS.drafts, [
+      const localDrafts = loadLocal<ContentDraft[]>(workspaceStorageKey(STORAGE_KEYS.drafts, workspace.id), []);
+      saveLocal(workspaceStorageKey(STORAGE_KEYS.drafts, workspace.id), [
         draft,
         ...localDrafts.filter((item) => item.id !== draft.id),
       ]);
-      saveLocal(STORAGE_KEYS.calendarPrefill, draft);
-      window.location.assign("/calendar");
+      window.location.assign(buildCalendarDraftUrl(draft.id));
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -851,8 +987,9 @@ export default function VideoStudio({
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
             >
               <option>TikTok</option>
-              <option disabled>Instagram Reels — next</option>
-              <option disabled>YouTube Shorts — next</option>
+              <option>Instagram Reels</option>
+              <option>Facebook Reels</option>
+              <option>YouTube Shorts</option>
             </select>
           </label>
           <label className="block text-sm text-slate-700">
@@ -897,9 +1034,11 @@ export default function VideoStudio({
                 }
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
               >
-                <option value={8}>8 seconds</option>
-                <option value={16}>16 seconds</option>
-                <option value={20}>20 seconds</option>
+                {VIDEO_DURATION_OPTIONS.map((seconds) => (
+                  <option key={seconds} value={seconds}>
+                    {seconds} seconds
+                  </option>
+                ))}
               </select>
             </label>
             <label className="block text-sm text-slate-700">
@@ -939,8 +1078,18 @@ export default function VideoStudio({
           </label>
           <button
             disabled={Boolean(working)}
-            onClick={() => void generatePlan()}
+            onClick={() => void startWorkflow()}
             className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold hover:bg-violet-500 disabled:opacity-60"
+          >
+            {working === "workflow"
+              ? "Generating video…"
+              : "Generate full video"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(working)}
+            onClick={() => void generatePlan()}
+            className="w-full rounded-xl border border-violet-200 bg-white px-5 py-3 font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-60"
           >
             {working === "plan" ? "Planning video…" : "Create video plan"}
           </button>
@@ -985,7 +1134,7 @@ export default function VideoStudio({
               </span>
               {creditStatus.billingExempt ? (
                 <span>
-                  Estimated platform cost:{" "}
+                  Estimated platform cost: {" "}
                   {(
                     renderQuote.estimatedProviderCostCents / 100
                   ).toLocaleString(undefined, {
@@ -1113,8 +1262,7 @@ export default function VideoStudio({
                   </p>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Planned time: {totalSceneSeconds}s /{" "}
-                  {project.durationSeconds}s
+                  Planned time: {totalSceneSeconds}s / {project.durationSeconds}s
                 </p>
               </div>
               <div className="mt-4 space-y-4">
@@ -1123,9 +1271,43 @@ export default function VideoStudio({
                     key={scene.order}
                     className="rounded-xl border border-slate-200/80 p-4"
                   >
-                    <p className="text-sm font-semibold">
-                      Scene {scene.order} · {scene.seconds}s
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">
+                        Scene {scene.order} · {scene.seconds}s
+                      </p>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <button
+                          type="button"
+                          disabled={sceneIndex === 0}
+                          onClick={() => void moveScene(sceneIndex, -1)}
+                          className="rounded-lg border border-slate-200 px-2 py-1 disabled:opacity-40"
+                        >
+                          Move up
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sceneIndex === project.scenes.length - 1}
+                          onClick={() => void moveScene(sceneIndex, 1)}
+                          className="rounded-lg border border-slate-200 px-2 py-1 disabled:opacity-40"
+                        >
+                          Move down
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void trimScene(sceneIndex, -1)}
+                          className="rounded-lg border border-slate-200 px-2 py-1 disabled:opacity-40"
+                        >
+                          -1s
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void trimScene(sceneIndex, 1)}
+                          className="rounded-lg border border-slate-200 px-2 py-1 disabled:opacity-40"
+                        >
+                          +1s
+                        </button>
+                      </div>
+                    </div>
                     <label className="mt-3 block text-xs text-slate-700">
                       Visual direction
                       <textarea
@@ -1180,6 +1362,82 @@ export default function VideoStudio({
                   </div>
                 ))}
               </div>
+              <details className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                  Advanced controls
+                </summary>
+                <div className="mt-4 space-y-4">
+                  {project.scenes.map((scene, sceneIndex) => (
+                    <div
+                      key={`${scene.order}-advanced`}
+                      className="rounded-xl border border-slate-200 bg-white p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold">
+                          Scene {scene.order} media and regen
+                        </p>
+                        <button
+                          type="button"
+                          disabled={Boolean(working)}
+                          onClick={() => void regenerateScene(sceneIndex)}
+                          className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          Regenerate scene
+                        </button>
+                      </div>
+                      <label className="mt-3 block text-xs text-slate-700">
+                        Replace scene media
+                        <input
+                          value={scene.mediaStoragePath || ""}
+                          onChange={(event) =>
+                            setProject({
+                              ...project,
+                              scenes: project.scenes.map((item, index) =>
+                                index === sceneIndex
+                                  ? {
+                                      ...item,
+                                      mediaStoragePath:
+                                        event.target.value || undefined,
+                                    }
+                                  : item,
+                              ),
+                            })
+                          }
+                          onBlur={(event) =>
+                            void replaceSceneMedia(
+                              sceneIndex,
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Paste a media storage path or asset reference"
+                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                        />
+                      </label>
+                    </div>
+                  ))}
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-semibold">Full-video regen</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Use the current scene plan, caption, hashtags, and CTA to
+                      regenerate the whole video.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={Boolean(working) || !renderPermission.allowed}
+                      onClick={() => void startRender()}
+                      className="mt-3 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {working === "render"
+                        ? "Starting render…"
+                        : `Regenerate full video · ${
+                            creditStatus?.billingExempt
+                              ? "Included"
+                              : `${renderQuote.requiredCredits} credits`
+                          }`}
+                    </button>
+                  </div>
+                </div>
+              </details>
             </div>
             <label className="block text-sm text-slate-700">
               Voiceover script

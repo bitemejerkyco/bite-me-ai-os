@@ -95,6 +95,8 @@ export async function POST(request: Request) {
   }
   return NextResponse.json({
     ...plan,
+    hashtags: plan.hashtags,
+    callToAction: plan.callToAction,
     model,
     promptVersion: VIDEO_PROMPT_VERSION,
   });

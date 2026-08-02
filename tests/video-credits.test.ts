@@ -20,9 +20,17 @@ describe("video credits", () => {
       requiredCredits: 8,
       estimatedProviderCostCents: 560,
     });
-    expect(quoteVideoCredits(20)).toEqual({
-      requiredCredits: 20,
-      estimatedProviderCostCents: 1400,
+    expect(quoteVideoCredits(10)).toEqual({
+      requiredCredits: 10,
+      estimatedProviderCostCents: 700,
+    });
+    expect(quoteVideoCredits(12)).toEqual({
+      requiredCredits: 12,
+      estimatedProviderCostCents: 840,
+    });
+    expect(quoteVideoCredits(15)).toEqual({
+      requiredCredits: 15,
+      estimatedProviderCostCents: 1050,
     });
   });
 
@@ -31,8 +39,13 @@ describe("video credits", () => {
       canStartVideoRender({ ...status, balanceCredits: 7 }, 8).allowed,
     ).toBe(false);
     expect(
-      canStartVideoRender({ ...status, monthlyUsedCredits: 90 }, 16).allowed,
+      canStartVideoRender({ ...status, monthlyUsedCredits: 90 }, 12).allowed,
     ).toBe(false);
+  });
+
+  it("rejects unsupported durations", () => {
+    expect(() => quoteVideoCredits(7)).toThrow("Unsupported video duration.");
+    expect(() => quoteVideoCredits(16)).toThrow("Unsupported video duration.");
   });
 
   it("never blocks billing-exempt super admins", () => {
@@ -44,7 +57,7 @@ describe("video credits", () => {
           monthlyLimitCredits: 0,
           billingExempt: true,
         },
-        20,
+        15,
       ).allowed,
     ).toBe(true);
   });

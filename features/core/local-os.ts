@@ -29,6 +29,7 @@ export type Industry =
   | "SUPPLEMENTS";
 
 export type WorkspaceProfile = {
+  id?: string;
   businessName: string;
   website: string;
   industry: Industry;
@@ -99,6 +100,7 @@ export type MediaAsset = {
   createdAt: string;
   storagePath?: string;
   folderId?: string;
+  isFavorite?: boolean;
   source?: "UPLOADED" | "GENERATED" | "IMPORTED" | "LEGACY" | "CAMPAIGN" | "UGC";
   generationStatus?: "PENDING" | "PROCESSING" | "READY" | "FAILED";
   generationJobId?: string;
@@ -196,6 +198,47 @@ export function loadLocal<T>(key: string, fallback: T): T {
 export function saveLocal<T>(key: string, value: T): void {
   window.localStorage.setItem(key, JSON.stringify(value));
   window.dispatchEvent(new Event("bite-me-os-change"));
+}
+
+export function workspaceStorageKey(baseKey: string, workspaceId?: string | null): string {
+  return workspaceId ? `${baseKey}:${workspaceId}` : baseKey;
+}
+
+type StorageLike = {
+  length: number;
+  key(index: number): string | null;
+  removeItem(key: string): void;
+};
+
+function matchesWorkspaceCacheKey(key: string): boolean {
+  return key === STORAGE_KEYS.workspace
+    || key === STORAGE_KEYS.calendarPrefill
+    || key === STORAGE_KEYS.drafts
+    || key === STORAGE_KEYS.campaigns
+    || key === STORAGE_KEYS.media
+    || key.startsWith(`${STORAGE_KEYS.drafts}:`)
+    || key.startsWith(`${STORAGE_KEYS.campaigns}:`)
+    || key.startsWith(`${STORAGE_KEYS.media}:`);
+}
+
+export function collectWorkspaceCacheKeys(storage: StorageLike): string[] {
+  const keys: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key) continue;
+    if (matchesWorkspaceCacheKey(key)) {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+export function clearWorkspaceClientCache(storage?: StorageLike): void {
+  if (typeof window === "undefined" && !storage) return;
+  const target = storage || window.localStorage;
+  for (const key of collectWorkspaceCacheKeys(target)) {
+    target.removeItem(key);
+  }
 }
 
 export function isDemoMode(): boolean {

@@ -18,9 +18,6 @@ import {
   type ContentScore,
 } from "@/features/core/content-score";
 import {
-  loadLocal,
-  saveLocal,
-  STORAGE_KEYS,
   type ContentDraft,
   type ContentKnowledgeItem,
   type PerformanceSnapshot,
@@ -32,6 +29,34 @@ function localDate(value: Date): string {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function timezoneDateKey(value: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const year = parts.find((part) => part.type === "year")?.value || "0000";
+  const month = parts.find((part) => part.type === "month")?.value || "00";
+  const day = parts.find((part) => part.type === "day")?.value || "00";
+  return `${year}-${month}-${day}`;
+}
+
+function formatScheduledDate(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone,
+  }).format(new Date(value));
+}
+
+function formatScheduledTime(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    timeStyle: "short",
+    timeZone,
+  }).format(new Date(value));
 }
 
 function monthCells(month: Date): Date[] {
@@ -119,6 +144,7 @@ export default function ContentCalendar() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const preferredView = new URLSearchParams(window.location.search).get("view")?.toLowerCase();
+      const requestedDraftId = new URLSearchParams(window.location.search).get("draft")?.trim();
       void Promise.all([
         loadCloudSchedule(),
         loadCloudDrafts(),
@@ -141,12 +167,11 @@ export default function ContentCalendar() {
               schedule[0] ||
               null,
           );
-          const prefill = loadLocal<ContentDraft | null>(
-            STORAGE_KEYS.calendarPrefill,
-            null,
-          );
-          if (prefill) {
-            const form = draftForm(prefill);
+          const requestedDraft = requestedDraftId
+            ? savedDrafts.find((item) => item.id === requestedDraftId) || null
+            : null;
+          if (requestedDraft) {
+            const form = draftForm(requestedDraft);
             setSelectedDraftId(form.selectedDraftId);
             setContentDraftId(form.contentDraftId);
             setEntryType(form.entryType);
@@ -155,7 +180,6 @@ export default function ContentCalendar() {
             setContent(form.content);
             setVideoProjectId(form.videoProjectId);
             setMediaStoragePath(form.mediaStoragePath);
-            saveLocal(STORAGE_KEYS.calendarPrefill, null);
             setMessage("AI Studio content loaded. Choose Schedule or Post now.");
           }
         })
@@ -186,11 +210,11 @@ export default function ContentCalendar() {
   const postsByDate = useMemo(() => {
     const grouped = new Map<string, ScheduledPost[]>();
     posts.forEach((post) => {
-      const key = localDate(new Date(post.scheduledFor));
+      const key = timezoneDateKey(post.scheduledFor, post.timezone || timezone);
       grouped.set(key, [...(grouped.get(key) || []), post]);
     });
     return grouped;
-  }, [posts]);
+  }, [posts, timezone]);
   const latestPerformanceByPost = useMemo(() => {
     const latest = new Map<string, PerformanceSnapshot>();
     performance.forEach((snapshot) => {
@@ -600,7 +624,7 @@ export default function ContentCalendar() {
               <article key={post.id} className="flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-white/70 p-4 md:flex-row md:items-center md:justify-between">
                 <button onClick={() => openPost(post)} className="text-left">
                   <p className="font-semibold">{post.title}</p>
-                  <p className="mt-1 text-sm text-slate-500">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
+                  <p className="mt-1 text-sm text-slate-500">{post.channel} · {formatScheduledDate(post.scheduledFor, post.timezone || timezone)}</p>
                 </button>
                 <div className="flex gap-2">
                   <button onClick={() => openPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View ad</button>
@@ -785,10 +809,7 @@ export default function ContentCalendar() {
                     <span className="block font-semibold">{post.title}</span>
                     <span className="mt-1 block text-sm text-slate-500">
                       {post.channel} ·{" "}
-                      {new Date(post.scheduledFor).toLocaleTimeString([], {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      {formatScheduledTime(post.scheduledFor, post.timezone || timezone)}
                     </span>
                   </span>
                   <span
@@ -817,7 +838,7 @@ export default function ContentCalendar() {
               </div>
               <h2 className="mt-3 text-xl font-bold">{selectedPost.title}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                {selectedPost.channel} · {new Date(selectedPost.scheduledFor).toLocaleString()} · {selectedPost.timezone}
+                {selectedPost.channel} · {formatScheduledDate(selectedPost.scheduledFor, selectedPost.timezone || timezone)} · {selectedPost.timezone}
               </p>
             </div>
             <button onClick={() => setSelectedPost(null)} className="rounded-xl border border-slate-200/80 px-3 py-2 text-sm">Close details</button>
@@ -880,7 +901,7 @@ export default function ContentCalendar() {
                   </div>
                 ))}
               </div>
-              {selectedPost.publishedAt ? <p className="mt-3 text-xs text-slate-500">Published: {new Date(selectedPost.publishedAt).toLocaleString()}</p> : null}
+              {selectedPost.publishedAt ? <p className="mt-3 text-xs text-slate-500">Published: {formatScheduledDate(selectedPost.publishedAt, selectedPost.timezone || timezone)}</p> : null}
             </div>
           </div>
           <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/70 p-4">
@@ -973,7 +994,7 @@ export default function ContentCalendar() {
                   <span className={`rounded-full px-2 py-1 text-xs ${statusStyle[post.status]}`}>{post.status.replaceAll("_", " ")}</span>
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{post.entryType}</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-500">{post.channel} · {new Date(post.scheduledFor).toLocaleString()}</p>
+                <p className="mt-1 text-sm text-slate-500">{post.channel} · {formatScheduledDate(post.scheduledFor, post.timezone || timezone)}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => openPost(post)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">View details</button>

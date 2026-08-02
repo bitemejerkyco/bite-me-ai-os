@@ -123,7 +123,7 @@ export function shouldRefreshSignedUrl(expiresAt: string | null, now = Date.now(
   if (!expiresAt) return true;
   const expiryMs = Date.parse(expiresAt);
   if (!Number.isFinite(expiryMs)) return true;
-  return expiryMs - now < 45_000;
+  return expiryMs <= now;
 }
 
 function toCustomerSafeError(message: string): string {

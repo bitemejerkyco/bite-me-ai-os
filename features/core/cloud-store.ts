@@ -34,6 +34,7 @@ type WorkspaceRow = {
 
 function workspaceFromRow(row: WorkspaceRow): WorkspaceProfile {
   return {
+    id: row.id,
     businessName: row.name,
     website: row.website || "",
     industry: row.industry,
@@ -63,14 +64,22 @@ async function currentUserId(): Promise<string> {
 
 export async function getWorkspaceRow(): Promise<WorkspaceRow | null> {
   if (isDemoMode()) return null;
-  const { data, error } = await createClient()
-    .from("workspaces")
-    .select("id,name,website,industry,primary_goal,audience,voice,updated_at")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data as WorkspaceRow | null;
+  const client = createClient();
+  const primaryWorkspaceId = typeof (client as { rpc?: unknown }).rpc === "function"
+    ? String((await client.rpc("my_primary_workspace_id")).data || "").trim()
+    : "";
+  if (primaryWorkspaceId) {
+    const { data, error } = await client
+      .from("workspaces")
+      .select("id,name,website,industry,primary_goal,audience,voice,updated_at")
+      .eq("id", primaryWorkspaceId)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (data) return data as WorkspaceRow;
+  }
+
+  return null;
 }
 
 export async function loadCloudWorkspace(): Promise<WorkspaceProfile | null> {
@@ -277,6 +286,7 @@ type MediaRow = {
   height: number | null;
   duration_seconds: number | null;
   archived_at: string | null;
+  is_favorite?: boolean | null;
 };
 
 function mediaFromRow(row: MediaRow): MediaAsset {
@@ -300,22 +310,28 @@ function mediaFromRow(row: MediaRow): MediaAsset {
       ? Number(row.duration_seconds)
       : undefined,
     archivedAt: row.archived_at || undefined,
+    isFavorite: row.is_favorite ?? false,
   };
 }
 
-export async function loadCloudMedia(): Promise<MediaAsset[]> {
+export async function loadCloudMedia(options?: {
+  includeArchived?: boolean;
+}): Promise<MediaAsset[]> {
   if (isDemoMode()) {
     ensureDemoData();
     return loadLocal(STORAGE_KEYS.demoMedia, []);
   }
   const workspace = await getWorkspaceRow();
   if (!workspace) return [];
-  const { data, error } = await createClient()
+  let query = createClient()
     .from("media_assets")
-    .select("id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at")
+    .select("*")
     .eq("workspace_id", workspace.id)
-    .is("archived_at", null)
     .order("created_at", { ascending: false });
+  if (!options?.includeArchived) {
+    query = query.is("archived_at", null);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data || []).map((row) => mediaFromRow(row as MediaRow));
 }
@@ -352,6 +368,7 @@ export async function uploadCloudMedia(
       width: options?.width,
       height: options?.height,
       durationSeconds: options?.durationSeconds,
+      isFavorite: false,
     };
     const media = loadLocal<MediaAsset[]>(STORAGE_KEYS.demoMedia, []);
     saveLocal(STORAGE_KEYS.demoMedia, [asset, ...media]);
@@ -390,8 +407,9 @@ export async function uploadCloudMedia(
       duration_seconds: Number.isFinite(options?.durationSeconds)
         ? options?.durationSeconds
         : null,
+      is_favorite: false,
     })
-    .select("id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at")
+    .select("*")
     .single();
 
   if (error) {
@@ -558,6 +576,7 @@ export async function updateCloudMediaAsset(
     tags?: string[];
     folderId?: string;
     archivedAt?: string | null;
+    isFavorite?: boolean;
   },
 ): Promise<void> {
   if (isDemoMode()) {
@@ -571,6 +590,8 @@ export async function updateCloudMediaAsset(
         folderId: updates.folderId ?? item.folderId,
         archivedAt:
           updates.archivedAt === undefined ? item.archivedAt : updates.archivedAt || undefined,
+        isFavorite:
+          updates.isFavorite === undefined ? item.isFavorite : updates.isFavorite,
       };
     });
     saveLocal(STORAGE_KEYS.demoMedia, next);
@@ -582,6 +603,7 @@ export async function updateCloudMediaAsset(
   if (updates.tags !== undefined) payload.tags = updates.tags;
   if (updates.folderId !== undefined) payload.folder_id = updates.folderId || null;
   if (updates.archivedAt !== undefined) payload.archived_at = updates.archivedAt;
+  if (updates.isFavorite !== undefined) payload.is_favorite = updates.isFavorite;
   if (!Object.keys(payload).length) return;
 
   const { error } = await createClient().from("media_assets").update(payload).eq("id", assetId);
@@ -670,8 +692,23 @@ export async function saveCloudScheduledPost(
   }
   const workspace = await requireWorkspace();
   const userId = await currentUserId();
+  let existingQuery = createClient()
+    .from("scheduled_posts")
+    .select("id")
+    .eq("workspace_id", workspace.id)
+    .eq("entry_type", post.entryType)
+    .eq("channel", post.channel)
+    .eq("scheduled_for", post.scheduledFor);
+  existingQuery = post.contentDraftId
+    ? existingQuery.eq("content_draft_id", post.contentDraftId)
+    : existingQuery.eq("title", post.title).eq("content", post.content);
+  const { data: existingPost, error: existingError } = await existingQuery
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
   const { error } = await createClient().from("scheduled_posts").upsert({
-    id: post.id,
+    id: (existingPost as { id?: string } | null)?.id || post.id,
     workspace_id: workspace.id,
     created_by: userId,
     entry_type: post.entryType,
@@ -693,12 +730,16 @@ export async function saveCloudScheduledPost(
 type VideoProjectRow = {
   id: string;
   content_draft_id: string | null;
+  workflow_key: string | null;
+  credit_request_id: string | null;
   title: string;
   channel: VideoProject["channel"];
   objective: string;
   prompt: string;
   script: string;
   caption: string;
+  hashtags: string[] | null;
+  call_to_action: string | null;
   scenes: VideoProject["scenes"];
   duration_seconds: VideoProject["durationSeconds"];
   aspect_ratio: "9:16";
@@ -707,6 +748,8 @@ type VideoProjectRow = {
   music_mode: VideoProject["musicMode"];
   licensed_music_asset_id: string | null;
   provider: VideoProject["provider"];
+  routing_tier: VideoProject["routingTier"] | null;
+  provider_model: string | null;
   provider_job_id: string | null;
   provider_progress: number | null;
   video_storage_path: string | null;
@@ -721,12 +764,15 @@ function videoProjectFromRow(row: VideoProjectRow): VideoProject {
   return {
     id: row.id,
     contentDraftId: row.content_draft_id || undefined,
+    workflowKey: row.workflow_key || undefined,
     title: row.title,
     channel: row.channel,
     objective: row.objective,
     prompt: row.prompt,
     script: row.script,
     caption: row.caption,
+    hashtags: row.hashtags || [],
+    callToAction: row.call_to_action || "",
     scenes: row.scenes || [],
     durationSeconds: Number(row.duration_seconds) as VideoProject["durationSeconds"],
     aspectRatio: "9:16",
@@ -735,6 +781,8 @@ function videoProjectFromRow(row: VideoProjectRow): VideoProject {
     musicMode: row.music_mode,
     licensedMusicAssetId: row.licensed_music_asset_id || undefined,
     provider: row.provider,
+    routingTier: row.routing_tier || undefined,
+    providerModel: row.provider_model || undefined,
     providerJobId: row.provider_job_id || undefined,
     providerProgress: row.provider_progress ?? undefined,
     videoStoragePath: row.video_storage_path || undefined,
@@ -754,7 +802,7 @@ export async function loadCloudVideoProjects(): Promise<VideoProject[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("video_projects")
-    .select("id,content_draft_id,title,channel,objective,prompt,script,caption,scenes,duration_seconds,aspect_ratio,voice,voice_disclosure,music_mode,licensed_music_asset_id,provider,provider_job_id,provider_progress,video_storage_path,voiceover_storage_path,status,failure_reason,created_at,updated_at")
+    .select("id,content_draft_id,workflow_key,credit_request_id,title,channel,objective,prompt,script,caption,hashtags,call_to_action,scenes,duration_seconds,aspect_ratio,voice,voice_disclosure,music_mode,licensed_music_asset_id,provider,routing_tier,provider_model,provider_job_id,provider_progress,video_storage_path,voiceover_storage_path,status,failure_reason,created_at,updated_at")
     .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
@@ -780,6 +828,8 @@ export async function saveCloudVideoProject(
     id: project.id,
     workspace_id: workspace.id,
     content_draft_id: project.contentDraftId || null,
+    workflow_key: project.workflowKey || null,
+    credit_request_id: null,
     created_by: userId,
     title: project.title,
     channel: project.channel,
@@ -787,6 +837,8 @@ export async function saveCloudVideoProject(
     prompt: project.prompt,
     script: project.script,
     caption: project.caption,
+    hashtags: project.hashtags || [],
+    call_to_action: project.callToAction || "",
     scenes: project.scenes,
     duration_seconds: project.durationSeconds,
     aspect_ratio: project.aspectRatio,
@@ -795,6 +847,8 @@ export async function saveCloudVideoProject(
     music_mode: project.musicMode,
     licensed_music_asset_id: project.licensedMusicAssetId || null,
     provider: project.provider,
+    routing_tier: project.routingTier || null,
+    provider_model: project.providerModel || null,
     provider_job_id: project.providerJobId || null,
     provider_progress: project.providerProgress ?? null,
     video_storage_path: project.videoStoragePath || null,

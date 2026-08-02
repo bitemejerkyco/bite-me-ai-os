@@ -8,6 +8,7 @@ import {
   loadLocal,
   saveLocal,
   STORAGE_KEYS,
+  workspaceStorageKey,
   type ContentDraft,
   type WorkspaceProfile,
 } from "@/features/core/local-os";
@@ -18,9 +19,28 @@ import {
   saveCloudDraft,
 } from "@/features/core/cloud-store";
 import VideoStudio from "@/components/core/VideoStudio";
+import { buildCalendarDraftUrl } from "@/features/content/content-navigation";
+import {
+  clearAIStudioRecovery,
+  loadAIStudioRecovery,
+  saveAIStudioRecovery,
+} from "@/features/core/ai-studio-recovery";
+import { isShortFormVideoChannel } from "@/features/core/video-post";
+
+const EMPTY_WORKSPACE: WorkspaceProfile = {
+  businessName: "",
+  website: "",
+  industry: "GENERAL_RETAIL",
+  primaryGoal: "",
+  audience: "",
+  voice: "",
+  completedAt: "",
+};
 
 export default function AIStudio() {
-  const [workspace, setWorkspace] = useState<WorkspaceProfile>(demoWorkspace());
+  const [workspace, setWorkspace] = useState<WorkspaceProfile>(
+    isDemoMode() ? demoWorkspace() : EMPTY_WORKSPACE,
+  );
   const [drafts, setDrafts] = useState<ContentDraft[]>([]);
   const [entryType, setEntryType] = useState<"POST" | "AD">("POST");
   const [channel, setChannel] = useState("instagram");
@@ -34,7 +54,7 @@ export default function AIStudio() {
   const [feedbackNote, setFeedbackNote] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [creationMode, setCreationMode] = useState<"CONTENT" | "VIDEO">(
-    "CONTENT",
+    "VIDEO",
   );
 
   useEffect(() => {
@@ -45,21 +65,49 @@ export default function AIStudio() {
       const campaignChannel = params.get("channel");
       if (campaign) setOffer(`Create content for the ${campaign} campaign.`);
       if (campaignObjective) setObjective(campaignObjective);
-      if (campaignChannel) setChannel(campaignChannel.toLowerCase());
-      void Promise.all([loadCloudWorkspace(), loadCloudDrafts()])
-        .then(([cloudWorkspace, cloudDrafts]) => {
-          setWorkspace(
-            cloudWorkspace || loadLocal(STORAGE_KEYS.workspace, demoWorkspace()),
-          );
-          setDrafts(
-            cloudDrafts.length
-              ? cloudDrafts
-              : loadLocal(STORAGE_KEYS.drafts, []),
-          );
+      if (campaignChannel) {
+        const normalizedChannel = campaignChannel.toLowerCase();
+        setChannel(normalizedChannel);
+        if (isShortFormVideoChannel(campaignChannel)) {
+          setCreationMode("VIDEO");
+        }
+      }
+      void Promise.allSettled([loadCloudWorkspace(), loadCloudDrafts()])
+        .then(([workspaceResult, draftsResult]) => {
+          const cloudWorkspace =
+            workspaceResult.status === "fulfilled" ? workspaceResult.value : null;
+          const cloudDrafts =
+            draftsResult.status === "fulfilled" ? draftsResult.value : [];
+
+          const nextWorkspace = cloudWorkspace
+            || (isDemoMode()
+              ? loadLocal(STORAGE_KEYS.demoWorkspace, demoWorkspace())
+              : null);
+
+          if (nextWorkspace) {
+            setWorkspace(nextWorkspace);
+            const nextDraftKey = workspaceStorageKey(STORAGE_KEYS.drafts, nextWorkspace.id);
+            const fallbackDrafts = isDemoMode() ? loadLocal(nextDraftKey, []) : [];
+            setDrafts(cloudDrafts.length ? cloudDrafts : fallbackDrafts);
+            const recovery = loadAIStudioRecovery(nextWorkspace.id);
+            if (recovery) {
+              setEntryType(recovery.entryType);
+              setChannel(recovery.channel);
+              setObjective(recovery.objective);
+              setOffer(recovery.offer);
+              setCta(recovery.callToAction);
+              setResult(recovery.result);
+              setSaved(false);
+            }
+            return;
+          }
+
+          setWorkspace(EMPTY_WORKSPACE);
+          setDrafts(cloudDrafts);
         })
         .catch(() => {
-          setWorkspace(loadLocal(STORAGE_KEYS.workspace, demoWorkspace()));
-          setDrafts(loadLocal(STORAGE_KEYS.drafts, []));
+          setWorkspace(isDemoMode() ? loadLocal(STORAGE_KEYS.demoWorkspace, demoWorkspace()) : EMPTY_WORKSPACE);
+          setDrafts([]);
         });
     });
     return () => cancelAnimationFrame(frame);
@@ -106,6 +154,21 @@ export default function AIStudio() {
           callToAction: cta,
         }),
       });
+      if (response.status === 429) {
+        saveAIStudioRecovery(
+          {
+            entryType,
+            channel,
+            objective,
+            offer,
+            callToAction: cta,
+            result,
+            savedAt: new Date().toISOString(),
+          },
+          workspace.id,
+        );
+        throw new Error("AI generation is temporarily at capacity. Your draft inputs were saved. Retry in a moment.");
+      }
       const payload = (await response.json()) as {
         title?: string;
         copy?: string;
@@ -135,6 +198,7 @@ export default function AIStudio() {
       });
       setSaved(false);
       setFeedbackMessage("");
+      clearAIStudioRecovery(workspace.id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Content generation failed.");
     } finally {
@@ -164,7 +228,7 @@ export default function AIStudio() {
       ? drafts.map((item) => (item.id === draft.id ? draft : item))
       : [draft, ...drafts];
     setDrafts(next);
-    saveLocal(STORAGE_KEYS.drafts, next);
+    saveLocal(workspaceStorageKey(STORAGE_KEYS.drafts, workspace.id), next);
     setSaved(true);
   };
 
@@ -183,8 +247,7 @@ export default function AIStudio() {
     setError("");
     try {
       if (!saved) await persistDraft(result);
-      saveLocal(STORAGE_KEYS.calendarPrefill, result);
-      window.location.assign("/calendar");
+      window.location.assign(buildCalendarDraftUrl(result.id));
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -251,7 +314,7 @@ export default function AIStudio() {
               : "text-slate-700 hover:bg-violet-50"
           }`}
         >
-          TikTok video
+          Generate Video Post
         </button>
       </div>
       {creationMode === "VIDEO" ? (
@@ -288,7 +351,7 @@ export default function AIStudio() {
             <input value={cta} onChange={(e) => setCta(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5" />
           </label>
           <button disabled={generating} onClick={generate} className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60">
-            {generating ? "Generating with AI…" : "Generate with AI"}
+            {generating ? "Generating with AI…" : "Generate post"}
           </button>
           {entryType === "AD" ? (
             <p className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-800">

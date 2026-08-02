@@ -15,11 +15,11 @@ const input = {
     voice: "bold",
     completedAt: "2026-07-29T00:00:00.000Z",
   },
-  channel: "TikTok" as const,
+  channel: "Facebook Reels" as const,
   objective: "Engagement",
   message: "Show the product on a trail",
   callToAction: "Shop now",
-  durationSeconds: 16 as const,
+  durationSeconds: 12 as const,
   voice: "marin" as const,
   musicMode: "GENERATED_AMBIENT" as const,
 };
@@ -30,7 +30,12 @@ describe("video project foundation", () => {
     const prompt = buildVideoPlanningPrompt(input);
     expect(prompt).toContain("9:16");
     expect(prompt).toContain("copyrighted music");
-    expect(prompt).toContain("16 seconds");
+    expect(prompt).toContain("12 seconds");
+  });
+
+  it("rejects unsupported durations", () => {
+    expect(parseVideoPlanInput({ ...input, durationSeconds: 7 })).toBeNull();
+    expect(parseVideoPlanInput({ ...input, durationSeconds: 16 })).toBeNull();
   });
 
   it("parses a structured scene plan", () => {
@@ -41,6 +46,8 @@ describe("video project foundation", () => {
         caption: "Trail fuel.",
         renderPrompt: "Vertical product video.",
         complianceNote: "Review.",
+        hashtags: ["#trail", "#snack"],
+        callToAction: "Shop now",
         scenes: [
           {
             order: 1,
@@ -53,5 +60,7 @@ describe("video project foundation", () => {
       }),
     );
     expect(parsed?.scenes[0].seconds).toBe(8);
+    expect(parsed?.hashtags).toEqual(["#trail", "#snack"]);
+    expect(parsed?.callToAction).toBe("Shop now");
   });
 });
