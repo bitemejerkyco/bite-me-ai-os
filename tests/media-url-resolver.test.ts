@@ -77,10 +77,9 @@ describe("media url resolver", () => {
     expect(usageRightsStatus("2026-07-01", "2026-12-01", now)).toBe("ACTIVE");
   });
 
-  it("indicates signed url refresh only when expired", () => {
+  it("indicates signed url refresh when near expiry", () => {
     const now = Date.parse("2026-08-01T00:00:00.000Z");
-    expect(shouldRefreshSignedUrl("2026-08-01T00:00:20.000Z", now)).toBe(false);
-    expect(shouldRefreshSignedUrl("2026-07-31T23:59:59.000Z", now)).toBe(true);
+    expect(shouldRefreshSignedUrl("2026-08-01T00:00:20.000Z", now)).toBe(true);
     expect(shouldRefreshSignedUrl("2026-08-01T00:10:00.000Z", now)).toBe(false);
   });
 

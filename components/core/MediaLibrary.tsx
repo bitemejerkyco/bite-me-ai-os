@@ -855,7 +855,7 @@ export default function MediaLibrary({
                   }}
                   className="px-3 py-2 text-sm"
                 >
-                  ▰ {folder.name}
+                  Gû¦ {folder.name}
                 </button>
                 <button
                   onClick={() => void renameFolder(folder)}
@@ -872,7 +872,7 @@ export default function MediaLibrary({
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-xl font-bold">Media intelligence library</h2>
-            <p className="text-sm text-slate-500">{assets.length} total assets · role {roleLabel}</p>
+            <p className="text-sm text-slate-500">{assets.length} total assets -+ role {roleLabel}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -1014,7 +1014,7 @@ export default function MediaLibrary({
                             className="h-full w-full object-cover"
                             onError={() => setBrokenIds((current) => new Set(current).add(asset.id))}
                           />
-                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 text-2xl text-white">▶</span>
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 text-2xl text-white">Gû¦</span>
                           {duration ? (
                             <span className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-xs text-white">{duration}</span>
                           ) : null}
@@ -1035,11 +1035,11 @@ export default function MediaLibrary({
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{asset.name}</p>
                         <p className="mt-1 text-xs text-slate-500">
-                          {resolved?.mimeType || asset.type} · {formatFileSize(resolved?.sizeBytes || asset.size)}
+                          {resolved?.mimeType || asset.type} -+ {formatFileSize(resolved?.sizeBytes || asset.size)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {asset.isFavorite ? <span className="text-amber-500" aria-label="Favorite">★</span> : null}
+                        {asset.isFavorite ? <span className="text-amber-500" aria-label="Favorite">Gÿà</span> : null}
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] uppercase text-slate-600">{sourceBadge(resolved?.source || asset.source)}</span>
                       </div>
                     </div>

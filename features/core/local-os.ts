@@ -268,7 +268,7 @@ export function generateContent(input: {
   const offer = input.offer.trim() || "something worth discovering";
   const cta = input.callToAction.trim() || "Learn more";
   const restricted = ["CANNABIS", "CBD", "ALCOHOL"].includes(input.workspace.industry);
-  const title = `${business}: ${input.entryType === "AD" ? "Ad" : "Post"} · ${input.objective} for ${channel}`;
+  const title = `${business}: ${input.entryType === "AD" ? "Ad" : "Post"} - ${input.objective} for ${channel}`;
   const copy = restricted
     ? `${business} is built around quality, transparency, and community. ${offer}. ${cta}.`
     : `${business} makes it easier to get ${offer}. Built for ${input.workspace.audience || "people who expect better"}, with a ${input.workspace.voice || "clear, confident"} voice. ${cta}.`;
