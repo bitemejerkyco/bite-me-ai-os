@@ -433,7 +433,30 @@ insert into public.creators (
   follower_count, average_views, engagement_rate, audience_summary, estimated_rate_min, estimated_rate_max,
   currency, brand_safety_status, availability_status, match_score, saved, source, is_demo
 )
-select * from (
+select
+  rows.id::text,
+  rows.workspace_id::uuid,
+  rows.display_name::text,
+  rows.handle::text,
+  rows.bio::text,
+  rows.profile_image_url::text,
+  rows.location::text,
+  rows.niches::text[],
+  rows.platforms::jsonb,
+  rows.follower_count::bigint,
+  rows.average_views::bigint,
+  rows.engagement_rate::numeric(8, 5),
+  rows.audience_summary::text,
+  rows.estimated_rate_min::numeric(12, 2),
+  rows.estimated_rate_max::numeric(12, 2),
+  rows.currency::text,
+  rows.brand_safety_status::text,
+  rows.availability_status::text,
+  rows.match_score::integer,
+  rows.saved::boolean,
+  rows.source::text,
+  rows.is_demo::boolean
+from (
   values
   ('cr_001', (select id from demo_workspace), 'Maya Food Lab', '@mayafoodlab', 'Demo creator profile', '/postmotive-mark.png', 'Austin, TX', '{Food,Beverage}', '[{"platform":"Instagram","handle":"@mayafoodlab","profileUrl":"https://example.com/mayafoodlab","followers":42000,"averageViews":22000,"engagementRate":0.064,"verified":false}]'::jsonb, 42000, 22000, 0.064, 'Food audience fit', 350, 700, 'USD', 'SAFE', 'AVAILABLE', 92, true, 'DEMO', true),
   ('cr_002', (select id from demo_workspace), 'Trail Fuel Josh', '@trailfueljosh', 'Demo creator profile', '/postmotive-mark.png', 'Boulder, CO', '{Outdoors,Fitness}', '[{"platform":"TikTok","handle":"@trailfueljosh","profileUrl":"https://example.com/trailfueljosh","followers":155000,"averageViews":74000,"engagementRate":0.052,"verified":false}]'::jsonb, 155000, 74000, 0.052, 'Outdoors audience fit', 1200, 2500, 'USD', 'SAFE', 'LIMITED', 87, false, 'DEMO', true),
@@ -460,8 +483,31 @@ select * from (
   ('cr_023', (select id from demo_workspace), 'Cafe Tech Weekly', '@cafetechweekly', 'Demo creator profile', '/postmotive-mark.png', 'Minneapolis, MN', '{Beverage,Business,Technology}', '[{"platform":"LinkedIn","handle":"@cafetechweekly","profileUrl":"https://example.com/cafetechweekly","followers":27000,"averageViews":11800,"engagementRate":0.064,"verified":false}]'::jsonb, 27000, 11800, 0.064, 'Beverage business fit', 320, 760, 'USD', 'SAFE', 'AVAILABLE', 81, true, 'DEMO', true),
   ('cr_024', (select id from demo_workspace), 'Motor Habit', '@motorhabit', 'Demo creator profile', '/postmotive-mark.png', 'Tampa, FL', '{Automotive,Outdoors}', '[{"platform":"Instagram","handle":"@motorhabit","profileUrl":"https://example.com/motorhabit","followers":79000,"averageViews":30000,"engagementRate":0.042,"verified":false}]'::jsonb, 79000, 30000, 0.042, 'Automotive risk fit', 800, 1500, 'USD', 'RESTRICTED', 'LIMITED', 63, false, 'DEMO', true),
   ('cr_025', (select id from demo_workspace), 'Local Spark Toni', '@localsparktoni', 'Demo creator profile', '/postmotive-mark.png', 'Kansas City, MO', '{Lifestyle,"Local creators","Micro creators"}', '[{"platform":"TikTok","handle":"@localsparktoni","profileUrl":"https://example.com/localsparktoni","followers":16000,"averageViews":8700,"engagementRate":0.099,"verified":false}]'::jsonb, 16000, 8700, 0.099, 'Local micro fit', 150, 360, 'USD', 'SAFE', 'AVAILABLE', 90, true, 'DEMO', true)
-) as rows
-where (select id from demo_workspace) is not null
+) as rows (
+  id,
+  workspace_id,
+  display_name,
+  handle,
+  bio,
+  profile_image_url,
+  location,
+  niches,
+  platforms,
+  follower_count,
+  average_views,
+  engagement_rate,
+  audience_summary,
+  estimated_rate_min,
+  estimated_rate_max,
+  currency,
+  brand_safety_status,
+  availability_status,
+  match_score,
+  saved,
+  source,
+  is_demo
+)
+where rows.workspace_id is not null
 on conflict (id) do update
 set
   workspace_id = excluded.workspace_id,
@@ -494,15 +540,53 @@ insert into public.creator_campaigns (
   id, workspace_id, name, goal, status, description, budget, currency, start_date, end_date,
   product_ids, creator_ids, platforms, deliverables, approval_required, tracking_method, created_by, is_demo
 )
-select * from (
+select
+  rows.id::text,
+  rows.workspace_id::uuid,
+  rows.name::text,
+  rows.goal::text,
+  rows.status::text,
+  rows.description::text,
+  rows.budget::numeric(12, 2),
+  rows.currency::text,
+  rows.start_date::date,
+  rows.end_date::date,
+  rows.product_ids::text[],
+  rows.creator_ids::text[],
+  rows.platforms::text[],
+  rows.deliverables::text[],
+  rows.approval_required::boolean,
+  rows.tracking_method::text,
+  rows.created_by::uuid,
+  rows.is_demo::boolean
+from (
   values
   ('cc_001', (select id from demo_workspace), 'Jerky Summer Trail Challenge', 'Drive product trial', 'ACTIVE', 'Demo campaign', 18000, 'USD', '2026-07-20', '2026-09-10', '{prod_trail_pack}', '{cr_002,cr_013,cr_021}', '{TikTok,Instagram,YouTube}', '{3 Reels,4 TikTok videos,1 YouTube recap}', true, 'UTM_LINK_PLACEHOLDER', null, true),
   ('cc_002', (select id from demo_workspace), 'Fuel Your Workday', 'Increase B2B snack box awareness', 'RECRUITING', 'Demo campaign', 9500, 'USD', '2026-08-10', '2026-09-20', '{prod_office_box}', '{cr_005,cr_009,cr_017}', '{LinkedIn,Instagram}', '{2 LinkedIn posts,3 short videos}', true, 'PROMO_CODE_PLACEHOLDER', null, true),
   ('cc_003', (select id from demo_workspace), 'Local Retail Weekend', 'Increase foot traffic', 'CONTENT_REVIEW', 'Demo campaign', 6000, 'USD', '2026-07-29', '2026-08-22', '{prod_sampler}', '{cr_010,cr_016,cr_025}', '{TikTok,Instagram}', '{6 local short videos}', true, 'STORE_CODE_PLACEHOLDER', null, true),
   ('cc_004', (select id from demo_workspace), 'Protein Focus Month', 'Expand fitness vertical awareness', 'DRAFT', 'Demo campaign', 12000, 'USD', '2026-09-01', '2026-10-05', '{prod_protein}', '{cr_007,cr_011,cr_020}', '{Instagram,YouTube,TikTok}', '{4 recipe videos,2 routines,5 short clips}', true, 'LANDING_LINK_PLACEHOLDER', null, true),
   ('cc_005', (select id from demo_workspace), 'Flavor Drop Tech Launch', 'Promote flavor drop', 'SCHEDULED', 'Demo campaign', 14000, 'USD', '2026-08-05', '2026-09-01', '{prod_flavor_drop}', '{cr_012,cr_019,cr_023}', '{YouTube,LinkedIn,Instagram}', '{3 preview videos,2 thought-leadership posts}', true, 'TRACKING_CODE_PLACEHOLDER', null, true)
-) as rows
-where (select id from demo_workspace) is not null
+) as rows (
+  id,
+  workspace_id,
+  name,
+  goal,
+  status,
+  description,
+  budget,
+  currency,
+  start_date,
+  end_date,
+  product_ids,
+  creator_ids,
+  platforms,
+  deliverables,
+  approval_required,
+  tracking_method,
+  created_by,
+  is_demo
+)
+where rows.workspace_id is not null
 on conflict (id) do update
 set
   workspace_id = excluded.workspace_id,
@@ -529,7 +613,17 @@ with demo_workspace as (
 insert into public.creator_pipeline_records (
   id, workspace_id, creator_id, stage, assigned_user_id, campaign_id, next_action, next_action_at, notes
 )
-select * from (
+select
+  rows.id::text,
+  rows.workspace_id::uuid,
+  rows.creator_id::text,
+  rows.stage::text,
+  rows.assigned_user_id::uuid,
+  rows.campaign_id::text,
+  rows.next_action::text,
+  rows.next_action_at::timestamptz,
+  rows.notes::text
+from (
   values
   ('cp_001', (select id from demo_workspace), 'cr_001', 'SAVED', null, null, 'Send intro brief', '2026-08-02T16:00:00Z', 'Demo record'),
   ('cp_002', (select id from demo_workspace), 'cr_002', 'NEGOTIATING', null, 'cc_001', 'Counter deliverable package', '2026-08-03T18:00:00Z', 'Demo record'),
@@ -546,8 +640,18 @@ select * from (
   ('cp_013', (select id from demo_workspace), 'cr_021', 'SAVED', null, null, 'Invite to trail challenge', '2026-08-05T17:30:00Z', null),
   ('cp_014', (select id from demo_workspace), 'cr_023', 'COMPLETED', null, 'cc_005', 'Plan ambassador proposal', '2026-08-11T17:30:00Z', null),
   ('cp_015', (select id from demo_workspace), 'cr_024', 'DECLINED', null, null, null, null, 'Safety restricted')
-) as rows
-where (select id from demo_workspace) is not null
+) as rows (
+  id,
+  workspace_id,
+  creator_id,
+  stage,
+  assigned_user_id,
+  campaign_id,
+  next_action,
+  next_action_at,
+  notes
+)
+where rows.workspace_id is not null
 on conflict (id) do update
 set
   workspace_id = excluded.workspace_id,
@@ -567,7 +671,22 @@ insert into public.creator_submissions (
   id, workspace_id, creator_id, campaign_id, status, asset_type, title, content_url, text_body, supporting_notes,
   submitted_at, reviewed_at, reviewed_by, is_demo
 )
-select * from (
+select
+  rows.id::text,
+  rows.workspace_id::uuid,
+  rows.creator_id::text,
+  rows.campaign_id::text,
+  rows.status::text,
+  rows.asset_type::text,
+  rows.title::text,
+  rows.content_url::text,
+  rows.text_body::text,
+  rows.supporting_notes::text,
+  rows.submitted_at::timestamptz,
+  rows.reviewed_at::timestamptz,
+  rows.reviewed_by::uuid,
+  rows.is_demo::boolean
+from (
   values
   ('cs_001', (select id from demo_workspace), 'cr_013', 'cc_001', 'SUBMITTED', 'VIDEO', 'Trail snack opener', 'https://example.com/demo/cs_001.mp4', null, 'Demo workspace data', now(), null, null, true),
   ('cs_002', (select id from demo_workspace), 'cr_002', 'cc_001', 'IN_REVIEW', 'SCRIPT', 'Day hike script', null, 'Script draft for TikTok post', 'Demo workspace data', now(), null, null, true),
@@ -581,8 +700,23 @@ select * from (
   ('cs_010', (select id from demo_workspace), 'cr_023', 'cc_005', 'APPROVED', 'CAPTION', 'Founder post draft', null, 'Founder release post', 'Demo workspace data', now(), now(), null, true),
   ('cs_011', (select id from demo_workspace), 'cr_025', 'cc_003', 'REJECTED', 'THUMBNAIL', 'Local splash card', 'https://example.com/demo/cs_011.jpg', null, 'Brand mismatch', now(), now(), null, true),
   ('cs_012', (select id from demo_workspace), 'cr_001', 'cc_001', 'ARCHIVED', 'IMAGE', 'Archived prep shot', 'https://example.com/demo/cs_012.jpg', null, 'Archived demo sample', now(), now(), null, true)
-) as rows
-where (select id from demo_workspace) is not null
+) as rows (
+  id,
+  workspace_id,
+  creator_id,
+  campaign_id,
+  status,
+  asset_type,
+  title,
+  content_url,
+  text_body,
+  supporting_notes,
+  submitted_at,
+  reviewed_at,
+  reviewed_by,
+  is_demo
+)
+where rows.workspace_id is not null
 on conflict (id) do update
 set
   workspace_id = excluded.workspace_id,
@@ -608,21 +742,21 @@ insert into public.creator_ugc_assets (
   usage_rights_start, usage_rights_end, approval_status, performance_metrics, media_library_asset_id, is_demo
 )
 select
-  'cu_' || lpad(idx::text, 3, '0'),
-  (select id from demo_workspace),
-  ('cr_' || lpad((((idx - 1) % 25) + 1)::text, 3, '0')),
-  ('cc_' || lpad((((idx - 1) % 5) + 1)::text, 3, '0')),
-  case when idx % 2 = 0 then 'prod_trail_pack' else 'prod_sampler' end,
-  case when idx % 3 = 0 then 'TikTok' when idx % 3 = 1 then 'Instagram' else 'YouTube' end,
-  case when idx % 2 = 0 then 'VIDEO' else 'IMAGE' end,
-  'Approved UGC Asset ' || idx,
-  array['demo','creator', case when idx % 2 = 0 then 'video' else 'image' end],
+  ('cu_' || lpad(idx::text, 3, '0'))::text,
+  (select id from demo_workspace)::uuid,
+  ('cr_' || lpad((((idx - 1) % 25) + 1)::text, 3, '0'))::text,
+  ('cc_' || lpad((((idx - 1) % 5) + 1)::text, 3, '0'))::text,
+  (case when idx % 2 = 0 then 'prod_trail_pack' else 'prod_sampler' end)::text,
+  (case when idx % 3 = 0 then 'TikTok' when idx % 3 = 1 then 'Instagram' else 'YouTube' end)::text,
+  (case when idx % 2 = 0 then 'VIDEO' else 'IMAGE' end)::text,
+  ('Approved UGC Asset ' || idx)::text,
+  array['demo','creator', case when idx % 2 = 0 then 'video' else 'image' end]::text[],
   '2026-08-01'::date,
   case when idx % 5 = 0 then '2026-09-01'::date else '2026-12-31'::date end,
-  'APPROVED',
-  case when idx <= 8 then jsonb_build_object('reach', 3000 + idx * 420, 'impressions', 4200 + idx * 610, 'engagement', 240 + idx * 35, 'clicks', 90 + idx * 11, 'conversions', 7 + idx) else null end,
-  null,
-  true
+  'APPROVED'::text,
+  case when idx <= 8 then jsonb_build_object('reach', 3000 + idx * 420, 'impressions', 4200 + idx * 610, 'engagement', 240 + idx * 35, 'clicks', 90 + idx * 11, 'conversions', 7 + idx) else null end::jsonb,
+  null::uuid,
+  true::boolean
 from generate_series(1, 20) as idx
 where (select id from demo_workspace) is not null
 on conflict (id) do update
@@ -649,7 +783,17 @@ with demo_workspace as (
 insert into public.creator_activity_events (
   id, workspace_id, actor_user_id, event_type, entity_type, entity_id, summary, metadata, is_demo
 )
-select * from (
+select
+  rows.id::text,
+  rows.workspace_id::uuid,
+  rows.actor_user_id::uuid,
+  rows.event_type::text,
+  rows.entity_type::text,
+  rows.entity_id::text,
+  rows.summary::text,
+  rows.metadata::jsonb,
+  rows.is_demo::boolean
+from (
   values
   ('ca_001', (select id from demo_workspace), null, 'CREATOR_SAVED', 'creator', 'cr_001', 'Creator saved from discover list.', '{"demo":true}'::jsonb, true),
   ('ca_002', (select id from demo_workspace), null, 'CAMPAIGN_CREATED', 'creator_campaign', 'cc_004', 'Creator campaign created.', '{"demo":true}'::jsonb, true),
@@ -657,8 +801,18 @@ select * from (
   ('ca_004', (select id from demo_workspace), null, 'CONTENT_APPROVED', 'creator_submission', 'cs_004', 'Creator content approved.', '{"demo":true}'::jsonb, true),
   ('ca_005', (select id from demo_workspace), null, 'CREATOR_STAGE_MOVED', 'creator_pipeline', 'cp_002', 'Creator moved to negotiating.', '{"demo":true,"from":"INTERESTED","to":"NEGOTIATING"}'::jsonb, true),
   ('ca_006', (select id from demo_workspace), null, 'UGC_ADDED', 'creator_ugc_asset', 'cu_001', 'Approved creator asset added to UGC library.', '{"demo":true}'::jsonb, true)
-) as rows
-where (select id from demo_workspace) is not null
+) as rows (
+  id,
+  workspace_id,
+  actor_user_id,
+  event_type,
+  entity_type,
+  entity_id,
+  summary,
+  metadata,
+  is_demo
+)
+where rows.workspace_id is not null
 on conflict (id) do update
 set
   workspace_id = excluded.workspace_id,
@@ -677,13 +831,13 @@ insert into public.creator_metric_snapshots (
   id, workspace_id, period_start, period_end, measured, estimated, is_demo
 )
 select
-  'cm_001',
-  (select id from demo_workspace),
+  'cm_001'::text,
+  (select id from demo_workspace)::uuid,
   '2026-07-01'::date,
   '2026-07-31'::date,
   '{"activeCampaigns":4,"creatorsEngaged":14,"contentSubmitted":12,"contentApproved":6,"publishedAssets":1,"reach":148000,"impressions":251000,"engagement":13200,"clicks":4100,"conversions":390,"revenue":null,"campaignSpend":22450,"costPerEngagement":1.7,"costPerAcquisition":57.56,"creatorRoi":null}'::jsonb,
   '{"campaignSpend":24000}'::jsonb,
-  true
+  true::boolean
 where (select id from demo_workspace) is not null
 on conflict (id) do update
 set
