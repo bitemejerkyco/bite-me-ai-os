@@ -9,9 +9,11 @@ alter table public.video_projects
 alter table public.video_projects
   drop constraint if exists video_projects_duration_seconds_check;
 
+-- Legacy rows may still include previously supported 16/20-second durations.
 alter table public.video_projects
   add constraint video_projects_duration_seconds_check
-  check (duration_seconds between 8 and 15);
+  check (duration_seconds between 8 and 15)
+  not valid;
 
 create unique index if not exists video_projects_workflow_key_unique
   on public.video_projects(workflow_key)
