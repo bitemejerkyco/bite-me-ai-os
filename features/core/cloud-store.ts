@@ -262,23 +262,44 @@ type MediaRow = {
   id: string;
   storage_path: string;
   file_name: string;
+  asset_type: string;
   mime_type: string | null;
   size_bytes: number;
   tags: string[];
   created_at: string;
   folder_id: string | null;
+  source: MediaAsset["source"] | null;
+  generation_status: MediaAsset["generationStatus"] | null;
+  generation_job_id: string | null;
+  thumbnail_path: string | null;
+  poster_path: string | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  archived_at: string | null;
 };
 
 function mediaFromRow(row: MediaRow): MediaAsset {
   return {
     id: row.id,
     name: row.file_name,
-    type: row.mime_type || "application/octet-stream",
+    type: row.mime_type || row.asset_type || "application/octet-stream",
     size: Number(row.size_bytes),
     tags: row.tags || [],
     createdAt: row.created_at,
     storagePath: row.storage_path,
     folderId: row.folder_id || undefined,
+    source: row.source || undefined,
+    generationStatus: row.generation_status || undefined,
+    generationJobId: row.generation_job_id || undefined,
+    thumbnailPath: row.thumbnail_path || undefined,
+    posterPath: row.poster_path || undefined,
+    width: Number.isFinite(row.width) ? Number(row.width) : undefined,
+    height: Number.isFinite(row.height) ? Number(row.height) : undefined,
+    durationSeconds: Number.isFinite(row.duration_seconds)
+      ? Number(row.duration_seconds)
+      : undefined,
+    archivedAt: row.archived_at || undefined,
   };
 }
 
@@ -291,8 +312,9 @@ export async function loadCloudMedia(): Promise<MediaAsset[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("media_assets")
-    .select("id,storage_path,file_name,mime_type,size_bytes,tags,created_at,folder_id")
+    .select("id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at")
     .eq("workspace_id", workspace.id)
+    .is("archived_at", null)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map((row) => mediaFromRow(row as MediaRow));
@@ -302,6 +324,16 @@ export async function uploadCloudMedia(
   file: File,
   tags: string[],
   folderId?: string,
+  options?: {
+    source?: MediaAsset["source"];
+    generationStatus?: MediaAsset["generationStatus"];
+    generationJobId?: string;
+    thumbnailPath?: string;
+    posterPath?: string;
+    width?: number;
+    height?: number;
+    durationSeconds?: number;
+  },
 ): Promise<MediaAsset> {
   if (isDemoMode()) {
     const asset: MediaAsset = {
@@ -312,6 +344,14 @@ export async function uploadCloudMedia(
       tags: [...new Set([...tags, "demo"])],
       createdAt: new Date().toISOString(),
       folderId,
+      source: options?.source || "UPLOADED",
+      generationStatus: options?.generationStatus || "READY",
+      generationJobId: options?.generationJobId,
+      thumbnailPath: options?.thumbnailPath,
+      posterPath: options?.posterPath,
+      width: options?.width,
+      height: options?.height,
+      durationSeconds: options?.durationSeconds,
     };
     const media = loadLocal<MediaAsset[]>(STORAGE_KEYS.demoMedia, []);
     saveLocal(STORAGE_KEYS.demoMedia, [asset, ...media]);
@@ -340,8 +380,18 @@ export async function uploadCloudMedia(
       size_bytes: file.size,
       tags,
       folder_id: folderId || null,
+      source: options?.source || "UPLOADED",
+      generation_status: options?.generationStatus || "READY",
+      generation_job_id: options?.generationJobId || null,
+      thumbnail_path: options?.thumbnailPath || null,
+      poster_path: options?.posterPath || null,
+      width: Number.isFinite(options?.width) ? options?.width : null,
+      height: Number.isFinite(options?.height) ? options?.height : null,
+      duration_seconds: Number.isFinite(options?.durationSeconds)
+        ? options?.durationSeconds
+        : null,
     })
-    .select("id,storage_path,file_name,mime_type,size_bytes,tags,created_at,folder_id")
+    .select("id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at")
     .single();
 
   if (error) {
@@ -498,6 +548,43 @@ export async function removeCloudMedia(asset: MediaAsset): Promise<void> {
     if (error) throw new Error(error.message);
   }
   const { error } = await supabase.from("media_assets").delete().eq("id", asset.id);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateCloudMediaAsset(
+  assetId: string,
+  updates: {
+    name?: string;
+    tags?: string[];
+    folderId?: string;
+    archivedAt?: string | null;
+  },
+): Promise<void> {
+  if (isDemoMode()) {
+    const media = loadLocal<MediaAsset[]>(STORAGE_KEYS.demoMedia, []);
+    const next = media.map((item) => {
+      if (item.id !== assetId) return item;
+      return {
+        ...item,
+        name: updates.name ?? item.name,
+        tags: updates.tags ?? item.tags,
+        folderId: updates.folderId ?? item.folderId,
+        archivedAt:
+          updates.archivedAt === undefined ? item.archivedAt : updates.archivedAt || undefined,
+      };
+    });
+    saveLocal(STORAGE_KEYS.demoMedia, next);
+    return;
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (updates.name !== undefined) payload.file_name = updates.name;
+  if (updates.tags !== undefined) payload.tags = updates.tags;
+  if (updates.folderId !== undefined) payload.folder_id = updates.folderId || null;
+  if (updates.archivedAt !== undefined) payload.archived_at = updates.archivedAt;
+  if (!Object.keys(payload).length) return;
+
+  const { error } = await createClient().from("media_assets").update(payload).eq("id", assetId);
   if (error) throw new Error(error.message);
 }
 
