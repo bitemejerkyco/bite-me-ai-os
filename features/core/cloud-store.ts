@@ -751,7 +751,17 @@ type VideoProjectRow = {
   routing_tier: VideoProject["routingTier"] | null;
   provider_model: string | null;
   provider_job_id: string | null;
+  provider_job_status: "queued" | "in_progress" | "completed" | "failed" | null;
   provider_progress: number | null;
+  workflow_stage: VideoProject["workflowStage"] | null;
+  workflow_percentage: number | null;
+  credit_status: VideoProject["creditStatus"] | null;
+  credit_refunded_at: string | null;
+  failure_reference_id: string | null;
+  media_asset_id: string | null;
+  workflow_started_at: string | null;
+  workflow_completed_at: string | null;
+  last_provider_poll_at: string | null;
   video_storage_path: string | null;
   voiceover_storage_path: string | null;
   status: VideoProject["status"];
@@ -765,6 +775,7 @@ function videoProjectFromRow(row: VideoProjectRow): VideoProject {
     id: row.id,
     contentDraftId: row.content_draft_id || undefined,
     workflowKey: row.workflow_key || undefined,
+    creditRequestId: row.credit_request_id || undefined,
     title: row.title,
     channel: row.channel,
     objective: row.objective,
@@ -784,7 +795,17 @@ function videoProjectFromRow(row: VideoProjectRow): VideoProject {
     routingTier: row.routing_tier || undefined,
     providerModel: row.provider_model || undefined,
     providerJobId: row.provider_job_id || undefined,
+    providerJobStatus: row.provider_job_status || undefined,
     providerProgress: row.provider_progress ?? undefined,
+    workflowStage: row.workflow_stage || undefined,
+    workflowProgress: row.workflow_percentage ?? undefined,
+    creditStatus: row.credit_status || undefined,
+    creditRefundedAt: row.credit_refunded_at || undefined,
+    failureReferenceId: row.failure_reference_id || undefined,
+    mediaAssetId: row.media_asset_id || undefined,
+    workflowStartedAt: row.workflow_started_at || undefined,
+    workflowCompletedAt: row.workflow_completed_at || undefined,
+    lastProviderPollAt: row.last_provider_poll_at || undefined,
     videoStoragePath: row.video_storage_path || undefined,
     voiceoverStoragePath: row.voiceover_storage_path || undefined,
     status: row.status,
@@ -802,7 +823,7 @@ export async function loadCloudVideoProjects(): Promise<VideoProject[]> {
   if (!workspace) return [];
   const { data, error } = await createClient()
     .from("video_projects")
-    .select("id,content_draft_id,workflow_key,credit_request_id,title,channel,objective,prompt,script,caption,hashtags,call_to_action,scenes,duration_seconds,aspect_ratio,voice,voice_disclosure,music_mode,licensed_music_asset_id,provider,routing_tier,provider_model,provider_job_id,provider_progress,video_storage_path,voiceover_storage_path,status,failure_reason,created_at,updated_at")
+    .select("id,content_draft_id,workflow_key,credit_request_id,title,channel,objective,prompt,script,caption,hashtags,call_to_action,scenes,duration_seconds,aspect_ratio,voice,voice_disclosure,music_mode,licensed_music_asset_id,provider,routing_tier,provider_model,provider_job_id,provider_job_status,provider_progress,workflow_stage,workflow_percentage,credit_status,credit_refunded_at,failure_reference_id,media_asset_id,workflow_started_at,workflow_completed_at,last_provider_poll_at,video_storage_path,voiceover_storage_path,status,failure_reason,created_at,updated_at")
     .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
@@ -829,7 +850,7 @@ export async function saveCloudVideoProject(
     workspace_id: workspace.id,
     content_draft_id: project.contentDraftId || null,
     workflow_key: project.workflowKey || null,
-    credit_request_id: null,
+    credit_request_id: project.creditRequestId || null,
     created_by: userId,
     title: project.title,
     channel: project.channel,
@@ -850,7 +871,17 @@ export async function saveCloudVideoProject(
     routing_tier: project.routingTier || null,
     provider_model: project.providerModel || null,
     provider_job_id: project.providerJobId || null,
+    provider_job_status: project.providerJobStatus || null,
     provider_progress: project.providerProgress ?? null,
+    workflow_stage: project.workflowStage || null,
+    workflow_percentage: project.workflowProgress ?? null,
+    credit_status: project.creditStatus || null,
+    credit_refunded_at: project.creditRefundedAt || null,
+    failure_reference_id: project.failureReferenceId || null,
+    media_asset_id: project.mediaAssetId || null,
+    workflow_started_at: project.workflowStartedAt || null,
+    workflow_completed_at: project.workflowCompletedAt || null,
+    last_provider_poll_at: project.lastProviderPollAt || null,
     video_storage_path: project.videoStoragePath || null,
     voiceover_storage_path: project.voiceoverStoragePath || null,
     status: project.status,

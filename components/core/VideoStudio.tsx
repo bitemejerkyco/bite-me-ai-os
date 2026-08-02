@@ -27,6 +27,7 @@ import {
   type CreativeVersion,
   type VideoMusicMode,
   type VideoProject,
+  type VideoWorkflowStage,
   type VideoVoice,
 } from "@/features/core/video-project";
 import {
@@ -44,6 +45,39 @@ type VideoPlanPayload = {
   scenes?: VideoProject["scenes"];
   error?: string;
 };
+
+type WorkflowStatusPayload = {
+  ok?: boolean;
+  projectId?: string;
+  workflowKey?: string;
+  status?: "in_progress" | "completed" | "failed";
+  stage?: VideoWorkflowStage;
+  progress?: number;
+  providerStatus?: "queued" | "in_progress" | "completed" | "failed";
+  creditStatus?: "NONE" | "RESERVED" | "REFUNDED";
+  refunded?: boolean;
+  failureReferenceId?: string;
+  mediaAssetId?: string;
+  draftId?: string;
+  error?: string;
+};
+
+const WORKFLOW_STAGE_LABELS: Record<VideoWorkflowStage, string> = {
+  PREPARING_VIDEO_PLAN: "Preparing your video plan",
+  RESERVING_CREDITS: "Reserving credits",
+  STARTING_VIDEO_GENERATOR: "Starting video generator",
+  GENERATING_SCENES: "Generating scenes",
+  RENDERING_FINAL_VIDEO: "Rendering final video",
+  SAVING_TO_MEDIA_LIBRARY: "Saving to Media Library",
+  CREATING_CONTENT_LIBRARY_DRAFT: "Creating Content Library draft",
+  COMPLETE: "Complete",
+  FAILED: "Video generation didn't complete",
+};
+
+function nextPollDelay(attempt: number): number {
+  const delay = Math.min(30_000, 2_500 * Math.pow(1.8, Math.max(0, attempt)));
+  return Math.round(delay);
+}
 
 function composeRenderPrompt(project: VideoProject): string {
   const scenePlan = project.scenes
@@ -90,6 +124,8 @@ export default function VideoStudio({
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [pollAttempt, setPollAttempt] = useState(0);
+  const [workflowKey, setWorkflowKey] = useState("");
   const [creditStatus, setCreditStatus] =
     useState<VideoCreditStatus | null>(null);
   const [creditError, setCreditError] = useState("");
@@ -101,18 +137,22 @@ export default function VideoStudio({
       void loadCloudVideoProjects()
         .then((items) => {
           setProjects(items);
+          const active = items.find((item) => item.status === "GENERATING");
+          const newest = items[0] || null;
           const resumed =
-            items.find((item) => item.status === "GENERATING") ||
-            items.find((item) => item.status === "READY") ||
-            items[0];
+            active || (newest?.status === "FAILED" ? newest : null);
           if (resumed) {
             setProject(resumed);
+            setWorkflowKey(resumed.workflowKey || "");
             setVoice(resumed.voice);
             if (resumed.status === "GENERATING") {
               setNotice(
-                `Resumed video render at ${resumed.providerProgress || 0}%. Motive will keep checking automatically.`,
+                "You may safely leave this page. Generation will continue.",
               );
             }
+          } else {
+            setProject(null);
+            setWorkflowKey("");
           }
         })
         .catch((caught: unknown) =>
@@ -261,28 +301,57 @@ export default function VideoStudio({
   const refreshVideoProjects = async (preferredId?: string) => {
     const items = await loadCloudVideoProjects();
     setProjects(items);
+    const active = items.find((item) => item.status === "GENERATING") || null;
+    const newest = items[0] || null;
     const nextProject =
       items.find((item) => item.id === preferredId) ||
-      items.find((item) => item.status === "GENERATING") ||
-      items.find((item) => item.status === "READY") ||
-      items[0] ||
+      active ||
+      (newest?.status === "FAILED" ? newest : null) ||
       null;
     if (nextProject) {
       setProject(nextProject);
+      setWorkflowKey(nextProject.workflowKey || "");
       setVoice(nextProject.voice);
       if (nextProject.status === "GENERATING") {
         setNotice(
-          `Resumed video render at ${nextProject.providerProgress || 0}%. Motive will keep checking automatically.`,
+          "You may safely leave this page. Generation will continue.",
         );
       }
+    } else {
+      setProject(null);
+      setWorkflowKey("");
     }
   };
 
-  const startWorkflow = async () => {
+  const createWorkflowKey = () =>
+    [workspace.id, channel, duration, crypto.randomUUID()].join("|").toLowerCase();
+
+  const startNewVideo = () => {
+    setProject(null);
+    setWorkflowKey("");
+    setProviderStatus("");
+    setNotice("");
+    setError("");
+    setPollAttempt(0);
+    setPreviewUrl("");
+    setVoiceoverUrl("");
+    setRevisionRequest("");
+    setComplianceNote("");
+  };
+
+  const startWorkflow = async (options?: { retry?: boolean }) => {
     setWorking("workflow");
     setError("");
     setNotice("");
     try {
+      const retry = Boolean(options?.retry);
+      const activeWorkflowKey = retry
+        ? (project?.workflowKey || workflowKey || "")
+        : (workflowKey || createWorkflowKey());
+      if (!workflowKey) {
+        setWorkflowKey(activeWorkflowKey);
+      }
+
       const response = await fetch("/api/ai/video-workflow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -294,6 +363,9 @@ export default function VideoStudio({
           durationSeconds: duration,
           voice,
           musicMode,
+          workflowKey: activeWorkflowKey,
+          projectId: retry ? project?.id : undefined,
+          retry,
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -302,15 +374,16 @@ export default function VideoStudio({
         projectId?: string;
         draftId?: string;
         workflowKey?: string;
+        stage?: VideoWorkflowStage;
+        progress?: number;
       } | null;
       if (!response.ok || !payload?.ok || !payload.projectId) {
         throw new Error(payload?.error || "Video generation could not start.");
       }
       await refreshVideoProjects(payload.projectId);
+      setPollAttempt(0);
       setNotice(
-        payload.workflowKey
-          ? "Video workflow started. Motive reserved credits, created the draft, and began rendering."
-          : "Video workflow started.",
+        "You may safely leave this page. Generation will continue.",
       );
     } catch (caught) {
       setError(
@@ -611,7 +684,7 @@ export default function VideoStudio({
   };
 
   const checkRender = async (silent = false) => {
-    if (!project?.providerJobId) return;
+    if (!project?.id) return;
     if (renderCheckInFlightRef.current) {
       if (!silent) {
         setNotice("A render status check is already in progress.");
@@ -623,99 +696,69 @@ export default function VideoStudio({
     setError("");
     try {
       const response = await fetch(
-        `/api/ai/video-render?id=${encodeURIComponent(project.providerJobId)}`,
+        `/api/ai/video-workflow?projectId=${encodeURIComponent(project.id)}&workflowKey=${encodeURIComponent(project.workflowKey || workflowKey)}`,
         { cache: "no-store" },
       );
-      const payload = (await response.json()) as {
-        status?: string;
-        progress?: number;
-        error?: { message?: string } | string;
-      };
-      if (!response.ok) throw new Error("Unable to check video status.");
-      const reportedProgress = Number(payload.progress);
-      const confirmedProgress = Number.isFinite(reportedProgress)
-        ? Math.max(
-            project.providerProgress || 0,
-            Math.min(100, Math.max(0, reportedProgress)),
-          )
-        : project.providerProgress || 0;
-      setProviderStatus(
-        confirmedProgress > 0 && payload.status === "queued"
-          ? "in_progress"
-          : payload.status || providerStatus || "queued",
-      );
+      const payload = (await response.json().catch(() => null)) as WorkflowStatusPayload | null;
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error || "Unable to check video status.");
+      }
+
+      const providerProgress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+      const nextProviderStatus = payload.providerStatus || "in_progress";
+      setProviderStatus(nextProviderStatus);
+
       if (payload.status === "failed") {
-        const failure =
-          typeof payload.error === "string"
-            ? payload.error
-            : payload.error?.message || "Video generation failed.";
         await updateProject({
           ...project,
           status: "FAILED",
-          failureReason: failure,
+          providerJobStatus: nextProviderStatus,
+          providerProgress: Math.min(89, providerProgress),
+          workflowStage: payload.stage || "FAILED",
+          workflowProgress: Math.min(89, providerProgress),
+          creditStatus: payload.creditStatus || project.creditStatus || "REFUNDED",
+          failureReferenceId: payload.failureReferenceId || project.failureReferenceId,
+          failureReason: payload.error || "Video generation didn't complete.",
           updatedAt: new Date().toISOString(),
         });
-        throw new Error(failure);
+        throw new Error(payload.error || "Video generation didn't complete.");
       }
-      if (payload.status !== "completed") {
+
+      if (payload.status === "completed") {
         await updateProject({
           ...project,
-          providerProgress: confirmedProgress,
-          status: "GENERATING",
+          status: "READY",
+          providerJobStatus: "completed",
+          providerProgress: 100,
+          workflowStage: "COMPLETE",
+          workflowProgress: 100,
+          creditStatus: payload.creditStatus || project.creditStatus || "RESERVED",
+          mediaAssetId: payload.mediaAssetId || project.mediaAssetId,
+          contentDraftId: payload.draftId || project.contentDraftId,
           updatedAt: new Date().toISOString(),
         });
-        setNotice(
-          payload.status === "queued" && confirmedProgress === 0
-            ? "Queued at OpenAI. 0% is normal while the job waits for rendering capacity."
-            : `Video is processing at ${confirmedProgress}% complete.`,
-        );
+        setPollAttempt(0);
+        setNotice("Video generation complete. Your video and draft are ready.");
         return;
       }
-      const mediaResponse = await fetch(
-        `/api/ai/video-content?id=${encodeURIComponent(project.providerJobId)}`,
-        { cache: "no-store" },
-      );
-      if (!mediaResponse.ok) throw new Error("Unable to download finished video.");
-      const blob = await mediaResponse.blob();
-      const file = new File(
-        [blob],
-        `${project.title.replace(/[^a-z0-9]+/gi, "-").slice(0, 80)}.mp4`,
-        { type: "video/mp4" },
-      );
-      const asset = await uploadCloudMedia(file, [
-        "video",
-        "vertical",
-        "ai-generated",
-        project.channel.toLowerCase(),
-      ]);
-      if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(URL.createObjectURL(blob));
-      const videoVersion: CreativeVersion = {
-        id: crypto.randomUUID(),
-        videoProjectId: project.id,
-        assetKind: "VIDEO",
-        versionNumber: nextVersionNumber("VIDEO"),
-        providerJobId: project.providerJobId,
-        storagePath: asset.storagePath || "",
-        prompt: revisionRequest.trim() || project.prompt,
-        createdAt: new Date().toISOString(),
-      };
-      await addVersion(videoVersion);
+
       await updateProject({
         ...project,
-        providerProgress: 100,
-        videoStoragePath: asset.storagePath,
-        status: "READY",
+        status: "GENERATING",
+        providerJobStatus: nextProviderStatus,
+        providerProgress,
+        workflowStage: payload.stage || (providerProgress >= 70 ? "RENDERING_FINAL_VIDEO" : "GENERATING_SCENES"),
+        workflowProgress: Math.min(89, providerProgress),
+        creditStatus: payload.creditStatus || project.creditStatus || "RESERVED",
         updatedAt: new Date().toISOString(),
       });
-      setProviderStatus("completed");
-      setNotice(
-        `Video version ${videoVersion.versionNumber} is ready and saved in Motive.`,
-      );
+      setNotice("You may safely leave this page. Generation will continue.");
+      setPollAttempt(0);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Unable to finish the video.",
       );
+      setPollAttempt((current) => current + 1);
     } finally {
       renderCheckInFlightRef.current = false;
       if (!silent) setWorking("");
@@ -889,25 +932,20 @@ export default function VideoStudio({
   });
 
   useEffect(() => {
-    if (
-      project?.status !== "GENERATING" ||
-      !project.providerJobId
-    ) {
+    if (!project || project.status !== "GENERATING") {
       return;
     }
-    const checkNow = window.setTimeout(
+    if (project.creditStatus === "REFUNDED") {
+      return;
+    }
+    const timeout = window.setTimeout(
       () => void checkRenderRef.current(),
-      1_000,
-    );
-    const interval = window.setInterval(
-      () => void checkRenderRef.current(),
-      8_000,
+      nextPollDelay(pollAttempt),
     );
     return () => {
-      window.clearTimeout(checkNow);
-      window.clearInterval(interval);
+      window.clearTimeout(timeout);
     };
-  }, [project?.providerJobId, project?.status]);
+  }, [project, pollAttempt]);
 
   const schedule = async () => {
     if (!project?.videoStoragePath) {
@@ -968,14 +1006,49 @@ export default function VideoStudio({
     }
   };
 
+  const activeJob = project?.status === "GENERATING";
+  const inferredStage: VideoWorkflowStage =
+    project?.status === "READY"
+      ? "COMPLETE"
+      : project?.status === "FAILED"
+        ? "FAILED"
+        : project?.workflowStage
+          || ((project?.providerProgress || 0) >= 70
+            ? "RENDERING_FINAL_VIDEO"
+            : "GENERATING_SCENES");
+  const workflowPercent = project
+    ? (project.status === "READY" || project.status === "APPROVED"
+      ? 100
+      : project.status === "FAILED"
+        ? Math.min(89, Math.max(0, Math.round(project.workflowProgress ?? project.providerProgress ?? 0)))
+        : Math.min(89, Math.max(0, Math.round(project.workflowProgress ?? project.providerProgress ?? 0))))
+    : 0;
+  const workflowStageLabel = project ? WORKFLOW_STAGE_LABELS[inferredStage] : WORKFLOW_STAGE_LABELS.PREPARING_VIDEO_PLAN;
+  const workflowStatusText = project?.status === "FAILED"
+    ? "Please retry this project or create a new video workflow."
+    : project?.status === "READY" || project?.status === "APPROVED"
+      ? "Generation complete. Your video is saved and ready for editing."
+      : "You may safely leave this page. Generation will continue.";
+
   return (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">
-        <h2 className="text-xl font-bold">Create a vertical video</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          TikTok first. The same 9:16 project will later work for Reels and
-          Shorts.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold">Create a vertical video</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              TikTok first. The same 9:16 project will later work for Reels and
+              Shorts.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={startNewVideo}
+            className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50"
+          >
+            Create new video
+          </button>
+        </div>
         <div className="mt-6 space-y-4">
           <label className="block text-sm text-slate-700">
             Channel
@@ -1077,7 +1150,7 @@ export default function VideoStudio({
             </select>
           </label>
           <button
-            disabled={Boolean(working)}
+            disabled={Boolean(working) || activeJob}
             onClick={() => void startWorkflow()}
             className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold hover:bg-violet-500 disabled:opacity-60"
           >
@@ -1087,7 +1160,7 @@ export default function VideoStudio({
           </button>
           <button
             type="button"
-            disabled={Boolean(working)}
+            disabled={Boolean(working) || activeJob}
             onClick={() => void generatePlan()}
             className="w-full rounded-xl border border-violet-200 bg-white px-5 py-3 font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-60"
           >
@@ -1102,6 +1175,38 @@ export default function VideoStudio({
           Video generation may take 5–10 minutes. You can leave this page and
           return while it continues processing.
         </p>
+        {project ? (
+          <div className="mt-3 rounded-2xl border border-blue-500/25 bg-blue-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-900">{workflowStageLabel}</p>
+              <p className="text-sm font-semibold text-blue-700">
+                {project.status === "READY" || project.status === "APPROVED"
+                  ? 100
+                  : workflowPercent}
+                %
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-slate-600">{workflowStatusText}</p>
+            <div
+              className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200"
+              role="progressbar"
+              aria-label="Video generation progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={project.status === "READY" || project.status === "APPROVED" ? 100 : workflowPercent}
+            >
+              <div
+                className="h-full rounded-full bg-blue-500 transition-[width] duration-700 ease-out"
+                style={{
+                  width: `${project.status === "READY" || project.status === "APPROVED" ? 100 : workflowPercent}%`,
+                }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              You may safely leave this page. Generation will continue.
+            </p>
+          </div>
+        ) : null}
         <div className="mt-3 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 to-cyan-50 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -1208,40 +1313,34 @@ export default function VideoStudio({
                     : ` · Processing ${project.providerProgress || 0}%`
                   : ""}
               </p>
-              {project.status === "GENERATING" ? (
-                <div className="mt-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="font-medium text-blue-100">
-                      {(project.providerProgress || 0) > 0
-                        ? "Rendering video"
-                        : "Queued for rendering"}
-                    </span>
-                    <span className="font-semibold text-blue-700">
-                      {Math.round(project.providerProgress || 0)}%
-                    </span>
-                  </div>
-                  <div
-                    className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100"
-                    role="progressbar"
-                    aria-label="Video rendering progress"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(project.providerProgress || 0)}
-                  >
-                    <div
-                      className="h-full rounded-full bg-blue-500 transition-[width] duration-700 ease-out"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          Math.max(0, project.providerProgress || 0),
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    The confirmed progress will only move forward. You can
-                    leave this page and return while rendering continues.
+              {project.status === "FAILED" ? (
+                <div className="mt-4 rounded-2xl border border-rose-300/40 bg-rose-50 p-4">
+                  <p className="text-sm font-semibold text-rose-800">
+                    Video generation didn&apos;t complete.
                   </p>
+                  <p className="mt-1 text-xs text-rose-700">
+                    Credits refunded: {project.creditStatus === "REFUNDED" ? "Yes" : "Pending"}
+                  </p>
+                  <p className="mt-1 text-xs text-rose-700">
+                    Reference ID: {project.failureReferenceId || "pending"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={Boolean(working)}
+                      onClick={() => void startWorkflow({ retry: true })}
+                      className="rounded-xl bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {working === "workflow" ? "Retrying…" : "Try again"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={startNewVideo}
+                      className="rounded-xl border border-rose-300 bg-white px-3 py-2 text-sm font-semibold text-rose-700"
+                    >
+                      Create new video
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1533,7 +1632,7 @@ export default function VideoStudio({
                 </>
               ) : !project.videoStoragePath ? (
                 <button
-                  disabled={Boolean(working) || !renderPermission.allowed}
+                  disabled={Boolean(working) || !renderPermission.allowed || activeJob}
                   onClick={() => void startRender()}
                   className="rounded-xl bg-violet-600 px-4 py-2 font-semibold disabled:opacity-60"
                 >
@@ -1554,6 +1653,13 @@ export default function VideoStudio({
                   Schedule / Post now
                 </button>
               )}
+              <button
+                type="button"
+                onClick={startNewVideo}
+                className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700"
+              >
+                Create new video
+              </button>
             </div>
             {project.videoStoragePath &&
             project.status !== "GENERATING" ? (
