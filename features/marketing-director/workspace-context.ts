@@ -16,8 +16,23 @@ type WorkspaceRow = {
   name: string | null;
 };
 
+type WorkspaceBootstrapEvent =
+  | "WORKSPACE_BOOTSTRAP_STARTED"
+  | "WORKSPACE_BOOTSTRAP_CREATED"
+  | "WORKSPACE_BOOTSTRAP_RECOVERED"
+  | "WORKSPACE_BOOTSTRAP_FAILED";
+
 function safeText(value: unknown): string {
   return String(value || "").trim();
+}
+
+function logWorkspaceBootstrap(event: WorkspaceBootstrapEvent, details: Record<string, unknown>): void {
+  const payload = JSON.stringify({ event, ...details });
+  if (event === "WORKSPACE_BOOTSTRAP_FAILED") {
+    console.error(payload);
+    return;
+  }
+  console.info(payload);
 }
 
 function slugFromUserId(userId: string): string {
@@ -58,7 +73,7 @@ async function findAccessibleWorkspaceId(
 ): Promise<string> {
   const { data, error } = await supabase.rpc("my_primary_workspace_id");
   if (error) {
-    throw new Error(`WORKSPACE_LOOKUP_FAILED:${error.message}`);
+    return "";
   }
   return safeText(data);
 }
@@ -75,6 +90,25 @@ async function readWorkspaceById(
 
   if (error) {
     throw new Error(`WORKSPACE_ACCESS_FAILED:${error.message}`);
+  }
+
+  return (data as WorkspaceRow | null) || null;
+}
+
+async function findOwnedWorkspace(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<WorkspaceRow | null> {
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("id,name")
+    .eq("owner_user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`WORKSPACE_OWNER_LOOKUP_FAILED:${error.message}`);
   }
 
   return (data as WorkspaceRow | null) || null;
@@ -119,32 +153,20 @@ async function ensureOwnerMembership(
   }
 }
 
-async function findOwnedWorkspace(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-): Promise<WorkspaceRow | null> {
-  const { data, error } = await supabase
-    .from("workspaces")
-    .select("id,name")
-    .eq("owner_user_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`WORKSPACE_OWNER_LOOKUP_FAILED:${error.message}`);
-  }
-
-  return (data as WorkspaceRow | null) || null;
-}
-
 async function ensureWorkspaceForUser(
   supabase: Awaited<ReturnType<typeof createClient>>,
   user: { id: string; user_metadata?: Record<string, unknown> | null },
 ): Promise<WorkspaceRow> {
+  logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_STARTED", { userId: user.id });
+
   const existing = await findOwnedWorkspace(supabase, user.id);
   if (existing) {
     await ensureOwnerMembership(supabase, { workspaceId: existing.id, userId: user.id });
+    logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_RECOVERED", {
+      userId: user.id,
+      workspaceId: existing.id,
+      source: "owned-workspace",
+    });
     return existing;
   }
 
@@ -153,20 +175,29 @@ async function ensureWorkspaceForUser(
 
   const { data: created, error: createError } = await supabase
     .from("workspaces")
-    .insert({
-      owner_user_id: user.id,
-      name: workspaceName,
-      slug,
-    })
+    .upsert(
+      {
+        owner_user_id: user.id,
+        name: workspaceName,
+        slug,
+      },
+      { onConflict: "slug" },
+    )
     .select("id,name")
     .maybeSingle();
 
   if (createError) {
     const fallback = await findOwnedWorkspace(supabase, user.id);
     if (!fallback) {
+      logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_FAILED", { userId: user.id, reason: createError.message });
       throw new Error(`WORKSPACE_BOOTSTRAP_FAILED:${createError.message}`);
     }
     await ensureOwnerMembership(supabase, { workspaceId: fallback.id, userId: user.id });
+    logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_RECOVERED", {
+      userId: user.id,
+      workspaceId: fallback.id,
+      source: "fallback-owned-workspace",
+    });
     return fallback;
   }
 
@@ -174,13 +205,20 @@ async function ensureWorkspaceForUser(
   if (!workspace) {
     const fallback = await findOwnedWorkspace(supabase, user.id);
     if (!fallback) {
+      logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_FAILED", { userId: user.id, reason: "Workspace creation returned no record." });
       throw new Error("WORKSPACE_BOOTSTRAP_FAILED:Workspace creation returned no record.");
     }
     await ensureOwnerMembership(supabase, { workspaceId: fallback.id, userId: user.id });
+    logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_RECOVERED", {
+      userId: user.id,
+      workspaceId: fallback.id,
+      source: "fallback-owned-workspace",
+    });
     return fallback;
   }
 
   await ensureOwnerMembership(supabase, { workspaceId: workspace.id, userId: user.id });
+  logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_CREATED", { userId: user.id, workspaceId: workspace.id });
   return workspace;
 }
 
@@ -208,6 +246,21 @@ export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
   }
 
   if (!workspace) {
+    const recovered = await findOwnedWorkspace(supabase, user.id);
+    if (recovered) {
+      await ensureOwnerMembership(supabase, { workspaceId: recovered.id, userId: user.id });
+      logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_RECOVERED", {
+        userId: user.id,
+        workspaceId: recovered.id,
+        source: "post-bootstrap-read",
+      });
+      workspaceId = recovered.id;
+      workspace = recovered;
+    }
+  }
+
+  if (!workspace) {
+    logWorkspaceBootstrap("WORKSPACE_BOOTSTRAP_FAILED", { userId: user.id, reason: "Workspace unavailable after bootstrap." });
     throw new Error("WORKSPACE_ACCESS_FAILED:Workspace unavailable.");
   }
 

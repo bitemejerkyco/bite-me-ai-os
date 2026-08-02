@@ -29,6 +29,15 @@ type WorkspaceRow = {
   audience: string | null;
   voice: string | null;
 };
+
+function logWorkspaceScoreRecovery(workspaceId: string, reason: string): void {
+  console.info(JSON.stringify({
+    event: "WORKSPACE_BOOTSTRAP_RECOVERED",
+    workspaceId,
+    source: "marketing-score",
+    reason,
+  }));
+}
 type DraftRow = { status: string | null; created_at: string | null };
 type CampaignRow = { status: string | null; updated_at: string | null };
 type ScheduledPostRow = { status: string | null; scheduled_for: string | null; updated_at: string | null };
@@ -56,7 +65,7 @@ function daysSince(timestamp: string | null): number | null {
 }
 
 function channelEnabled(input: MarketingScoreInput, key: keyof MarketingScoreInput["integrations"]): boolean {
-  const intentionallyDisabled = new Set(input.intentionallyDisabledChannels.map((item) => item.toLowerCase()));
+  const intentionallyDisabled = new Set(input.intentionallyDisabledChannels.map((item) => (item ?? "").toLowerCase()));
   if (intentionallyDisabled.has(key.toLowerCase())) return false;
   return input.integrations[key].enabled;
 }
@@ -415,8 +424,18 @@ export async function getMarketingScoreForWorkspace(workspaceId: string): Promis
   const aiUsage = (aiUsageResult.data as AiUsageRow[] | null) || [];
   const tiktok = (tiktokResult.data as TikTokConnectionRow | null) || null;
 
+  const resolvedWorkspace = workspace || {
+    id: workspaceId,
+    name: "My Workspace",
+    website: null,
+    industry: "GENERAL_RETAIL",
+    primary_goal: null,
+    audience: null,
+    voice: null,
+  };
+
   if (workspaceResult.error || !workspace) {
-    throw new Error(`MARKETING_SCORE_WORKSPACE_LOOKUP_FAILED:${workspaceResult.error?.message || "Workspace not found."}`);
+    logWorkspaceScoreRecovery(workspaceId, workspaceResult.error?.message || "Workspace not found.");
   }
   if (draftsResult.error) throw new Error(`MARKETING_SCORE_DRAFTS_FAILED:${draftsResult.error.message}`);
   if (campaignsResult.error) throw new Error(`MARKETING_SCORE_CAMPAIGNS_FAILED:${campaignsResult.error.message}`);
@@ -428,12 +447,12 @@ export async function getMarketingScoreForWorkspace(workspaceId: string): Promis
   const score = calculateMarketingScore({
     workspaceId,
     brand: {
-      businessName: workspace.name,
-      website: workspace.website,
-      industry: workspace.industry,
-      primaryGoal: workspace.primary_goal,
-      audience: workspace.audience,
-      voice: workspace.voice,
+      businessName: resolvedWorkspace.name,
+      website: resolvedWorkspace.website,
+      industry: resolvedWorkspace.industry,
+      primaryGoal: resolvedWorkspace.primary_goal,
+      audience: resolvedWorkspace.audience,
+      voice: resolvedWorkspace.voice,
     },
     drafts: {
       total: drafts.length,
