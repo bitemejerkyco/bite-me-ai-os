@@ -13,6 +13,7 @@ export function buildUserGuideSections() {
     { title: "Content Library", routes: ["/content"] },
     { title: "Media Library", routes: ["/media"] },
     { title: "Campaigns", routes: ["/marketing/campaigns"] },
+    { title: "Creator Hub", routes: ["/creators", "/creators/discover", "/creators/pipeline", "/creators/campaigns", "/creators/content-review", "/creators/ugc", "/creators/analytics"] },
     { title: "Calendar", routes: ["/calendar"] },
     { title: "Approvals", routes: ["/approvals"] },
     { title: "Publishing", routes: ["/publishing-queue"] },

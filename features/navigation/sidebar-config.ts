@@ -4,7 +4,7 @@ export type SidebarLink = {
   icon: string;
 };
 
-export type SidebarGroupId = "primary" | "assets" | "account" | "support" | "admin";
+export type SidebarGroupId = "primary" | "creators" | "assets" | "account" | "support" | "admin";
 
 export type SidebarGroup = {
   id: SidebarGroupId;
@@ -28,6 +28,21 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { href: "/studio", label: "AI Studio", icon: "✦" },
       { href: "/content", label: "Content Library", icon: "▤" },
       { href: "/calendar", label: "Calendar", icon: "◫" },
+    ],
+  },
+  {
+    id: "creators",
+    label: "Creator Hub",
+    defaultExpanded: true,
+    compactDefaultExpanded: true,
+    links: [
+      { href: "/creators", label: "Creator Dashboard", icon: "◉" },
+      { href: "/creators/discover", label: "Discover Creators", icon: "◌" },
+      { href: "/creators/pipeline", label: "Creator Pipeline", icon: "▥" },
+      { href: "/creators/campaigns", label: "Creator Campaigns", icon: "◈" },
+      { href: "/creators/content-review", label: "Content Review", icon: "✓" },
+      { href: "/creators/ugc", label: "UGC Library", icon: "▣" },
+      { href: "/creators/analytics", label: "Creator Analytics", icon: "↗" },
     ],
   },
   {

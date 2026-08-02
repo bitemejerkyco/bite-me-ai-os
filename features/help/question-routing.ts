@@ -4,6 +4,12 @@ export function inferHelpRouteFromQuestion(question: string) {
   if (text.includes("create content")) return "/studio";
   if (text.includes("connect tiktok")) return "/settings/integrations/tiktok";
   if (text.includes("connect amazon")) return "/settings/integrations/amazon-ads";
+  if (text.includes("creator analytics") || text.includes("creator roi")) return "/creators/analytics";
+  if (text.includes("ugc") || text.includes("usage rights")) return "/creators/ugc";
+  if (text.includes("creator campaign")) return "/creators/campaigns";
+  if (text.includes("creator pipeline") || text.includes("creator outreach")) return "/creators/pipeline";
+  if (text.includes("discover creator") || text.includes("find creator")) return "/creators/discover";
+  if (text.includes("creator")) return "/creators";
   if (text.includes("approve") || text.includes("approval")) return "/approvals";
   if (text.includes("publish") || text.includes("publishing")) return "/publishing-queue";
   if (text.includes("credit") || text.includes("billing") || text.includes("plan")) return "/settings/billing";
