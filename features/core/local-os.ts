@@ -99,6 +99,15 @@ export type MediaAsset = {
   createdAt: string;
   storagePath?: string;
   folderId?: string;
+  source?: "UPLOADED" | "GENERATED" | "IMPORTED" | "LEGACY" | "CAMPAIGN" | "UGC";
+  generationStatus?: "PENDING" | "PROCESSING" | "READY" | "FAILED";
+  generationJobId?: string;
+  thumbnailPath?: string;
+  posterPath?: string;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+  archivedAt?: string;
 };
 
 export type LibraryFolder = {
