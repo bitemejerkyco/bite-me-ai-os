@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import {
   resolveMediaRows,
   type MediaAssociation,
   type MediaUrlResolverRow,
 } from "@/features/media/media-url-resolver";
+import { filterRowsForWorkspace } from "@/features/media/workspace-access";
 
 type ResolveRequest = {
   assetIds?: unknown;
@@ -20,14 +21,9 @@ function parseAssetIds(value: unknown): string[] {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: claimsData } = await supabase.auth.getClaims();
-    if (!claimsData?.claims) {
-      return NextResponse.json(
-        { ok: false, error: "Sign in required." },
-        { status: 401 },
-      );
-    }
+    const context = await requireWorkspaceContext();
+    const supabase = context.supabase;
+    const workspaceId = context.workspaceId;
 
     const body = (await request.json().catch(() => null)) as ResolveRequest | null;
     const assetIds = parseAssetIds(body?.assetIds);
@@ -40,6 +36,7 @@ export async function POST(request: Request) {
       .select(
         "id,workspace_id,file_name,asset_type,mime_type,storage_path,thumbnail_path,poster_path,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,width,height,duration_seconds,archived_at",
       )
+      .eq("workspace_id", workspaceId)
       .in("id", assetIds)
       .is("archived_at", null);
 
@@ -50,8 +47,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const mediaRows = ((rows || []) as MediaUrlResolverRow[]).filter((row) =>
-      assetIds.includes(row.id),
+    const mediaRows = filterRowsForWorkspace(
+      workspaceId,
+      ((rows || []) as MediaUrlResolverRow[]).filter((row) => assetIds.includes(row.id)),
     );
 
     const { data: ugcRows } = await supabase
@@ -102,9 +100,10 @@ export async function POST(request: Request) {
       { ok: true, assets },
       { headers: { "cache-control": "no-store" } },
     );
-  } catch {
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : "Unable to resolve media previews.";
     return NextResponse.json(
-      { ok: false, error: "Unable to resolve media previews." },
+      { ok: false, error: message || "Unable to resolve media previews." },
       { status: 500 },
     );
   }

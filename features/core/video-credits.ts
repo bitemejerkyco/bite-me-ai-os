@@ -13,7 +13,7 @@ export type VideoCreditStatus = {
 };
 
 export function quoteVideoCredits(seconds: number) {
-  if (!Number.isInteger(seconds) || ![8, 16, 20].includes(seconds)) {
+  if (!Number.isInteger(seconds) || seconds < 8 || seconds > 15) {
     throw new Error("Unsupported video duration.");
   }
   return {

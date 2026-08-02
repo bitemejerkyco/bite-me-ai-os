@@ -77,30 +77,34 @@ export default function HelpAssistant() {
         data-help="ask-postmotive"
         type="button"
         onClick={() => setAssistantOpen(!assistantOpen)}
-        className="fixed bottom-5 right-5 z-[70] rounded-full bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-xl hover:bg-violet-500"
+        className="ask-motive-button fixed bottom-5 right-5 z-[70] text-sm font-semibold"
+        aria-label="Open Ask Motive assistant"
+        title="Pick PostMotive’s brain"
         aria-expanded={assistantOpen}
       >
-        <span className="hidden sm:inline">Ask PostMotive</span>
-        <span className="sm:hidden">Need Help?</span>
-        {helpContextData.betaTesterMode ? <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">Beta</span> : null}
+        <span className="ask-motive-button__glow" aria-hidden="true" />
+        <span className="ask-motive-button__content">
+          <span>Ask Motive</span>
+          {helpContextData.betaTesterMode ? <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">Beta</span> : null}
+        </span>
       </button>
       {assistantOpen ? (
         <aside className="fixed bottom-20 right-5 z-[80] w-[min(92vw,26rem)] rounded-[2rem] border border-white/80 bg-white p-5 shadow-2xl">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">Context-aware help</p>
-              <h2 className="mt-1 text-lg font-black tracking-tight text-slate-900">Ask PostMotive</h2>
+              <h2 className="mt-1 text-lg font-black tracking-tight text-slate-900">Ask Motive</h2>
               {helpContextData.betaTesterMode ? (
                 <p className="mt-1 text-xs font-semibold text-slate-500">Beta mode · {helpContextData.appVersion}</p>
               ) : null}
             </div>
             <button type="button" onClick={() => setAssistantOpen(false)} className="text-sm font-semibold text-slate-500 hover:text-slate-700">Close</button>
           </div>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Ask what this page does, why a workflow is blocked, or where to go next.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Ask questions, explore your knowledge, and get answers tailored to your business.</p>
           <textarea
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="What do I do on this page? How do I connect TikTok? Why can't I publish?"
+            placeholder="What would you like to ask Motive?"
             className="mt-4 min-h-24 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900"
           />
           <div className="mt-3 flex flex-wrap gap-2">
@@ -111,6 +115,9 @@ export default function HelpAssistant() {
               Start walkthrough
             </button>
           </div>
+          {!reply ? (
+            <p className="mt-4 text-sm font-semibold text-slate-900">What can Motive help you with?</p>
+          ) : null}
           {reply ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
               <p className="whitespace-pre-line text-sm leading-6 text-slate-700">{reply.answer}</p>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import { normalizeStoragePath, isAbsoluteUrl } from "@/features/media/media-url-resolver";
+import { rowBelongsToWorkspace } from "@/features/media/workspace-access";
 
 type RouteContext = {
   params: Promise<{ assetId: string }>;
@@ -12,7 +13,7 @@ function safeFileName(value: string): string {
 }
 
 async function logDownload(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: Awaited<ReturnType<typeof requireWorkspaceContext>>["supabase"],
   row: { id: string; workspace_id: string; file_name: string },
 ): Promise<void> {
   try {
@@ -36,11 +37,9 @@ async function logDownload(
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const { assetId } = await context.params;
-    const supabase = await createClient();
-    const { data: claimsData } = await supabase.auth.getClaims();
-    if (!claimsData?.claims) {
-      return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-    }
+    const workspaceContext = await requireWorkspaceContext();
+    const supabase = workspaceContext.supabase;
+    const workspaceId = workspaceContext.workspaceId;
 
     const { data: row, error } = await supabase
       .from("media_assets")
@@ -48,7 +47,7 @@ export async function GET(_request: Request, context: RouteContext) {
       .eq("id", assetId)
       .maybeSingle();
 
-    if (error || !row) {
+    if (error || !row || !rowBelongsToWorkspace(workspaceId, row.workspace_id)) {
       return NextResponse.json(
         { error: "The requested file is missing." },
         { status: 404 },
@@ -87,19 +86,35 @@ export async function GET(_request: Request, context: RouteContext) {
       });
     }
 
-    const { data: signed, error: signedError } = await supabase.storage
-      .from("brand-media")
-      .createSignedUrl(storagePath, 120);
+    const downloadFromSignedStorage = async () => {
+      const signedAttempt = await supabase.storage
+        .from("brand-media")
+        .createSignedUrl(storagePath, 120);
 
-    if (signedError || !signed?.signedUrl) {
-      return NextResponse.json(
-        { error: "Unable to prepare file download." },
-        { status: 403 },
-      );
-    }
+      if (signedAttempt.error || !signedAttempt.data?.signedUrl) {
+        return null;
+      }
 
-    const upstream = await fetch(signed.signedUrl, { cache: "no-store" });
-    if (!upstream.ok || !upstream.body) {
+      const first = await fetch(signedAttempt.data.signedUrl, { cache: "no-store" });
+      if (first.ok && first.body) return first;
+
+      if (first.status !== 401 && first.status !== 403) {
+        return first;
+      }
+
+      const retryAttempt = await supabase.storage
+        .from("brand-media")
+        .createSignedUrl(storagePath, 120);
+
+      if (retryAttempt.error || !retryAttempt.data?.signedUrl) {
+        return first;
+      }
+
+      return fetch(retryAttempt.data.signedUrl, { cache: "no-store" });
+    };
+
+    const upstream = await downloadFromSignedStorage();
+    if (!upstream?.ok || !upstream.body) {
       return NextResponse.json(
         { error: "The requested file is missing." },
         { status: 404 },

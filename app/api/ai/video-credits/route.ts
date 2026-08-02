@@ -37,8 +37,5 @@ export async function GET() {
     monthlyUsedCredits: Number(row.monthly_used_credits),
     billingExempt: Boolean(row.billing_exempt),
     creditsPerSecond: Number(row.credits_per_second),
-    providerCostCentsPerSecond: Number(
-      row.provider_cost_cents_per_second,
-    ),
   });
 }

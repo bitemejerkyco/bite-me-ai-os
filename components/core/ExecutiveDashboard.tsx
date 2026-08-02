@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { demoWorkspace, loadLocal, STORAGE_KEYS, type CampaignPlan, type ContentDraft, type MediaAsset, type WorkspaceProfile } from "@/features/core/local-os";
+import { demoWorkspace, isDemoMode, loadLocal, STORAGE_KEYS, workspaceStorageKey, type CampaignPlan, type ContentDraft, type MediaAsset, type WorkspaceProfile } from "@/features/core/local-os";
 import {
   loadCloudCampaigns,
   loadCloudDrafts,
@@ -26,26 +26,32 @@ export default function ExecutiveDashboard() {
             loadCloudCampaigns(),
             loadCloudMedia(),
           ]);
-        setWorkspace(
-          cloudWorkspace ||
-            loadLocal<WorkspaceProfile | null>(STORAGE_KEYS.workspace, null),
-        );
+        const resolvedWorkspace =
+          cloudWorkspace || (isDemoMode() ? loadLocal(STORAGE_KEYS.demoWorkspace, demoWorkspace()) : null);
+        setWorkspace(resolvedWorkspace);
+        const scopedDraftKey = workspaceStorageKey(STORAGE_KEYS.drafts, resolvedWorkspace?.id);
+        const scopedCampaignKey = workspaceStorageKey(STORAGE_KEYS.campaigns, resolvedWorkspace?.id);
+        const scopedMediaKey = workspaceStorageKey(STORAGE_KEYS.media, resolvedWorkspace?.id);
         setDrafts(
-          cloudDrafts.length ? cloudDrafts : loadLocal(STORAGE_KEYS.drafts, []),
+          cloudDrafts.length ? cloudDrafts : loadLocal(scopedDraftKey, []),
         );
         setCampaigns(
           cloudCampaigns.length
             ? cloudCampaigns
-            : loadLocal(STORAGE_KEYS.campaigns, []),
+            : loadLocal(scopedCampaignKey, []),
         );
         setMedia(
-          cloudMedia.length ? cloudMedia : loadLocal(STORAGE_KEYS.media, []),
+          cloudMedia.length ? cloudMedia : loadLocal(scopedMediaKey, []),
         );
       } catch {
-        setWorkspace(loadLocal<WorkspaceProfile | null>(STORAGE_KEYS.workspace, null));
-        setDrafts(loadLocal(STORAGE_KEYS.drafts, []));
-        setCampaigns(loadLocal(STORAGE_KEYS.campaigns, []));
-        setMedia(loadLocal(STORAGE_KEYS.media, []));
+        const fallbackWorkspace = isDemoMode() ? loadLocal(STORAGE_KEYS.demoWorkspace, demoWorkspace()) : null;
+        setWorkspace(fallbackWorkspace);
+        const scopedDraftKey = workspaceStorageKey(STORAGE_KEYS.drafts, fallbackWorkspace?.id);
+        const scopedCampaignKey = workspaceStorageKey(STORAGE_KEYS.campaigns, fallbackWorkspace?.id);
+        const scopedMediaKey = workspaceStorageKey(STORAGE_KEYS.media, fallbackWorkspace?.id);
+        setDrafts(loadLocal(scopedDraftKey, []));
+        setCampaigns(loadLocal(scopedCampaignKey, []));
+        setMedia(loadLocal(scopedMediaKey, []));
       }
     };
     void refresh();

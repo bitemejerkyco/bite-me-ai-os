@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import GuidedEmptyState from "@/components/help/GuidedEmptyState";
 import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
 import {
-  loadLocal,
   saveLocal,
   STORAGE_KEYS,
   type LibraryFolder,
@@ -14,14 +13,39 @@ import {
 import type { TikTokConnectionView } from "@/features/integrations/tiktok/types";
 import {
   createCloudFolder,
-  loadCloudFolders,
-  loadCloudMedia,
   moveCloudMediaToFolder,
   removeCloudMedia,
   renameCloudFolder,
   updateCloudMediaAsset,
   uploadCloudMedia,
 } from "@/features/core/cloud-store";
+import {
+  matchesSourceFilter,
+  matchesTypeFilter,
+  sourceBadge,
+  type AssetTypeFilter,
+  type SourceFilter,
+} from "@/features/media/media-library-filters";
+import {
+  DEFAULT_MEDIA_UI_STATE,
+  parseMediaUiState,
+} from "@/features/media/media-ui-state";
+import {
+  nextResolveRefreshInMs,
+  selectAssetIdsNeedingResolve,
+} from "@/features/media/resolve-cache";
+import {
+  extractFileNameFromDisposition,
+  isLikelyExpiredSignedUrlFailure,
+} from "@/features/media/download-utils";
+import {
+  applyArchiveUpdate,
+  applyFavoriteUpdate,
+} from "@/features/media/media-asset-updates";
+import {
+  DEFAULT_MEDIA_CAPABILITIES,
+  type MediaCapabilities,
+} from "@/features/media/media-capabilities";
 
 type ResolvedAsset = {
   assetId: string;
@@ -58,8 +82,29 @@ type ResolvePayload = {
   assets?: ResolvedAsset[];
 };
 
+type SortFilter = "NEWEST" | "OLDEST" | "NAME" | "SIZE";
 const VIEW_MODE_KEY = "postmotive:media:view-mode";
+const MEDIA_UI_STATE_KEY = "postmotive:media:ui-state";
 const PAGE_SIZE = 24;
+let tiktokStatusRequest: Promise<TikTokConnectionView | null> | null = null;
+
+function getTiktokStatusOnce(): Promise<TikTokConnectionView | null> {
+  if (!tiktokStatusRequest) {
+    tiktokStatusRequest = fetch("/api/integrations/tiktok/status", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          ok?: boolean;
+          data?: TikTokConnectionView;
+        };
+        if (response.ok && payload.ok && payload.data) {
+          return payload.data;
+        }
+        return null;
+      })
+      .catch(() => null);
+  }
+  return tiktokStatusRequest;
+}
 
 function tagsFor(file: File): string[] {
   const tags = [file.type.split("/")[0] || "asset"];
@@ -85,10 +130,12 @@ function formatDuration(seconds: number | null | undefined): string {
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
-function mimeCategory(asset: MediaAsset, resolved?: ResolvedAsset): "image" | "video" | "file" {
+function mimeCategory(asset: MediaAsset, resolved?: ResolvedAsset): "image" | "video" | "audio" | "document" | "file" {
   const mime = (resolved?.mimeType || asset.type || "").toLowerCase();
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.includes("pdf") || mime.includes("document") || mime.includes("text")) return "document";
   return "file";
 }
 
@@ -101,6 +148,11 @@ function readViewMode(): "grid" | "list" {
   if (typeof window === "undefined") return "grid";
   const stored = window.localStorage.getItem(VIEW_MODE_KEY);
   return stored === "list" ? "list" : "grid";
+}
+
+function readMediaUiState() {
+  if (typeof window === "undefined") return { ...DEFAULT_MEDIA_UI_STATE };
+  return parseMediaUiState(window.localStorage.getItem(MEDIA_UI_STATE_KEY));
 }
 
 async function inferFileMetadata(file: File): Promise<{
@@ -148,94 +200,174 @@ async function inferFileMetadata(file: File): Promise<{
   return {};
 }
 
-export default function MediaLibrary() {
-  const [assets, setAssets] = useState<MediaAsset[]>([]);
-  const [folders, setFolders] = useState<LibraryFolder[]>([]);
-  const [folderFilter, setFolderFilter] = useState("ALL");
+type MediaLibraryProps = {
+  initialAssets?: MediaAsset[];
+  initialFolders?: LibraryFolder[];
+  initialRoleLabel?: string;
+  initialCapabilities?: MediaCapabilities;
+};
+
+export default function MediaLibrary({
+  initialAssets = [],
+  initialFolders = [],
+  initialRoleLabel = "GUEST",
+  initialCapabilities = DEFAULT_MEDIA_CAPABILITIES,
+}: MediaLibraryProps) {
+  const persistedUiState = useMemo(() => readMediaUiState(), []);
+
+  const [assets, setAssets] = useState<MediaAsset[]>(initialAssets);
+  const [folders, setFolders] = useState<LibraryFolder[]>(initialFolders);
+  const [folderFilter, setFolderFilter] = useState(persistedUiState.folderFilter);
   const [newFolderName, setNewFolderName] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(persistedUiState.query);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [tiktokView, setTikTokView] = useState<TikTokConnectionView | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">(() => readViewMode());
+  const [viewMode, setViewMode] = useState<"grid" | "list">(persistedUiState.viewMode || readViewMode());
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [resolvedMap, setResolvedMap] = useState<Record<string, ResolvedAsset>>({});
-  const [previewRequestNonce, setPreviewRequestNonce] = useState(0);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [brokenIds, setBrokenIds] = useState<Set<string>>(new Set());
+  const [typeFilter, setTypeFilter] = useState<AssetTypeFilter>(persistedUiState.typeFilter);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>(persistedUiState.sourceFilter);
+  const [sortBy, setSortBy] = useState<SortFilter>(persistedUiState.sortBy);
+  const [favoriteOnly, setFavoriteOnly] = useState(persistedUiState.favoriteOnly);
+  const [showArchived, setShowArchived] = useState(persistedUiState.showArchived);
+  const roleLabel = initialRoleLabel;
+  const capabilities: MediaCapabilities = initialCapabilities;
+  const [resolveRefreshRevision, setResolveRefreshRevision] = useState(0);
+
+  const resolveCacheRef = useRef<Record<string, ResolvedAsset>>({});
+  const inflightResolveRef = useRef<Set<string>>(new Set());
+  const resolveRefreshTimerRef = useRef<number | null>(null);
 
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      void Promise.all([loadCloudMedia(), loadCloudFolders("MEDIA")])
-        .then(([cloud, savedFolders]) => {
-          setAssets(cloud.length ? cloud : loadLocal(STORAGE_KEYS.media, []));
-          setFolders(savedFolders);
-        })
-        .catch(() => setAssets(loadLocal(STORAGE_KEYS.media, [])));
-    });
-    return () => cancelAnimationFrame(frame);
-  }, []);
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 200);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
-    void fetch("/api/integrations/tiktok/status", { cache: "no-store" })
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          ok?: boolean;
-          data?: TikTokConnectionView;
-        };
-        if (response.ok && payload.ok && payload.data) {
-          setTikTokView(payload.data);
-        }
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      MEDIA_UI_STATE_KEY,
+      JSON.stringify({
+        folderFilter,
+        query,
+        typeFilter,
+        sourceFilter,
+        sortBy,
+        favoriteOnly,
+        showArchived,
+        viewMode,
+      }),
+    );
+  }, [favoriteOnly, folderFilter, query, showArchived, sortBy, sourceFilter, typeFilter, viewMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tiktokStatusPromise = getTiktokStatusOnce();
+    void tiktokStatusPromise
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        setTikTokView(payload);
       })
       .catch(() => {
         // The library remains usable even if TikTok status cannot be loaded.
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  const filtered = useMemo(() => {
+    const base = assets.filter((asset) => {
+      const resolved = resolvedMap[asset.id];
+      const category = mimeCategory(asset, resolved);
+      const normalized = `${asset.name} ${(resolved?.tags || asset.tags).join(" ")} ${resolved?.creatorName || ""}`.toLowerCase();
+      const matchesSearch = !debouncedQuery || normalized.includes(debouncedQuery);
+      const matchesFolder = folderFilter === "ALL" ? true : (asset.folderId || "") === folderFilter;
+      const matchesType = matchesTypeFilter(category, typeFilter);
+      const matchesSource = matchesSourceFilter(resolved?.source || asset.source, sourceFilter);
+      const matchesFavorite = favoriteOnly ? Boolean(asset.isFavorite) : true;
+      const matchesArchived = showArchived ? Boolean(asset.archivedAt) : !asset.archivedAt;
+      return (
+        matchesSearch &&
+        matchesFolder &&
+        matchesType &&
+        matchesSource &&
+        matchesFavorite &&
+        matchesArchived
+      );
+    });
+
+    const sorted = [...base];
+    if (sortBy === "NAME") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === "SIZE") {
+      sorted.sort((a, b) => b.size - a.size);
+    } else if (sortBy === "OLDEST") {
+      sorted.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    } else {
+      sorted.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    }
+    return sorted;
+  }, [
+    assets,
+    debouncedQuery,
+    favoriteOnly,
+    folderFilter,
+    resolvedMap,
+    showArchived,
+    sortBy,
+    sourceFilter,
+    typeFilter,
+  ]);
+
+  const visibleAssets = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  const visibleAssetIdKey = useMemo(
+    () => visibleAssets.map((asset) => asset.id).join("|"),
+    [visibleAssets],
+  );
+
   useEffect(() => {
-    if (!previewAssetId) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPreviewAssetId(null);
+    const visibleAssetIds = visibleAssetIdKey ? visibleAssetIdKey.split("|") : [];
+    if (!visibleAssetIds.length) return;
+
+    const hydratedFromCache: Record<string, ResolvedAsset> = {};
+    for (const assetId of visibleAssetIds) {
+      const cached = resolveCacheRef.current[assetId];
+      if (cached) {
+        hydratedFromCache[assetId] = cached;
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    previewCloseRef.current?.focus();
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [previewAssetId]);
+    }
+    if (Object.keys(hydratedFromCache).length) {
+      const rafId = window.requestAnimationFrame(() => {
+        setResolvedMap((current) => ({ ...current, ...hydratedFromCache }));
+      });
 
-  const filtered = useMemo(
-    () =>
-      assets.filter((asset) => {
-        const matchesSearch = `${asset.name} ${asset.tags.join(" ")}`
-          .toLowerCase()
-          .includes(query.toLowerCase());
-        const matchesFolder =
-          folderFilter === "ALL"
-            ? !asset.folderId
-            : asset.folderId === folderFilter;
-        return matchesSearch && matchesFolder;
-      }),
-    [assets, query, folderFilter],
-  );
+      return () => window.cancelAnimationFrame(rafId);
+    }
 
-  const visibleAssets = useMemo(
-    () => filtered.slice(0, visibleCount),
-    [filtered, visibleCount],
-  );
+    const idsToResolve = selectAssetIdsNeedingResolve({
+      visibleAssetIds,
+      cachedById: resolveCacheRef.current,
+      inflightAssetIds: inflightResolveRef.current,
+    });
 
-  useEffect(() => {
-    const ids = visibleAssets.map((asset) => asset.id);
-    if (!ids.length) return;
+    if (!idsToResolve.length) return;
+    idsToResolve.forEach((assetId) => inflightResolveRef.current.add(assetId));
 
     void fetch("/api/media/resolve", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assetIds: ids }),
+      body: JSON.stringify({ assetIds: idsToResolve }),
     })
       .then(async (response) => {
         const payload = (await response.json()) as ResolvePayload;
@@ -245,6 +377,7 @@ export default function MediaLibrary() {
         const next: Record<string, ResolvedAsset> = {};
         for (const item of payload.assets) {
           next[item.assetId] = item;
+          resolveCacheRef.current[item.assetId] = item;
         }
         setResolvedMap((current) => ({ ...current, ...next }));
       })
@@ -252,26 +385,48 @@ export default function MediaLibrary() {
         // Keep cards visible with placeholders when secure URL resolution fails.
       })
       .finally(() => {
-        // Trigger a repaint signal when preview resolution attempt completes.
-        setPreviewRequestNonce((value) => value + 1);
+        idsToResolve.forEach((assetId) => inflightResolveRef.current.delete(assetId));
       });
-  }, [visibleAssets]);
+  }, [resolveRefreshRevision, visibleAssetIdKey]);
+
+  useEffect(() => {
+    if (resolveRefreshTimerRef.current !== null) {
+      window.clearTimeout(resolveRefreshTimerRef.current);
+      resolveRefreshTimerRef.current = null;
+    }
+
+    const visibleAssetIds = visibleAssetIdKey ? visibleAssetIdKey.split("|") : [];
+    if (!visibleAssetIds.length) return;
+
+    const refreshInMs = nextResolveRefreshInMs({
+      visibleAssetIds,
+      cachedById: resolveCacheRef.current,
+    });
+    if (refreshInMs === null) return;
+
+    resolveRefreshTimerRef.current = window.setTimeout(() => {
+      setResolveRefreshRevision((current) => current + 1);
+    }, refreshInMs);
+
+    return () => {
+      if (resolveRefreshTimerRef.current !== null) {
+        window.clearTimeout(resolveRefreshTimerRef.current);
+        resolveRefreshTimerRef.current = null;
+      }
+    };
+  }, [visibleAssetIdKey]);
 
   const createFolder = async () => {
     if (!newFolderName.trim()) return;
     setMessage("");
     try {
       const folder = await createCloudFolder("MEDIA", newFolderName);
-      setFolders((current) =>
-        [...current, folder].sort((a, b) => a.name.localeCompare(b.name)),
-      );
+      setFolders((current) => [...current, folder].sort((a, b) => a.name.localeCompare(b.name)));
       setFolderFilter(folder.id);
       setNewFolderName("");
       setMessage(`Folder \"${folder.name}\" created.`);
     } catch (caught) {
-      setMessage(
-        caught instanceof Error ? caught.message : "Unable to create folder.",
-      );
+      setMessage(caught instanceof Error ? caught.message : "Unable to create folder.");
     }
   };
 
@@ -287,39 +442,33 @@ export default function MediaLibrary() {
       );
       setMessage(`Folder renamed to \"${updated.name}\".`);
     } catch (caught) {
-      setMessage(
-        caught instanceof Error ? caught.message : "Unable to rename folder.",
-      );
+      setMessage(caught instanceof Error ? caught.message : "Unable to rename folder.");
     }
   };
 
   const moveAsset = async (asset: MediaAsset, folderId: string) => {
+    if (!capabilities.canMoveFolder) return;
     setMessage("");
     try {
       await moveCloudMediaToFolder(asset.id, folderId || undefined);
       const updated = { ...asset, folderId: folderId || undefined };
-      const next = assets.map((item) =>
-        item.id === asset.id ? updated : item,
-      );
+      const next = assets.map((item) => (item.id === asset.id ? updated : item));
       setAssets(next);
       saveLocal(STORAGE_KEYS.media, next);
       setMessage(folderId ? "Asset moved." : "Asset moved to Unfiled.");
     } catch (caught) {
-      setMessage(
-        caught instanceof Error ? caught.message : "Unable to move asset.",
-      );
+      setMessage(caught instanceof Error ? caught.message : "Unable to move asset.");
     }
   };
 
   const renameAsset = async (asset: MediaAsset) => {
+    if (!capabilities.canRename) return;
     const name = window.prompt("Rename asset", asset.name);
     if (!name || name.trim() === asset.name) return;
     try {
       await updateCloudMediaAsset(asset.id, { name: name.trim() });
       setAssets((current) =>
-        current.map((item) =>
-          item.id === asset.id ? { ...item, name: name.trim() } : item,
-        ),
+        current.map((item) => (item.id === asset.id ? { ...item, name: name.trim() } : item)),
       );
       setMessage("Asset renamed.");
     } catch (caught) {
@@ -328,8 +477,9 @@ export default function MediaLibrary() {
   };
 
   const addTags = async (asset: MediaAsset) => {
+    if (!capabilities.canEditTags) return;
     const existing = asset.tags.join(", ");
-    const value = window.prompt("Add tags (comma separated)", existing);
+    const value = window.prompt("Edit tags (comma separated)", existing);
     if (value === null) return;
     const tags = value
       .split(",")
@@ -337,48 +487,65 @@ export default function MediaLibrary() {
       .filter(Boolean);
     try {
       await updateCloudMediaAsset(asset.id, { tags });
-      setAssets((current) =>
-        current.map((item) => (item.id === asset.id ? { ...item, tags } : item)),
-      );
+      setAssets((current) => current.map((item) => (item.id === asset.id ? { ...item, tags } : item)));
       setMessage("Tags updated.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to update tags.");
     }
   };
 
-  const archiveAsset = async (asset: MediaAsset) => {
-    if (!window.confirm(`Archive ${asset.name}?`)) return;
+  const toggleFavorite = async (asset: MediaAsset) => {
+    if (!capabilities.canFavorite) return;
+    const nextFavorite = !asset.isFavorite;
     try {
-      await updateCloudMediaAsset(asset.id, { archivedAt: new Date().toISOString() });
-      const next = assets.filter((item) => item.id !== asset.id);
-      setAssets(next);
+      await updateCloudMediaAsset(asset.id, { isFavorite: nextFavorite });
+      setAssets((current) => applyFavoriteUpdate(current, asset.id, nextFavorite));
+      setMessage(nextFavorite ? "Added to favorites." : "Removed from favorites.");
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Unable to update favorite state.");
+    }
+  };
+
+  const archiveAsset = async (asset: MediaAsset) => {
+    if (!capabilities.canArchive) return;
+    if (!window.confirm(`Archive ${asset.name}?`)) return;
+    const archivedAt = new Date().toISOString();
+    try {
+      await updateCloudMediaAsset(asset.id, { archivedAt });
+      setAssets((current) => applyArchiveUpdate(current, asset.id, archivedAt));
       setMessage("Asset archived.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to archive asset.");
     }
   };
 
+  const restoreAsset = async (asset: MediaAsset) => {
+    if (!capabilities.canArchive) return;
+    try {
+      await updateCloudMediaAsset(asset.id, { archivedAt: null });
+      setAssets((current) => applyArchiveUpdate(current, asset.id, null));
+      setMessage("Asset restored.");
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Unable to restore asset.");
+    }
+  };
+
   const upload = async (files: FileList | null) => {
     if (!files?.length) return;
     setUploading(true);
-    setMessage("Uploading securely…");
+    setMessage("Uploading securely...");
     try {
       const added: MediaAsset[] = [];
       for (const file of Array.from(files)) {
         const meta = await inferFileMetadata(file);
         added.push(
-          await uploadCloudMedia(
-            file,
-            tagsFor(file),
-            folderFilter !== "ALL" ? folderFilter : undefined,
-            {
-              source: "UPLOADED",
-              generationStatus: "READY",
-              width: meta.width,
-              height: meta.height,
-              durationSeconds: meta.durationSeconds,
-            },
-          ),
+          await uploadCloudMedia(file, tagsFor(file), folderFilter !== "ALL" ? folderFilter : undefined, {
+            source: "UPLOADED",
+            generationStatus: "READY",
+            width: meta.width,
+            height: meta.height,
+            durationSeconds: meta.durationSeconds,
+          }),
         );
       }
       const next = [...added, ...assets];
@@ -394,7 +561,8 @@ export default function MediaLibrary() {
   };
 
   const remove = async (asset: MediaAsset) => {
-    if (!window.confirm(`Delete ${asset.name}? This cannot be undone.`)) return;
+    if (!capabilities.canDelete) return;
+    if (!window.confirm(`Permanently delete ${asset.name}? This cannot be undone.`)) return;
     setMessage("");
     try {
       await removeCloudMedia(asset);
@@ -412,6 +580,11 @@ export default function MediaLibrary() {
     setZoom(1);
   };
 
+  const closePreview = useCallback(() => {
+    setPreviewAssetId(null);
+    setZoom(1);
+  }, []);
+
   const selectedCount = selectedIds.size;
 
   const toggleSelection = (assetId: string) => {
@@ -423,13 +596,44 @@ export default function MediaLibrary() {
     });
   };
 
-  const downloadAsset = (assetId: string) => {
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(visibleAssets.map((asset) => asset.id)));
+  };
+
+  const downloadAsset = async (assetId: string, retryAttempted = false): Promise<void> => {
     const resolved = resolvedMap[assetId];
     if (!resolved?.isDownloadAllowed) {
       setMessage("Download unavailable for this item.");
       return;
     }
-    window.location.href = resolved.downloadUrl;
+
+    const response = await fetch(resolved.downloadUrl, {
+      cache: "no-store",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      if (!retryAttempted && isLikelyExpiredSignedUrlFailure(response.status, bodyText)) {
+        await retryResolve(assetId);
+        await downloadAsset(assetId, true);
+        return;
+      }
+      setMessage("Unable to download this file.");
+      return;
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition");
+    const safeName = extractFileNameFromDisposition(disposition) || resolved.fileName || "media-asset";
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = safeName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
   };
 
   const copySecureLink = async (assetId: string) => {
@@ -446,8 +650,20 @@ export default function MediaLibrary() {
     }
   };
 
+  const copyAssetId = async (assetId: string) => {
+    try {
+      await navigator.clipboard.writeText(assetId);
+      setMessage("Asset ID copied.");
+    } catch {
+      setMessage("Unable to copy asset ID.");
+    }
+  };
+
   const retryResolve = async (assetId: string) => {
     try {
+      if (inflightResolveRef.current.has(assetId)) return;
+      inflightResolveRef.current.add(assetId);
+
       const response = await fetch("/api/media/resolve", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -457,6 +673,7 @@ export default function MediaLibrary() {
       if (!response.ok || !payload.ok || !payload.assets?.length) {
         throw new Error("resolve-failed");
       }
+      resolveCacheRef.current[assetId] = payload.assets![0];
       setResolvedMap((current) => ({ ...current, [assetId]: payload.assets![0] }));
       setBrokenIds((current) => {
         const next = new Set(current);
@@ -466,6 +683,8 @@ export default function MediaLibrary() {
       setMessage("Preview refreshed.");
     } catch {
       setMessage("Preview unavailable.");
+    } finally {
+      inflightResolveRef.current.delete(assetId);
     }
   };
 
@@ -476,36 +695,107 @@ export default function MediaLibrary() {
     }
   };
 
-  const previewAsset = previewAssetId
-    ? assets.find((item) => item.id === previewAssetId) || null
-    : null;
+  const previewIndex = previewAssetId ? filtered.findIndex((item) => item.id === previewAssetId) : -1;
+  const previewAsset = previewIndex >= 0 ? filtered[previewIndex] : null;
   const previewResolved = previewAsset ? resolvedMap[previewAsset.id] : undefined;
+
+  const openPreviousPreview = useCallback(() => {
+    if (previewIndex <= 0) return;
+    openPreview(filtered[previewIndex - 1]!.id);
+  }, [filtered, previewIndex]);
+
+  const openNextPreview = useCallback(() => {
+    if (previewIndex < 0 || previewIndex >= filtered.length - 1) return;
+    openPreview(filtered[previewIndex + 1]!.id);
+  }, [filtered, previewIndex]);
+
+  useEffect(() => {
+    if (!previewAssetId) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [previewAssetId]);
+
+  useEffect(() => {
+    if (!previewAssetId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePreview();
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        openPreviousPreview();
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        openNextPreview();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    previewCloseRef.current?.focus();
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closePreview, openNextPreview, openPreviousPreview, previewAssetId]);
+
+  useEffect(() => {
+    return () => {
+      if (resolveRefreshTimerRef.current !== null) {
+        window.clearTimeout(resolveRefreshTimerRef.current);
+        resolveRefreshTimerRef.current = null;
+      }
+      document.body.style.overflow = "";
+    };
+  }, []);
 
   const canLoadMore = filtered.length > visibleCount;
 
   return (
     <div className="space-y-5">
-      <section data-help="media-upload-zone" className="rounded-3xl border border-dashed border-violet-300 bg-violet-50 p-6 text-center">
+      <section
+        data-help="media-upload-zone"
+        className={`rounded-3xl border border-dashed p-6 text-center transition ${
+          isDragOver ? "border-violet-500 bg-violet-100" : "border-violet-300 bg-violet-50"
+        }`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragOver(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setIsDragOver(false);
+          void upload(event.dataTransfer.files);
+        }}
+      >
         <h2 className="text-xl font-bold">Upload branded media</h2>
-        <p className="mt-2 text-sm text-slate-500">Photos, videos, logos, graphics, and licensed audio.</p>
-        <label className={`mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 font-semibold hover:bg-violet-500 ${uploading ? "cursor-wait opacity-60" : "cursor-pointer"}`}>
-          {uploading ? "Uploading…" : "Choose files"}
+        <p className="mt-2 text-sm text-slate-500">Images, videos, audio, and PDFs for secure reuse across workflows.</p>
+        <label className={`mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 font-semibold text-white hover:bg-violet-500 ${uploading ? "cursor-wait opacity-60" : "cursor-pointer"}`}>
+          {uploading ? "Uploading..." : "Choose files"}
           <input
             type="file"
             multiple
             disabled={uploading}
-            accept="image/*,video/*,audio/*,.pdf"
+            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,video/mp4,video/mov,video/webm,video/m4v,audio/mp3,audio/wav,audio/m4a,.pdf"
             onChange={(event) => void upload(event.target.files)}
             className="hidden"
           />
         </label>
+        <p className="mt-2 text-xs text-slate-500">Drag and drop files anywhere in this area.</p>
         {message ? <p className="mt-3 text-sm text-emerald-700">{message}</p> : null}
         {assets.length ? (
           <Link
             href="/studio"
             className="mt-4 inline-block rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50"
           >
-            Create content with these assets →
+            Create content with these assets {"->"}
           </Link>
         ) : null}
       </section>
@@ -534,29 +824,20 @@ export default function MediaLibrary() {
             </div>
           </div>
           <div className="flex flex-wrap content-start gap-2">
-            {[
-              {
-                id: "ALL",
-                name: "All assets",
-                count: assets.filter((asset) => !asset.folderId).length,
-              },
-            ].map((folder) => (
-              <button
-                key={folder.id}
-                onClick={() => {
-                  setFolderFilter(folder.id);
-                  setVisibleCount(PAGE_SIZE);
-                  setSelectedIds(new Set());
-                }}
-                className={`rounded-xl border px-3 py-2 text-sm ${
-                  folderFilter === folder.id
-                    ? "border-violet-300 bg-violet-100 font-semibold text-violet-700"
-                    : "border-slate-200 bg-white text-slate-600"
-                }`}
-              >
-                {folder.name} ({folder.count})
-              </button>
-            ))}
+            <button
+              onClick={() => {
+                setFolderFilter("ALL");
+                setVisibleCount(PAGE_SIZE);
+                setSelectedIds(new Set());
+              }}
+              className={`rounded-xl border px-3 py-2 text-sm ${
+                folderFilter === "ALL"
+                  ? "border-violet-300 bg-violet-100 font-semibold text-violet-700"
+                  : "border-slate-200 bg-white text-slate-600"
+              }`}
+            >
+              All folders
+            </button>
             {folders.map((folder) => (
               <div
                 key={folder.id}
@@ -574,8 +855,7 @@ export default function MediaLibrary() {
                   }}
                   className="px-3 py-2 text-sm"
                 >
-                  ▰ {folder.name} (
-                  {assets.filter((asset) => asset.folderId === folder.id).length})
+                  Gû¦ {folder.name}
                 </button>
                 <button
                   onClick={() => void renameFolder(folder)}
@@ -591,10 +871,10 @@ export default function MediaLibrary() {
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-xl font-bold">Asset library</h2>
-            <p className="text-sm text-slate-500">{assets.length} saved assets</p>
+            <h2 className="text-xl font-bold">Media intelligence library</h2>
+            <p className="text-sm text-slate-500">{assets.length} total assets -+ role {roleLabel}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => changeViewMode("grid")}
@@ -614,41 +894,73 @@ export default function MediaLibrary() {
               onChange={(event) => {
                 setQuery(event.target.value);
                 setVisibleCount(PAGE_SIZE);
-                setSelectedIds(new Set());
               }}
-              placeholder="Search names or tags"
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+              placeholder="Search filename, tags, creator"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
             />
           </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+          <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as AssetTypeFilter)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+            <option value="ALL">All types</option>
+            <option value="IMAGE">Images</option>
+            <option value="VIDEO">Videos</option>
+            <option value="AUDIO">Audio</option>
+            <option value="DOCUMENT">Documents</option>
+          </select>
+          <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as SourceFilter)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+            <option value="ALL">All sources</option>
+            <option value="UPLOADED">Uploaded</option>
+            <option value="GENERATED">AI Generated</option>
+            <option value="IMPORTED">Imported</option>
+            <option value="UGC">UGC</option>
+            <option value="CAMPAIGN">Campaign</option>
+          </select>
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortFilter)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+            <option value="NEWEST">Newest</option>
+            <option value="OLDEST">Oldest</option>
+            <option value="NAME">Name</option>
+            <option value="SIZE">File size</option>
+          </select>
+          <button type="button" onClick={() => setFavoriteOnly((value) => !value)} className={`rounded-xl border px-3 py-2 text-sm ${favoriteOnly ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700"}`}>
+            Favorites {favoriteOnly ? "On" : "Off"}
+          </button>
+          <button type="button" onClick={() => setShowArchived((value) => !value)} className={`rounded-xl border px-3 py-2 text-sm ${showArchived ? "border-slate-600 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-700"}`}>
+            {showArchived ? "Viewing archived" : "Active assets"}
+          </button>
+          <button type="button" onClick={() => {
+            setTypeFilter("ALL");
+            setSourceFilter("ALL");
+            setSortBy("NEWEST");
+            setFavoriteOnly(false);
+            setFolderFilter("ALL");
+            setQuery("");
+            setVisibleCount(PAGE_SIZE);
+          }} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            Reset filters
+          </button>
         </div>
 
         {selectedCount > 0 ? (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
             <span className="font-semibold">{selectedCount} selected</span>
+            <button type="button" onClick={selectAllVisible} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5">Select visible</button>
             <button
               type="button"
               onClick={() => {
                 if (selectedCount === 1) {
                   const only = [...selectedIds][0];
-                  downloadAsset(only);
+                  if (only) void downloadAsset(only);
                   return;
                 }
-                setMessage("Bulk ZIP download is not supported yet. Download items individually.");
+                setMessage("Bulk ZIP download coming soon. Download items individually.");
               }}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5"
             >
               Download
             </button>
-            {selectedCount > 1 ? (
-              <span className="text-xs text-slate-500">ZIP download coming soon</span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setSelectedIds(new Set())}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5"
-            >
-              Clear selection
-            </button>
+            <button type="button" onClick={() => setSelectedIds(new Set())} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5">Clear selection</button>
           </div>
         ) : null}
 
@@ -662,31 +974,34 @@ export default function MediaLibrary() {
               const previewUnavailable = Boolean(resolved?.error) || brokenIds.has(asset.id);
               const thumbUrl = resolved?.thumbnailUrl || "";
               const duration = formatDuration(resolved?.durationSeconds ?? asset.durationSeconds);
+              const dimensions = resolved?.width && resolved?.height ? `${resolved.width}x${resolved.height}` : "";
+              const folderName = folders.find((folder) => folder.id === asset.folderId)?.name || "Unfiled";
+              const metadataLoading = !resolved;
 
               return (
-                <article key={asset.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/70">
+                <article key={asset.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-sm">
                   <div className="relative">
                     <input
                       aria-label={`Select ${asset.name}`}
                       type="checkbox"
                       checked={selectedIds.has(asset.id)}
                       onChange={() => toggleSelection(asset.id)}
-                      className="absolute left-3 top-3 z-10 h-4 w-4 rounded border-slate-300"
+                      className="absolute left-3 top-3 z-20 h-4 w-4 rounded border-slate-300"
                     />
                     <button
                       type="button"
                       onClick={() => openPreview(asset.id)}
-                      className="group relative block h-48 w-full overflow-hidden bg-slate-100 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                      className="group relative block aspect-video w-full overflow-hidden bg-slate-100 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                     >
+                      {metadataLoading ? <div className="absolute inset-0 animate-pulse bg-slate-200" /> : null}
+
                       {category === "image" && thumbUrl ? (
                         <img
                           src={thumbUrl}
                           alt={asset.name || "Media image"}
                           loading="lazy"
                           className="h-full w-full object-cover"
-                          onError={() =>
-                            setBrokenIds((current) => new Set(current).add(asset.id))
-                          }
+                          onError={() => setBrokenIds((current) => new Set(current).add(asset.id))}
                         />
                       ) : null}
 
@@ -697,22 +1012,19 @@ export default function MediaLibrary() {
                             alt={asset.name || "Video preview"}
                             loading="lazy"
                             className="h-full w-full object-cover"
-                            onError={() =>
-                              setBrokenIds((current) => new Set(current).add(asset.id))
-                            }
+                            onError={() => setBrokenIds((current) => new Set(current).add(asset.id))}
                           />
-                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 text-white">▶</span>
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 text-2xl text-white">Gû¦</span>
                           {duration ? (
                             <span className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-xs text-white">{duration}</span>
                           ) : null}
                         </>
                       ) : null}
 
-                      {((category === "file") || previewUnavailable || !thumbUrl) ? (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-500">
+                      {(category === "file" || category === "audio" || previewUnavailable || !thumbUrl) ? (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-slate-600">
                           <span className="rounded-full bg-white px-3 py-1 text-xs font-bold tracking-wide shadow-sm">{extensionFor(asset.name)}</span>
-                          <span className="text-xs font-medium">{previewUnavailable ? "Preview unavailable" : "Preview"}</span>
-                          {category === "video" ? <span className="text-xs">Video</span> : null}
+                          <span className="text-xs font-medium">{previewUnavailable ? "Preview unavailable" : "Customer-safe placeholder"}</span>
                         </div>
                       ) : null}
                     </button>
@@ -722,12 +1034,32 @@ export default function MediaLibrary() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{asset.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {resolved?.mimeType || asset.type} · {formatFileSize(resolved?.sizeBytes || asset.size)}
+                        <p className="mt-1 text-xs text-slate-500">
+                          {resolved?.mimeType || asset.type} -+ {formatFileSize(resolved?.sizeBytes || asset.size)}
                         </p>
                       </div>
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] uppercase text-slate-600">{resolved?.label || "uploaded"}</span>
+                      <div className="flex items-center gap-2">
+                        {asset.isFavorite ? <span className="text-amber-500" aria-label="Favorite">Gÿà</span> : null}
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] uppercase text-slate-600">{sourceBadge(resolved?.source || asset.source)}</span>
+                      </div>
                     </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                      <p>Type: {category}</p>
+                      <p>Status: {resolved?.generationStatus || asset.generationStatus || "READY"}</p>
+                      <p>Created: {new Date(asset.createdAt).toLocaleDateString()}</p>
+                      <p>Folder: {folderName}</p>
+                      <p>{dimensions ? `Dimensions: ${dimensions}` : "Dimensions: -"}</p>
+                      <p>{duration ? `Duration: ${duration}` : "Duration: -"}</p>
+                    </div>
+
+                    {(resolved?.tags || asset.tags).length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {(resolved?.tags || asset.tags).slice(0, 6).map((tag) => (
+                          <span key={tag} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">#{tag}</span>
+                        ))}
+                      </div>
+                    ) : null}
 
                     {resolved?.usageRightsStatus === "EXPIRED" ? (
                       <p className="rounded bg-rose-50 px-2 py-1 text-xs text-rose-700">Usage rights expired</p>
@@ -736,50 +1068,53 @@ export default function MediaLibrary() {
                       <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">Usage rights expiring soon</p>
                     ) : null}
 
-                    <div className="flex flex-wrap gap-2">
-                      {asset.tags.map((tag) => <span key={tag} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">{tag}</span>)}
-                    </div>
-
                     {previewUnavailable ? (
                       <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
                         <p>Preview unavailable</p>
                         <div className="mt-2 flex gap-2">
                           <button type="button" onClick={() => void retryResolve(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Retry</button>
                           {resolved?.isDownloadAllowed ? (
-                            <button type="button" onClick={() => downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Download original</button>
+                            <button type="button" onClick={() => void downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Download original</button>
                           ) : null}
                         </div>
                       </div>
                     ) : null}
 
-                    <div className="grid gap-2">
-                      <label className="text-xs text-slate-500">
-                        Folder
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <button type="button" onClick={() => openPreview(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">View</button>
+                      <button type="button" onClick={() => void downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Download</button>
+                      {capabilities.canRename ? <button type="button" onClick={() => void renameAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Rename</button> : null}
+                      {capabilities.canEditTags ? <button type="button" onClick={() => void addTags(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Edit tags</button> : null}
+                      {capabilities.canMoveFolder ? (
                         <select
                           value={asset.folderId || ""}
-                          onChange={(event) =>
-                            void moveAsset(asset, event.target.value)
-                          }
-                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                          onChange={(event) => void moveAsset(asset, event.target.value)}
+                          className="rounded border border-slate-200 bg-white px-2 py-1"
+                          aria-label={`Move ${asset.name} to folder`}
                         >
+                          <option value="">Move to folder</option>
                           <option value="">Unfiled</option>
                           {folders.map((folder) => (
-                            <option key={folder.id} value={folder.id}>
-                              {folder.name}
-                            </option>
+                            <option key={folder.id} value={folder.id}>{folder.name}</option>
                           ))}
                         </select>
-                      </label>
-
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <button type="button" onClick={() => openPreview(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">View</button>
-                        <button type="button" onClick={() => downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Download</button>
-                        <button type="button" onClick={() => void renameAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Rename</button>
-                        <button type="button" onClick={() => void addTags(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Add tags</button>
-                        <button type="button" onClick={() => void copySecureLink(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Copy secure link</button>
-                        <button type="button" onClick={() => void archiveAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Archive</button>
-                        <button type="button" onClick={() => void remove(asset)} className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700">Delete</button>
-                      </div>
+                      ) : null}
+                      {capabilities.canFavorite ? (
+                        <button type="button" onClick={() => void toggleFavorite(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">
+                          {asset.isFavorite ? "Unfavorite" : "Favorite"}
+                        </button>
+                      ) : null}
+                      {capabilities.canCreateWithAsset ? (
+                        <Link href={`/studio?assetId=${asset.id}`} className="rounded border border-slate-200 bg-white px-2 py-1">Create with this asset</Link>
+                      ) : null}
+                      <button type="button" onClick={() => void copySecureLink(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Copy secure link</button>
+                      <button type="button" onClick={() => void copyAssetId(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Copy asset ID</button>
+                      {asset.archivedAt ? (
+                        capabilities.canArchive ? <button type="button" onClick={() => void restoreAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Restore</button> : null
+                      ) : (
+                        capabilities.canArchive ? <button type="button" onClick={() => void archiveAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Archive</button> : null
+                      )}
+                      {capabilities.canDelete ? <button type="button" onClick={() => void remove(asset)} className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700">Delete</button> : null}
                     </div>
 
                     {asset.type.startsWith("video/") ? (
@@ -816,10 +1151,9 @@ export default function MediaLibrary() {
                   <th className="px-3 py-2">Asset</th>
                   <th className="px-3 py-2">Type</th>
                   <th className="px-3 py-2">Size</th>
-                  <th className="px-3 py-2">Dimensions / Duration</th>
-                  <th className="px-3 py-2">Created</th>
-                  <th className="px-3 py-2">Folder</th>
                   <th className="px-3 py-2">Source</th>
+                  <th className="px-3 py-2">Favorite</th>
+                  <th className="px-3 py-2">Created</th>
                   <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
@@ -827,8 +1161,6 @@ export default function MediaLibrary() {
                 {visibleAssets.map((asset) => {
                   const resolved = resolvedMap[asset.id];
                   const thumb = resolved?.thumbnailUrl || "";
-                  const duration = formatDuration(resolved?.durationSeconds ?? asset.durationSeconds);
-                  const dimensions = resolved?.width && resolved?.height ? `${resolved.width}x${resolved.height}` : "-";
                   return (
                     <tr key={asset.id} className="border-t border-slate-100">
                       <td className="px-3 py-2 align-top">
@@ -848,15 +1180,13 @@ export default function MediaLibrary() {
                       </td>
                       <td className="px-3 py-2">{resolved?.mimeType || asset.type}</td>
                       <td className="px-3 py-2">{formatFileSize(resolved?.sizeBytes || asset.size)}</td>
-                      <td className="px-3 py-2">{duration || dimensions}</td>
+                      <td className="px-3 py-2">{sourceBadge(resolved?.source || asset.source)}</td>
+                      <td className="px-3 py-2">{asset.isFavorite ? "Yes" : "No"}</td>
                       <td className="px-3 py-2">{new Date(asset.createdAt).toLocaleString()}</td>
-                      <td className="px-3 py-2">{folders.find((folder) => folder.id === asset.folderId)?.name || "Unfiled"}</td>
-                      <td className="px-3 py-2">{resolved?.label || "uploaded"}</td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
                           <button type="button" onClick={() => openPreview(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">View</button>
-                          <button type="button" onClick={() => downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">Download</button>
-                          <button type="button" onClick={() => void remove(asset)} className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">Delete</button>
+                          <button type="button" onClick={() => void downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">Download</button>
                         </div>
                       </td>
                     </tr>
@@ -878,22 +1208,31 @@ export default function MediaLibrary() {
             </button>
           </div>
         ) : null}
-
-        {!Object.keys(resolvedMap).length && previewRequestNonce === 0 ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="h-40 animate-pulse rounded-2xl bg-slate-100" />
-            ))}
-          </div>
-        ) : null}
       </section>
 
       {previewAsset && previewResolved ? (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/60 p-0 md:items-center md:justify-center md:p-6" role="dialog" aria-modal="true" aria-label="Media preview dialog">
+        <div
+          className="fixed inset-0 z-40 flex items-end bg-black/60 p-0 md:items-center md:justify-center md:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Media preview dialog"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closePreview();
+            }
+          }}
+        >
           <div className="flex h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white md:h-[85vh] md:max-w-6xl md:rounded-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="truncate text-base font-semibold">{previewAsset.name}</h3>
-              <button ref={previewCloseRef} type="button" onClick={() => setPreviewAssetId(null)} className="rounded border border-slate-200 px-3 py-1 text-sm">Close</button>
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold">{previewAsset.name}</h3>
+                <p className="text-xs text-slate-500">{previewIndex + 1} of {filtered.length}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={openPreviousPreview} disabled={previewIndex <= 0} className="rounded border border-slate-200 px-3 py-1 text-sm disabled:opacity-40">Prev</button>
+                <button type="button" onClick={openNextPreview} disabled={previewIndex >= filtered.length - 1} className="rounded border border-slate-200 px-3 py-1 text-sm disabled:opacity-40">Next</button>
+                <button ref={previewCloseRef} type="button" onClick={closePreview} className="rounded border border-slate-200 px-3 py-1 text-sm">Close</button>
+              </div>
             </div>
             <div className="grid h-full min-h-0 lg:grid-cols-[1fr_320px]">
               <div className="relative flex min-h-0 items-center justify-center overflow-auto bg-slate-900 p-3">
@@ -901,7 +1240,7 @@ export default function MediaLibrary() {
                   <img
                     src={previewResolved.previewUrl}
                     alt={previewAsset.name || "Media preview"}
-                    className="max-h-full max-w-full"
+                    className="max-h-full max-w-full cursor-grab"
                     style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
                   />
                 ) : null}
@@ -913,7 +1252,7 @@ export default function MediaLibrary() {
                     className="max-h-full max-w-full"
                   />
                 ) : null}
-                {mimeCategory(previewAsset, previewResolved) === "file" ? (
+                {mimeCategory(previewAsset, previewResolved) === "file" || mimeCategory(previewAsset, previewResolved) === "audio" || mimeCategory(previewAsset, previewResolved) === "document" ? (
                   <div className="text-center text-white">
                     <p className="text-sm">Preview unavailable for this file type.</p>
                   </div>
@@ -922,17 +1261,18 @@ export default function MediaLibrary() {
 
               <aside className="min-h-0 space-y-3 overflow-y-auto border-t border-slate-200 p-4 lg:border-l lg:border-t-0">
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setZoom((value) => Math.max(0.5, value - 0.25))} className="rounded border border-slate-200 px-2 py-1 text-xs">Zoom -</button>
-                  <button type="button" onClick={() => setZoom((value) => Math.min(3, value + 0.25))} className="rounded border border-slate-200 px-2 py-1 text-xs">Zoom +</button>
-                  <button type="button" onClick={() => setZoom(1)} className="rounded border border-slate-200 px-2 py-1 text-xs">Fit</button>
-                  <button type="button" onClick={() => setZoom(1)} className="rounded border border-slate-200 px-2 py-1 text-xs">Original</button>
+                  <button type="button" onClick={() => setZoom((value) => Math.max(0.5, value - 0.25))} className="rounded border border-slate-200 px-2 py-1 text-xs">Zoom out</button>
+                  <button type="button" onClick={() => setZoom((value) => Math.min(3, value + 0.25))} className="rounded border border-slate-200 px-2 py-1 text-xs">Zoom in</button>
+                  <button type="button" onClick={() => setZoom(1)} className="rounded border border-slate-200 px-2 py-1 text-xs">Reset zoom</button>
+                  <button type="button" onClick={() => setZoom(1)} className="rounded border border-slate-200 px-2 py-1 text-xs">Fit to screen</button>
                 </div>
 
                 <div className="space-y-1 text-sm">
                   <p><span className="font-semibold">Filename:</span> {previewResolved.fileName}</p>
                   <p><span className="font-semibold">Type:</span> {previewResolved.mimeType}</p>
                   <p><span className="font-semibold">Date:</span> {new Date(previewResolved.createdAt).toLocaleString()}</p>
-                  <p><span className="font-semibold">Source:</span> {previewResolved.source}</p>
+                  <p><span className="font-semibold">Source:</span> {sourceBadge(previewResolved.source)}</p>
+                  <p><span className="font-semibold">Status:</span> {previewResolved.generationStatus}</p>
                   <p><span className="font-semibold">Dimensions:</span> {previewResolved.width && previewResolved.height ? `${previewResolved.width} x ${previewResolved.height}` : "Unknown"}</p>
                   <p><span className="font-semibold">Duration:</span> {formatDuration(previewResolved.durationSeconds) || "-"}</p>
                   <p><span className="font-semibold">Size:</span> {formatFileSize(previewResolved.sizeBytes)}</p>
@@ -940,7 +1280,6 @@ export default function MediaLibrary() {
                   <p><span className="font-semibold">Campaigns:</span> {previewResolved.campaignIds.length ? previewResolved.campaignIds.join(", ") : "-"}</p>
                   <p><span className="font-semibold">Creator:</span> {previewResolved.creatorName || "-"}</p>
                   <p><span className="font-semibold">Usage rights:</span> {previewResolved.usageRightsStatus}</p>
-                  <p><span className="font-semibold">Label:</span> {previewResolved.label}</p>
                 </div>
 
                 {previewResolved.usageRightsStatus === "EXPIRED" ? (
@@ -951,16 +1290,15 @@ export default function MediaLibrary() {
                 ) : null}
 
                 <div className="grid gap-2">
-                  <button type="button" onClick={() => openPreview(previewAsset.id)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">View</button>
-                  <button type="button" onClick={() => downloadAsset(previewAsset.id)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Download</button>
-                  <button type="button" onClick={() => void renameAsset(previewAsset)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Rename</button>
-                  <button type="button" onClick={() => void moveAsset(previewAsset, "")} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Move to Folder</button>
-                  <button type="button" onClick={() => void addTags(previewAsset)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Add Tags</button>
-                  <button type="button" disabled className="cursor-not-allowed rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400">Add to Campaign</button>
-                  <button type="button" disabled className="cursor-not-allowed rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400">Add to Content</button>
-                  <button type="button" onClick={() => void copySecureLink(previewAsset.id)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Copy Secure Link</button>
-                  <button type="button" onClick={() => void archiveAsset(previewAsset)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Archive</button>
-                  <button type="button" onClick={() => void remove(previewAsset)} className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">Delete</button>
+                  <button type="button" onClick={() => void downloadAsset(previewAsset.id)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Download</button>
+                  {capabilities.canRename ? <button type="button" onClick={() => void renameAsset(previewAsset)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Rename</button> : null}
+                  {capabilities.canEditTags ? <button type="button" onClick={() => void addTags(previewAsset)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Edit tags</button> : null}
+                  {capabilities.canCreateWithAsset ? <Link href={`/studio?assetId=${previewAsset.id}`} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Create with this asset</Link> : null}
+                  <button type="button" onClick={() => void copySecureLink(previewAsset.id)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Copy secure link</button>
+                  <button type="button" onClick={() => void copyAssetId(previewAsset.id)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Copy asset ID</button>
+                  {capabilities.canArchive && !previewAsset.archivedAt ? <button type="button" onClick={() => void archiveAsset(previewAsset)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Archive</button> : null}
+                  {capabilities.canArchive && previewAsset.archivedAt ? <button type="button" onClick={() => void restoreAsset(previewAsset)} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">Restore</button> : null}
+                  {capabilities.canDelete ? <button type="button" onClick={() => void remove(previewAsset)} className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">Delete</button> : null}
                 </div>
               </aside>
             </div>

@@ -55,7 +55,7 @@ describe("help registry coverage", () => {
     const dashboardWalkthrough = WALKTHROUGH_REGISTRY.find((entry) => entry.id === "dashboard-overview");
     expect(dashboardWalkthrough?.version).toBe("2");
     expect(dashboardWalkthrough?.steps.length).toBe(8);
-    expect(dashboardWalkthrough?.steps.some((step) => step.title === "Ask PostMotive")).toBe(true);
+    expect(dashboardWalkthrough?.steps.some((step) => step.title === "Ask Motive")).toBe(true);
     dashboardWalkthrough?.steps.forEach((step) => {
       expect(step.targetSelector.length).toBeGreaterThan(0);
     });

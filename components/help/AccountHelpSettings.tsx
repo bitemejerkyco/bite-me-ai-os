@@ -21,12 +21,9 @@ export default function AccountHelpSettings() {
         <input type="checkbox" checked={preference.compactPanels} onChange={(event) => void setCompactPanels(event.target.checked)} />
         Keep page help panels compact by default after I am familiar with a page
       </label>
-      <div className="mt-5 flex flex-wrap gap-3">
+      <div className="mt-5">
         <Link href="/help" className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
           Open Help Center
-        </Link>
-        <Link href="/academy" className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-          Open Academy
         </Link>
       </div>
     </section>

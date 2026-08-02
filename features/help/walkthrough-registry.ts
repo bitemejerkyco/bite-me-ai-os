@@ -14,7 +14,7 @@ export const WALKTHROUGH_REGISTRY: WalkthroughDefinition[] = [
       { id: "dash-5", title: "AI Marketing Director Command Center", description: "Describe your goal in plain language and PostMotive will map the next workflow steps.", targetSelector: '[data-help="dashboard-command-center"]' },
       { id: "dash-6", title: "Marketing Score", description: "Your score reflects setup quality, activity, and connected data confidence.", targetSelector: '[data-help="dashboard-score"]' },
       { id: "dash-7", title: "Navigation", description: "Use Content Library, Media Library, Calendar, Analytics, and Integrations to execute each step.", targetSelector: '[aria-label="Sidebar navigation"]' },
-      { id: "dash-8", title: "Ask PostMotive", description: "Use contextual help any time to ask what to do next on your current page.", targetSelector: '[data-help="ask-postmotive"]' },
+      { id: "dash-8", title: "Ask Motive", description: "Use contextual help any time to ask what to do next on your current page.", targetSelector: '[data-help="ask-postmotive"]' },
     ],
   },
   {

@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import GuidedEmptyState from "@/components/help/GuidedEmptyState";
 import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
-import { loadLocal, saveLocal, STORAGE_KEYS, type CampaignPlan } from "@/features/core/local-os";
+import { loadLocal, saveLocal, STORAGE_KEYS, workspaceStorageKey, type CampaignPlan, type WorkspaceProfile } from "@/features/core/local-os";
 import {
   loadCloudCampaigns,
+  loadCloudWorkspace,
   saveCloudCampaign,
 } from "@/features/core/cloud-store";
 
 export default function MarketingWorkspace() {
+  const [workspace, setWorkspace] = useState<WorkspaceProfile | null>(null);
   const [campaigns, setCampaigns] = useState<CampaignPlan[]>([]);
   const [name, setName] = useState("");
   const [objective, setObjective] = useState("Generate sales");
@@ -21,13 +23,19 @@ export default function MarketingWorkspace() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void loadCloudCampaigns()
-        .then((cloud) =>
-          setCampaigns(
-            cloud.length ? cloud : loadLocal(STORAGE_KEYS.campaigns, []),
-          ),
-        )
-        .catch(() => setCampaigns(loadLocal(STORAGE_KEYS.campaigns, [])));
+      void Promise.all([loadCloudWorkspace(), loadCloudCampaigns()])
+        .then(([cloudWorkspace, cloud]) => {
+          const workspaceId = cloudWorkspace?.id || null;
+          setWorkspace(cloudWorkspace);
+          if (cloud.length) {
+            setCampaigns(cloud);
+            return;
+          }
+          setCampaigns(workspaceId ? loadLocal(workspaceStorageKey(STORAGE_KEYS.campaigns, workspaceId), []) : []);
+        })
+        .catch(() => {
+          setCampaigns([]);
+        });
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -44,7 +52,9 @@ export default function MarketingWorkspace() {
       await saveCloudCampaign(campaign);
       const next = [campaign, ...campaigns];
       setCampaigns(next);
-      saveLocal(STORAGE_KEYS.campaigns, next);
+      if (workspace?.id) {
+        saveLocal(workspaceStorageKey(STORAGE_KEYS.campaigns, workspace.id), next);
+      }
       setName("");
       const success = SUCCESS_MESSAGES.campaignCreated();
       setMessage(`${success.title} ${success.detail}`);
@@ -70,7 +80,9 @@ export default function MarketingWorkspace() {
     try {
       await saveCloudCampaign(changed);
       setCampaigns(next);
-      saveLocal(STORAGE_KEYS.campaigns, next);
+      if (workspace?.id) {
+        saveLocal(workspaceStorageKey(STORAGE_KEYS.campaigns, workspace.id), next);
+      }
       setMessage("Campaign updated successfully. Recommended next step: review whether the current status still matches the active content plan.");
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "Unable to update campaign.");

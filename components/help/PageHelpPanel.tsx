@@ -5,7 +5,7 @@ import HelpTerm from "@/components/help/HelpTerm";
 import { useHelp } from "@/components/help/HelpContext";
 
 export default function PageHelpPanel() {
-  const { pageHelp, panelExpanded, setPanelExpanded, openSearch, setAssistantOpen, walkthrough, preference, visitCount } = useHelp();
+  const { pageHelp, panelExpanded, setPanelExpanded, openSearch, walkthrough, preference, visitCount } = useHelp();
 
   if (!pageHelp) return null;
   if (preference.helpMode === "OFF") return null;
@@ -84,9 +84,6 @@ export default function PageHelpPanel() {
                 <button type="button" onClick={openSearch} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-violet-300 hover:text-violet-700">
                   Open Help Search
                 </button>
-                <button type="button" onClick={() => setAssistantOpen(true)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-violet-300 hover:text-violet-700">
-                  Open Help Assistant
-                </button>
                 {pageHelp.videoUrl ? (
                   <Link href={pageHelp.videoUrl} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-violet-300 hover:text-violet-700">
                     Watch walkthrough
@@ -109,9 +106,6 @@ export default function PageHelpPanel() {
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-700">
           <span>{pageHelp.recommendedFirstAction}</span>
-          <button type="button" onClick={() => setAssistantOpen(true)} className="font-semibold text-violet-700 hover:text-violet-600">
-            Open Help Assistant
-          </button>
         </div>
       )}
     </section>

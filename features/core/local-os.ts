@@ -29,6 +29,7 @@ export type Industry =
   | "SUPPLEMENTS";
 
 export type WorkspaceProfile = {
+  id?: string;
   businessName: string;
   website: string;
   industry: Industry;
@@ -99,6 +100,7 @@ export type MediaAsset = {
   createdAt: string;
   storagePath?: string;
   folderId?: string;
+  isFavorite?: boolean;
   source?: "UPLOADED" | "GENERATED" | "IMPORTED" | "LEGACY" | "CAMPAIGN" | "UGC";
   generationStatus?: "PENDING" | "PROCESSING" | "READY" | "FAILED";
   generationJobId?: string;
@@ -198,6 +200,47 @@ export function saveLocal<T>(key: string, value: T): void {
   window.dispatchEvent(new Event("bite-me-os-change"));
 }
 
+export function workspaceStorageKey(baseKey: string, workspaceId?: string | null): string {
+  return workspaceId ? `${baseKey}:${workspaceId}` : baseKey;
+}
+
+type StorageLike = {
+  length: number;
+  key(index: number): string | null;
+  removeItem(key: string): void;
+};
+
+function matchesWorkspaceCacheKey(key: string): boolean {
+  return key === STORAGE_KEYS.workspace
+    || key === STORAGE_KEYS.calendarPrefill
+    || key === STORAGE_KEYS.drafts
+    || key === STORAGE_KEYS.campaigns
+    || key === STORAGE_KEYS.media
+    || key.startsWith(`${STORAGE_KEYS.drafts}:`)
+    || key.startsWith(`${STORAGE_KEYS.campaigns}:`)
+    || key.startsWith(`${STORAGE_KEYS.media}:`);
+}
+
+export function collectWorkspaceCacheKeys(storage: StorageLike): string[] {
+  const keys: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key) continue;
+    if (matchesWorkspaceCacheKey(key)) {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+export function clearWorkspaceClientCache(storage?: StorageLike): void {
+  if (typeof window === "undefined" && !storage) return;
+  const target = storage || window.localStorage;
+  for (const key of collectWorkspaceCacheKeys(target)) {
+    target.removeItem(key);
+  }
+}
+
 export function isDemoMode(): boolean {
   return loadLocal<AccountMode>(STORAGE_KEYS.accountMode, "SUPER_ADMIN") === "DEMO";
 }
@@ -225,7 +268,7 @@ export function generateContent(input: {
   const offer = input.offer.trim() || "something worth discovering";
   const cta = input.callToAction.trim() || "Learn more";
   const restricted = ["CANNABIS", "CBD", "ALCOHOL"].includes(input.workspace.industry);
-  const title = `${business}: ${input.entryType === "AD" ? "Ad" : "Post"} · ${input.objective} for ${channel}`;
+  const title = `${business}: ${input.entryType === "AD" ? "Ad" : "Post"} - ${input.objective} for ${channel}`;
   const copy = restricted
     ? `${business} is built around quality, transparency, and community. ${offer}. ${cta}.`
     : `${business} makes it easier to get ${offer}. Built for ${input.workspace.audience || "people who expect better"}, with a ${input.workspace.voice || "clear, confident"} voice. ${cta}.`;

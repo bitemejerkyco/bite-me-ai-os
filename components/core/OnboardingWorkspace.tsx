@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   demoWorkspace,
-  loadLocal,
-  saveLocal,
-  STORAGE_KEYS,
+  isDemoMode,
   type Industry,
   type WorkspaceProfile,
 } from "@/features/core/local-os";
@@ -35,10 +33,18 @@ export default function OnboardingWorkspace() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       void loadCloudWorkspace()
-        .then((cloud) =>
-          setProfile(cloud || loadLocal(STORAGE_KEYS.workspace, empty)),
-        )
-        .catch(() => setProfile(loadLocal(STORAGE_KEYS.workspace, empty)));
+        .then((cloud) => {
+          if (cloud) {
+            setProfile(cloud);
+            return;
+          }
+          if (isDemoMode()) {
+            setProfile(demoWorkspace());
+            return;
+          }
+          setProfile(empty);
+        })
+        .catch(() => setProfile(isDemoMode() ? demoWorkspace() : empty));
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -62,7 +68,6 @@ export default function OnboardingWorkspace() {
       };
       const cloud = await saveCloudWorkspace(completed);
       setProfile(cloud);
-      saveLocal(STORAGE_KEYS.workspace, cloud);
       setSaved(true);
       const success = SUCCESS_MESSAGES.businessProfileSaved();
       setSuccessMessage(`${success.title}. ${success.detail}`);
