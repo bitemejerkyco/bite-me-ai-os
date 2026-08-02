@@ -80,4 +80,32 @@ describe("AI content request", () => {
       }),
     ).toBe("Ready copy");
   });
+
+  it("extracts top-level output_text", () => {
+    expect(extractResponseText({ output_text: "Top-level copy" })).toBe("Top-level copy");
+  });
+
+  it("extracts text type content text", () => {
+    expect(
+      extractResponseText({
+        output: [{ content: [{ type: "text", text: "Direct text" }] }],
+      }),
+    ).toBe("Direct text");
+  });
+
+  it("extracts nested text values", () => {
+    expect(
+      extractResponseText({
+        output: [{ content: [{ type: "text", text: { value: "Nested value" } }] }],
+      }),
+    ).toBe("Nested value");
+  });
+
+  it("returns empty string for unsupported text shapes", () => {
+    expect(
+      extractResponseText({
+        output: [{ content: [{ type: "tool_call", text: { unknown: true } }] }],
+      }),
+    ).toBe("");
+  });
 });

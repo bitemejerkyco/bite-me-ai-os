@@ -157,13 +157,77 @@ export function parseVideoPlanResponse(value: string): {
   callToAction: string;
   scenes: VideoScene[];
 } | null {
+  return parseVideoPlanResponseDetailed(value).plan;
+}
+
+export type VideoPlanParseFailureCategory =
+  | "empty"
+  | "json_parse_error"
+  | "validation_failed";
+
+export function parseVideoPlanResponseDetailed(value: string): {
+  plan: {
+    title: string;
+    script: string;
+    caption: string;
+    renderPrompt: string;
+    complianceNote: string;
+    hashtags: string[];
+    callToAction: string;
+    scenes: VideoScene[];
+  } | null;
+  failureCategory: VideoPlanParseFailureCategory | null;
+} {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { plan: null, failureCategory: "empty" };
+  }
+
+  const fenceMatch = trimmed.match(/```json\s*([\s\S]*?)```/i);
+  const fenced = fenceMatch ? fenceMatch[1].trim() : trimmed;
+
+  const extractFirstJsonObject = (input: string): string | null => {
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < input.length; index += 1) {
+      const char = input[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+
+      if (char === "{") {
+        if (start === -1) start = index;
+        depth += 1;
+      } else if (char === "}") {
+        if (depth > 0) depth -= 1;
+        if (start !== -1 && depth === 0) {
+          return input.slice(start, index + 1);
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const candidate = fenced.startsWith("{")
+    ? fenced
+    : (extractFirstJsonObject(fenced) || fenced);
+
   try {
-    const cleaned = value
-      .trim()
-      .replace(/^```json\s*/i, "")
-      .replace(/```$/, "")
-      .trim();
-    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
     if (
       typeof parsed.title !== "string" ||
       typeof parsed.script !== "string" ||
@@ -174,7 +238,7 @@ export function parseVideoPlanResponse(value: string): {
       !Array.isArray(parsed.hashtags) ||
       !Array.isArray(parsed.scenes)
     ) {
-      return null;
+      return { plan: null, failureCategory: "validation_failed" };
     }
     const scenes = parsed.scenes.map((scene, index) => {
       const item = scene as Record<string, unknown>;
@@ -188,18 +252,23 @@ export function parseVideoPlanResponse(value: string): {
         mediaAssetId: typeof item.mediaAssetId === "string" ? item.mediaAssetId : undefined,
       };
     });
-    if (!scenes.length || scenes.some((scene) => !scene.visual)) return null;
+    if (!scenes.length || scenes.some((scene) => !scene.visual)) {
+      return { plan: null, failureCategory: "validation_failed" };
+    }
     return {
-      title: parsed.title,
-      script: parsed.script,
-      caption: parsed.caption,
-      renderPrompt: parsed.renderPrompt,
-      complianceNote: parsed.complianceNote,
-      hashtags: parsed.hashtags.map((item) => String(item).trim()).filter(Boolean),
-      callToAction: parsed.callToAction,
-      scenes,
+      plan: {
+        title: parsed.title,
+        script: parsed.script,
+        caption: parsed.caption,
+        renderPrompt: parsed.renderPrompt,
+        complianceNote: parsed.complianceNote,
+        hashtags: parsed.hashtags.map((item) => String(item).trim()).filter(Boolean),
+        callToAction: parsed.callToAction,
+        scenes,
+      },
+      failureCategory: null,
     };
   } catch {
-    return null;
+    return { plan: null, failureCategory: "json_parse_error" };
   }
 }

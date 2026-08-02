@@ -97,6 +97,24 @@ export function buildMarketingPrompt(input: AIContentRequest): string {
 
 export function extractResponseText(value: unknown): string {
   if (!value || typeof value !== "object") return "";
+
+  const readTextValue = (input: unknown): string => {
+    if (typeof input === "string") return input.trim();
+    if (!input || typeof input !== "object") return "";
+
+    const objectValue = input as { value?: unknown; text?: unknown };
+    if (typeof objectValue.value === "string") {
+      return objectValue.value.trim();
+    }
+    if (typeof objectValue.text === "string") {
+      return objectValue.text.trim();
+    }
+    if (objectValue.text && typeof objectValue.text === "object") {
+      return readTextValue(objectValue.text);
+    }
+    return "";
+  };
+
   const response = value as {
     output_text?: unknown;
     output?: Array<{
@@ -107,8 +125,8 @@ export function extractResponseText(value: unknown): string {
 
   return (response.output || [])
     .flatMap((item) => item.content || [])
-    .filter((item) => item.type === "output_text" && typeof item.text === "string")
-    .map((item) => String(item.text).trim())
+    .filter((item) => item.type === "output_text" || item.type === "text")
+    .map((item) => readTextValue(item.text))
     .filter(Boolean)
     .join("\n");
 }

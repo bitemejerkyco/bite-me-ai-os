@@ -63,4 +63,81 @@ describe("video project foundation", () => {
     expect(parsed?.hashtags).toEqual(["#trail", "#snack"]);
     expect(parsed?.callToAction).toBe("Shop now");
   });
+
+  it("parses JSON wrapped in fenced markdown", () => {
+    const parsed = parseVideoPlanResponse(
+      "```json\n" +
+        JSON.stringify({
+          title: "Fenced plan",
+          script: "Script",
+          caption: "Caption",
+          renderPrompt: "Prompt",
+          complianceNote: "Review.",
+          hashtags: ["#a"],
+          callToAction: "Shop now",
+          scenes: [
+            {
+              order: 1,
+              seconds: 8,
+              visual: "Visual",
+              narration: "Narration",
+              onScreenText: "Text",
+            },
+          ],
+        }) +
+        "\n```",
+    );
+
+    expect(parsed?.title).toBe("Fenced plan");
+    expect(parsed?.scenes).toHaveLength(1);
+  });
+
+  it("extracts the first complete JSON object from surrounding text", () => {
+    const parsed = parseVideoPlanResponse(
+      `Here is your plan:\n${JSON.stringify({
+        title: "Wrapped plan",
+        script: "Script",
+        caption: "Caption",
+        renderPrompt: "Prompt",
+        complianceNote: "Review.",
+        hashtags: ["#wrapped"],
+        callToAction: "Learn more",
+        scenes: [
+          {
+            order: 1,
+            seconds: 12,
+            visual: "Wrapped visual",
+            narration: "Narration",
+            onScreenText: "Text",
+          },
+        ],
+      })}\nThanks!`,
+    );
+
+    expect(parsed?.title).toBe("Wrapped plan");
+    expect(parsed?.callToAction).toBe("Learn more");
+  });
+
+  it("fails when required fields are missing", () => {
+    const parsed = parseVideoPlanResponse(
+      JSON.stringify({
+        title: "Bad plan",
+        script: "Script",
+        caption: "Caption",
+        hashtags: ["#a"],
+        callToAction: "Shop now",
+        scenes: [
+          {
+            order: 1,
+            seconds: 8,
+            visual: "Visual",
+            narration: "Narration",
+            onScreenText: "Text",
+          },
+        ],
+      }),
+    );
+
+    expect(parsed).toBeNull();
+  });
 });
