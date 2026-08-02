@@ -249,11 +249,13 @@ export async function POST(request: Request) {
     console.error(error);
     console.error(error instanceof Error ? error.stack : undefined);
 
+    const safeMessage = safeError(error);
+
     return NextResponse.json(
       {
         ok: false,
         code: "REQUEST_FAILED",
-        error: error instanceof Error ? error.message : String(error),
+        error: safeMessage,
         stack:
           process.env.NODE_ENV !== "production"
             ? error instanceof Error
