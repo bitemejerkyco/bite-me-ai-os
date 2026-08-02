@@ -1,6 +1,9 @@
 begin;
 
 alter table public.video_projects
+  drop constraint if exists video_projects_duration_seconds_check;
+
+alter table public.video_projects
   add column if not exists workflow_stage text,
   add column if not exists workflow_percentage integer,
   add column if not exists provider_job_status text,
@@ -91,5 +94,11 @@ $$;
 
 create index if not exists video_projects_status_updated_idx
   on public.video_projects(workspace_id, status, updated_at desc);
+
+-- Legacy rows may still include previously supported 16/20-second durations.
+alter table public.video_projects
+  add constraint video_projects_duration_seconds_check
+  check (duration_seconds between 8 and 15)
+  not valid;
 
 commit;
