@@ -1,10 +1,13 @@
 export type MarketingDirectorIntent =
   | "create_campaign"
   | "create_content_plan"
+  | "plan_content"
   | "improve_marketing_score"
   | "analyze_performance"
+  | "analyze_channels"
   | "launch_product"
   | "increase_sales"
+  | "amazon_growth"
   | "create_tiktok_plan"
   | "optimize_amazon_ads"
   | "unknown";
@@ -32,11 +35,14 @@ function hasAny(prompt: string, terms: string[]): boolean {
 
 export function classifyIntent(prompt: string): MarketingDirectorIntent {
   const value = normalizePrompt(prompt);
-  if (hasAny(value, ["campaign", "launch campaign", "promotion calendar"])) return "create_campaign";
+  if (hasAny(value, ["campaign", "launch campaign", "promotion calendar", "marketing plan", "promotion"])) return "create_campaign";
   if (hasAny(value, ["content plan", "30 days", "content calendar", "content strategy", "pending content", "review pending content"])) return "create_content_plan";
-  if (hasAny(value, ["improve my marketing score", "improve marketing score", "score"])) return "improve_marketing_score";
+  if (hasAny(value, ["prepare content", "plan content", "prepare next week", "next week's content", "schedule content"])) return "plan_content";
+  if (hasAny(value, ["improve my marketing score", "improve marketing score", "score", "weakness", "weakest", "biggest weakness"])) return "improve_marketing_score";
+  if (hasAny(value, ["analyze facebook", "analyze instagram", "analyze tiktok", "analyze youtube", "analyze channel", "channel performance", "facebook performance", "instagram performance", "tiktok performance", "youtube performance"])) return "analyze_channels";
   if (hasAny(value, ["analyze", "performance", "what happened", "diagnose"])) return "analyze_performance";
   if (hasAny(value, ["launch product", "new product", "product drop"])) return "launch_product";
+  if (hasAny(value, ["amazon sales", "amazon revenue", "amazon growth", "increase amazon", "grow amazon", "boost amazon"])) return "amazon_growth";
   if (hasAny(value, ["increase sales", "grow sales", "boost revenue"])) return "increase_sales";
   if (hasAny(value, ["tiktok", "short-form", "reels plan"])) return "create_tiktok_plan";
   if (hasAny(value, ["amazon", "ppc", "acos", "roas", "sponsored products"])) return "optimize_amazon_ads";
@@ -45,6 +51,48 @@ export function classifyIntent(prompt: string): MarketingDirectorIntent {
 
 function template(intent: MarketingDirectorIntent): Omit<CommandRouterResult, "detectedIntent"> {
   switch (intent) {
+    case "plan_content":
+      return {
+        summary: "Plan and prepare upcoming content for connected channels.",
+        proposedSteps: [
+          "Review the current draft backlog and recent publishing history.",
+          "Propose a short-term content schedule with themes by channel.",
+          "Queue draft requests for approval before scheduling.",
+        ],
+        requiredInformation: ["Posting cadence", "Channel priority", "Upcoming dates or events"],
+        estimatedCreditUsage: 0,
+        requiresApproval: true,
+        availableActions: ["Draft content schedule", "Queue content prompts"],
+        unavailableActions: ["Auto-schedule posts", "Auto-publish content"],
+      };
+    case "analyze_channels":
+      return {
+        summary: "Analyze performance on specific connected channels.",
+        proposedSteps: [
+          "Review available analytics data for the selected channel.",
+          "Identify performance trends, gaps, and top-performing content.",
+          "Propose channel-specific improvement actions for manual review.",
+        ],
+        requiredInformation: ["Channel name", "Date range", "Primary metric"],
+        estimatedCreditUsage: 0,
+        requiresApproval: true,
+        availableActions: ["Open channel analytics", "Create channel action plan"],
+        unavailableActions: ["Auto-adjust channel settings", "Auto-publish responses"],
+      };
+    case "amazon_growth":
+      return {
+        summary: "Identify Amazon sales growth opportunities from available channel data.",
+        proposedSteps: [
+          "Review current Amazon Ads performance and organic sales trends.",
+          "Identify top opportunities for revenue growth and waste reduction.",
+          "Prepare a prioritized growth plan for manual review and approval.",
+        ],
+        requiredInformation: ["Sales target", "Primary ASINs", "Budget guardrails"],
+        estimatedCreditUsage: 0,
+        requiresApproval: true,
+        availableActions: ["Open Amazon insights", "Build Amazon growth plan"],
+        unavailableActions: ["Apply ad changes automatically", "Auto-adjust budgets"],
+      };
     case "create_campaign":
       return {
         summary: "Build a campaign brief, channel mix, and publishing checklist.",
