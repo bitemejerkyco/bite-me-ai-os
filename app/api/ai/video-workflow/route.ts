@@ -7,8 +7,10 @@ import { loadVideoRouterSettings } from "@/features/core/video-router-settings";
 import { resolveVideoRouterProfile } from "@/features/core/video-router";
 import {
   buildVideoPlanningPrompt,
+  parseVideoPlanResponseDetailed,
   parseVideoPlanResponse,
   VIDEO_PROMPT_VERSION,
+  type VideoPlanParseFailureCategory,
   type VideoProject,
 } from "@/features/core/video-project";
 import { startVideoProviderJob, getVideoProviderUnavailableMessage } from "@/features/core/video-provider";
@@ -40,6 +42,24 @@ function normalizeHashtags(value: unknown): string[] {
   return [...new Set(value.map((item) => text(item)).filter(Boolean))].slice(0, 12);
 }
 
+function logVideoPlanFailure(input: {
+  stage: "openai_request_failed" | "openai_response_failed" | "plan_parse_failed";
+  openAiStatus: number | null;
+  openAiRequestId: string | null;
+  extractedTextEmpty: boolean;
+  parseFailureCategory: VideoPlanParseFailureCategory | null;
+  model: string;
+}) {
+  console.error("[video-workflow] plan-failure", {
+    stage: input.stage,
+    openAiStatus: input.openAiStatus,
+    openAiRequestId: input.openAiRequestId,
+    extractedTextEmpty: input.extractedTextEmpty,
+    parseFailureCategory: input.parseFailureCategory,
+    model: input.model,
+  });
+}
+
 async function generatePlan(input: {
   workspace: Record<string, unknown>;
   channel: VideoProject["channel"];
@@ -64,62 +84,101 @@ async function generatePlan(input: {
     throw new Error("Video generation is temporarily unavailable.");
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.openAiApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: env.openAiModel,
-      instructions:
-        "You are PostMotive's vertical-video planning engine. Return valid JSON only and obey all brand, rights, and compliance constraints.",
-      input: buildAgentPrompt({
-        jobType: "VIDEO_PLAN",
-        businessName: text(input.workspace.businessName),
-        channel: input.channel,
-        objective: input.objective,
-        roles: ["PROMPT_DIRECTOR", "BRAND_STRATEGIST", "CHANNEL_SPECIALIST", "CREATIVE_DIRECTOR", "COPYWRITER", "COMPLIANCE_REVIEWER"],
-        facts: [
-          `Website: ${text(input.workspace.website) || "not supplied"}`,
-          `Audience: ${text(input.workspace.audience) || "not supplied"}`,
-          `Brand voice: ${text(input.workspace.voice) || "not supplied"}`,
-          `Industry: ${text(input.workspace.industry) || "GENERAL_RETAIL"}`,
-          `Duration: ${input.durationSeconds} seconds`,
-          `Voice: ${input.voice}`,
-          `Music mode: ${input.musicMode}`,
-          `Call to action: ${input.callToAction}`,
-        ],
-        constraints: [
-          "Create original 9:16 vertical-video material.",
-          "Do not use real-person likenesses, celebrities, copyrighted characters, copyrighted music, or third-party watermarks.",
-          "Never invent prices, discounts, certifications, testimonials, legal approval, or product claims.",
-          "Include readable on-screen captions and a safe human-review note.",
-        ],
-        requiredOutput: [
-          "Return strict JSON only.",
-          "Include title, script, caption, hashtags, callToAction, renderPrompt, complianceNote, and scenes.",
-          "Scene durations must total the requested duration.",
-        ],
-        task: buildVideoPlanningPrompt({
-          workspace: input.workspace as never,
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.openAiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: env.openAiModel,
+        instructions:
+          "You are PostMotive's vertical-video planning engine. Return valid JSON only and obey all brand, rights, and compliance constraints.",
+        input: buildAgentPrompt({
+          jobType: "VIDEO_PLAN",
+          businessName: text(input.workspace.businessName),
           channel: input.channel,
           objective: input.objective,
-          message: input.message,
-          callToAction: input.callToAction,
-          durationSeconds: input.durationSeconds,
-          voice: input.voice,
-          musicMode: input.musicMode,
+          roles: ["PROMPT_DIRECTOR", "BRAND_STRATEGIST", "CHANNEL_SPECIALIST", "CREATIVE_DIRECTOR", "COPYWRITER", "COMPLIANCE_REVIEWER"],
+          facts: [
+            `Website: ${text(input.workspace.website) || "not supplied"}`,
+            `Audience: ${text(input.workspace.audience) || "not supplied"}`,
+            `Brand voice: ${text(input.workspace.voice) || "not supplied"}`,
+            `Industry: ${text(input.workspace.industry) || "GENERAL_RETAIL"}`,
+            `Duration: ${input.durationSeconds} seconds`,
+            `Voice: ${input.voice}`,
+            `Music mode: ${input.musicMode}`,
+            `Call to action: ${input.callToAction}`,
+          ],
+          constraints: [
+            "Create original 9:16 vertical-video material.",
+            "Do not use real-person likenesses, celebrities, copyrighted characters, copyrighted music, or third-party watermarks.",
+            "Never invent prices, discounts, certifications, testimonials, legal approval, or product claims.",
+            "Include readable on-screen captions and a safe human-review note.",
+          ],
+          requiredOutput: [
+            "Return strict JSON only.",
+            "Include title, script, caption, hashtags, callToAction, renderPrompt, complianceNote, and scenes.",
+            "Scene durations must total the requested duration.",
+          ],
+          task: buildVideoPlanningPrompt({
+            workspace: input.workspace as never,
+            channel: input.channel,
+            objective: input.objective,
+            message: input.message,
+            callToAction: input.callToAction,
+            durationSeconds: input.durationSeconds,
+            voice: input.voice,
+            musicMode: input.musicMode,
+          }),
         }),
+        max_output_tokens: 1800,
       }),
-      max_output_tokens: 1800,
-    }),
-    cache: "no-store",
-  });
+      cache: "no-store",
+    });
+  } catch {
+    logVideoPlanFailure({
+      stage: "openai_request_failed",
+      openAiStatus: null,
+      openAiRequestId: null,
+      extractedTextEmpty: true,
+      parseFailureCategory: null,
+      model: env.openAiModel,
+    });
+    throw new Error("Video generation is temporarily unavailable.");
+  }
 
   const payload = await response.json().catch(() => null);
-  const plan = parseVideoPlanResponse(extractResponseText(payload));
-  if (!response.ok || !plan) {
+  const extractedText = extractResponseText(payload);
+  const parsedPlan = parseVideoPlanResponseDetailed(extractedText);
+  const requestId = response.headers.get("x-request-id")
+    || response.headers.get("openai-request-id")
+    || null;
+
+  if (!response.ok) {
+    logVideoPlanFailure({
+      stage: "openai_response_failed",
+      openAiStatus: response.status,
+      openAiRequestId: requestId,
+      extractedTextEmpty: extractedText.trim().length === 0,
+      parseFailureCategory: parsedPlan.failureCategory,
+      model: env.openAiModel,
+    });
+    throw new Error("Video generation is temporarily unavailable.");
+  }
+
+  const plan = parsedPlan.plan || parseVideoPlanResponse(extractedText);
+  if (!plan) {
+    logVideoPlanFailure({
+      stage: "plan_parse_failed",
+      openAiStatus: response.status,
+      openAiRequestId: requestId,
+      extractedTextEmpty: extractedText.trim().length === 0,
+      parseFailureCategory: parsedPlan.failureCategory,
+      model: env.openAiModel,
+    });
     throw new Error("Video generation is temporarily unavailable.");
   }
 

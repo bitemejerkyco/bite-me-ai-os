@@ -27,7 +27,7 @@ export type VideoRouterSettings = {
 export const DEFAULT_VIDEO_ROUTER_SETTINGS: VideoRouterSettings = {
   mode: "AUTO",
   defaultTier: "BALANCED",
-  economyModel: "wan-2.2-fast",
+  economyModel: "wan-video/wan-2.2-t2v-fast",
   balancedModel: "sora-2-pro",
   premiumModel: "sora-2-pro",
   economyCostCentsPerSecond: 45,

@@ -12,6 +12,8 @@ type VideoProviderJob = {
   model: string;
 };
 
+const OFFICIAL_REPLICATE_ECONOMY_MODEL = "wan-video/wan-2.2-t2v-fast";
+
 function sanitizeProviderError(message: string): string {
   if (!message.trim()) return "Video generation is temporarily unavailable.";
   return "Video generation is temporarily unavailable.";
@@ -47,6 +49,13 @@ async function readJsonResponse(response: Response): Promise<unknown> {
   return response.json().catch(() => null);
 }
 
+function normalizeReplicateModel(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) return OFFICIAL_REPLICATE_ECONOMY_MODEL;
+  if (normalized === "wan-2.2-fast") return OFFICIAL_REPLICATE_ECONOMY_MODEL;
+  return normalized;
+}
+
 export async function startVideoProviderJob(input: {
   providerKey: string;
   model: string;
@@ -57,7 +66,8 @@ export async function startVideoProviderJob(input: {
   const providerKey = input.providerKey.toUpperCase();
   if (providerKey === "REPLICATE") {
     const token = String(process.env.REPLICATE_API_TOKEN || "").trim();
-    const model = String(process.env.REPLICATE_WAN_22_FAST_MODEL || input.model || "").trim();
+    const configuredModel = String(process.env.REPLICATE_WAN_22_FAST_MODEL || input.model || "").trim();
+    const model = normalizeReplicateModel(configuredModel);
     if (!token || !model) {
       throw new Error("Video generation is temporarily unavailable.");
     }
