@@ -22,6 +22,19 @@ export type VideoStatus =
   | "FAILED"
   | "APPROVED";
 
+export type VideoWorkflowStage =
+  | "PREPARING_VIDEO_PLAN"
+  | "RESERVING_CREDITS"
+  | "STARTING_VIDEO_GENERATOR"
+  | "GENERATING_SCENES"
+  | "RENDERING_FINAL_VIDEO"
+  | "SAVING_TO_MEDIA_LIBRARY"
+  | "CREATING_CONTENT_LIBRARY_DRAFT"
+  | "COMPLETE"
+  | "FAILED";
+
+export type VideoCreditStatusState = "NONE" | "RESERVED" | "REFUNDED";
+
 export type VideoScene = {
   order: number;
   seconds: number;
@@ -36,6 +49,7 @@ export type VideoProject = {
   id: string;
   contentDraftId?: string;
   workflowKey?: string;
+  creditRequestId?: string;
   title: string;
   channel: "TikTok" | "Instagram Reels" | "Facebook Reels" | "YouTube Shorts";
   objective: string;
@@ -55,7 +69,17 @@ export type VideoProject = {
   routingTier?: VideoRenderTier;
   providerModel?: string;
   providerJobId?: string;
+  providerJobStatus?: "queued" | "in_progress" | "completed" | "failed";
   providerProgress?: number;
+  workflowStage?: VideoWorkflowStage;
+  workflowProgress?: number;
+  creditStatus?: VideoCreditStatusState;
+  creditRefundedAt?: string;
+  failureReferenceId?: string;
+  mediaAssetId?: string;
+  workflowStartedAt?: string;
+  workflowCompletedAt?: string;
+  lastProviderPollAt?: string;
   videoStoragePath?: string;
   voiceoverStoragePath?: string;
   status: VideoStatus;
