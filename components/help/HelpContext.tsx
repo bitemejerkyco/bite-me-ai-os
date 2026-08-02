@@ -64,6 +64,31 @@ const PANEL_KEY = "postmotive-help-panel-expanded";
 const WALKTHROUGH_KEY = "postmotive-help-active-walkthrough";
 const SESSION_PROMPT_KEY = "postmotive-help-prompt-session";
 
+function getSessionValue(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(key);
+}
+
+function setSessionValue(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(key, value);
+}
+
+function removeSessionValue(key: string): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(key);
+}
+
+function getLocalValue(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(key);
+}
+
+function setLocalValue(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, value);
+}
+
 async function postJson(url: string, body: Record<string, unknown>) {
   await fetch(url, {
     method: "POST",
@@ -84,17 +109,15 @@ export function HelpProvider({
   const pathname = normalizeHelpRoute(usePathname() || "/");
   const [preference, setPreference] = useState(initialPreference);
   const [routeVisits, setRouteVisits] = useState<Record<string, number>>(() => {
-    if (typeof window === "undefined") return {};
     try {
-      return JSON.parse(localStorage.getItem(VISIT_KEY) || "{}") as Record<string, number>;
+      return JSON.parse(getLocalValue(VISIT_KEY) || "{}") as Record<string, number>;
     } catch {
       return {};
     }
   });
   const [panelExpandedState, setPanelExpandedState] = useState<Record<string, boolean>>(() => {
-    if (typeof window === "undefined") return {};
     try {
-      return JSON.parse(localStorage.getItem(PANEL_KEY) || "{}") as Record<string, boolean>;
+      return JSON.parse(getLocalValue(PANEL_KEY) || "{}") as Record<string, boolean>;
     } catch {
       return {};
     }
@@ -119,7 +142,7 @@ export function HelpProvider({
 
   useEffect(() => {
     try {
-      const savedWalkthrough = JSON.parse(sessionStorage.getItem(WALKTHROUGH_KEY) || "null");
+      const savedWalkthrough = JSON.parse(getSessionValue(WALKTHROUGH_KEY) || "null");
       if (savedWalkthrough?.id) {
         const walkthrough = WALKTHROUGH_REGISTRY.find((item) => item.id === savedWalkthrough.id) || null;
         if (walkthrough) {
@@ -140,7 +163,7 @@ export function HelpProvider({
     const handle = window.requestAnimationFrame(() => {
       setRouteVisits((current) => {
         const next = { ...current, [pathname]: (current[pathname] || 0) + 1 };
-        localStorage.setItem(VISIT_KEY, JSON.stringify(next));
+        setLocalValue(VISIT_KEY, JSON.stringify(next));
         return next;
       });
       setSecondsOnPage(0);
@@ -194,7 +217,7 @@ export function HelpProvider({
   }, []);
 
   const trainerPrompt = useMemo(() => {
-    const sessionPromptMap = JSON.parse(sessionStorage.getItem(SESSION_PROMPT_KEY) || "{}");
+    const sessionPromptMap = JSON.parse(getSessionValue(SESSION_PROMPT_KEY) || "{}");
     return resolveTrainerPrompt({
       route: pathname,
       helpMode: preference.helpMode,
@@ -223,16 +246,16 @@ export function HelpProvider({
   function setPanelExpanded(expanded: boolean) {
     const next = { ...panelExpandedState, [pathname]: expanded };
     setPanelExpandedState(next);
-    localStorage.setItem(PANEL_KEY, JSON.stringify(next));
+    setLocalValue(PANEL_KEY, JSON.stringify(next));
     if (!expanded && !preference.compactPanels) {
       void persistPreference({ compactPanels: true });
     }
   }
 
   async function dismissTrainerPrompt(input: { dontShowAgain?: boolean }) {
-    const sessionPromptMap = JSON.parse(sessionStorage.getItem(SESSION_PROMPT_KEY) || "{}");
+    const sessionPromptMap = JSON.parse(getSessionValue(SESSION_PROMPT_KEY) || "{}");
     sessionPromptMap[pathname] = true;
-    sessionStorage.setItem(SESSION_PROMPT_KEY, JSON.stringify(sessionPromptMap));
+    setSessionValue(SESSION_PROMPT_KEY, JSON.stringify(sessionPromptMap));
     if (trainerPrompt) {
       await postJson("/api/help/walkthrough", {
         action: "dismiss_prompt",
@@ -250,7 +273,7 @@ export function HelpProvider({
     if (!walkthrough) return;
     setActiveWalkthrough(walkthrough);
     setWalkthroughStepIndex(0);
-    sessionStorage.setItem(WALKTHROUGH_KEY, JSON.stringify({ id: walkthrough.id, stepIndex: 0 }));
+    setSessionValue(WALKTHROUGH_KEY, JSON.stringify({ id: walkthrough.id, stepIndex: 0 }));
     await postJson("/api/help/walkthrough", { action: "start", walkthroughId: walkthrough.id, route: walkthrough.route, version: walkthrough.version, stepIndex: 0 }).catch(() => undefined);
   }
 
@@ -263,28 +286,28 @@ export function HelpProvider({
       return;
     }
     setWalkthroughStepIndex(nextIndex);
-    sessionStorage.setItem(WALKTHROUGH_KEY, JSON.stringify({ id: activeWalkthrough.id, stepIndex: nextIndex }));
+    setSessionValue(WALKTHROUGH_KEY, JSON.stringify({ id: activeWalkthrough.id, stepIndex: nextIndex }));
   }
 
   async function backWalkthroughStep() {
     if (!activeWalkthrough) return;
     const nextIndex = Math.max(walkthroughStepIndex - 1, 0);
     setWalkthroughStepIndex(nextIndex);
-    sessionStorage.setItem(WALKTHROUGH_KEY, JSON.stringify({ id: activeWalkthrough.id, stepIndex: nextIndex }));
+    setSessionValue(WALKTHROUGH_KEY, JSON.stringify({ id: activeWalkthrough.id, stepIndex: nextIndex }));
   }
 
   async function skipWalkthrough() {
     if (!activeWalkthrough) return;
     await postJson("/api/help/walkthrough", { action: "skip", walkthroughId: activeWalkthrough.id, route: activeWalkthrough.route, version: activeWalkthrough.version, stepIndex: walkthroughStepIndex }).catch(() => undefined);
     setActiveWalkthrough(null);
-    sessionStorage.removeItem(WALKTHROUGH_KEY);
+    removeSessionValue(WALKTHROUGH_KEY);
   }
 
   async function finishWalkthrough() {
     if (!activeWalkthrough) return;
     await postJson("/api/help/walkthrough", { action: "finish", walkthroughId: activeWalkthrough.id, route: activeWalkthrough.route, version: activeWalkthrough.version, stepIndex: walkthroughStepIndex }).catch(() => undefined);
     setActiveWalkthrough(null);
-    sessionStorage.removeItem(WALKTHROUGH_KEY);
+    removeSessionValue(WALKTHROUGH_KEY);
   }
 
   async function resumeWalkthrough() {
@@ -301,7 +324,7 @@ export function HelpProvider({
       return;
     }
     setWalkthroughStepIndex(0);
-    sessionStorage.setItem(WALKTHROUGH_KEY, JSON.stringify({ id: activeWalkthrough.id, stepIndex: 0 }));
+    setSessionValue(WALKTHROUGH_KEY, JSON.stringify({ id: activeWalkthrough.id, stepIndex: 0 }));
     await postJson("/api/help/walkthrough", { action: "restart", walkthroughId: activeWalkthrough.id, route: activeWalkthrough.route, version: activeWalkthrough.version, stepIndex: 0 }).catch(() => undefined);
   }
 

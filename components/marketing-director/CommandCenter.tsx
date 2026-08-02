@@ -87,6 +87,21 @@ const COMMAND_SUGGESTIONS = [
   "Review pending content",
 ];
 
+function getSessionValue(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(key);
+}
+
+function setSessionValue(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(key, value);
+}
+
+function removeSessionValue(key: string): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(key);
+}
+
 function messageId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -339,8 +354,8 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
   const [submitting, setSubmitting] = useState(false);
   const [messages, setMessages] = useState<ConversationMessage[]>(() => {
     if (typeof window === "undefined") return [];
-    const currentSaved = sessionStorage.getItem(STORAGE_KEY);
-    const legacySaved = sessionStorage.getItem(LEGACY_STORAGE_KEY);
+    const currentSaved = getSessionValue(STORAGE_KEY);
+    const legacySaved = getSessionValue(LEGACY_STORAGE_KEY);
     const restored = restoreConversationMessages(currentSaved ?? legacySaved);
     return restored;
   });
@@ -362,7 +377,7 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
   );
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    setSessionValue(STORAGE_KEY, JSON.stringify(messages));
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
@@ -497,8 +512,8 @@ export default function CommandCenter(props: { modeLabel: string; canViewTechnic
     setMessages([]);
     setError(null);
     setLastRequest("");
-    sessionStorage.removeItem(STORAGE_KEY);
-    sessionStorage.removeItem(LEGACY_STORAGE_KEY);
+    removeSessionValue(STORAGE_KEY);
+    removeSessionValue(LEGACY_STORAGE_KEY);
     try {
       await fetch("/api/marketing-director/command/clear-session", { method: "POST" });
     } catch {
