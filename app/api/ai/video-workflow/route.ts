@@ -18,6 +18,7 @@ import {
 import {
   fetchVideoProviderJob,
   getVideoProviderUnavailableMessage,
+  mapProviderErrorCodeToMessage,
   startVideoProviderJob,
 } from "@/features/core/video-provider";
 import { buildShortVideoWorkflowKey } from "@/features/core/video-idempotency";
@@ -80,6 +81,8 @@ type MediaAssetRow = {
 
 const SAFE_FAILURE_MESSAGE = "Video generation didn't complete.";
 const SAFE_TRANSIENT_ERROR = "Video generation is temporarily unavailable.";
+const SAFE_FALLBACK_COMPLIANCE_NOTE =
+  "Human review required before publishing. Verify claims, visuals, captions, and rights compliance.";
 const STAGE_PROGRESS: Record<VideoWorkflowStage, number> = {
   PREPARING_VIDEO_PLAN: 8,
   RESERVING_CREDITS: 18,
@@ -135,6 +138,70 @@ function safeError(message?: string): string {
   return message.includes("temporarily unavailable")
     ? SAFE_TRANSIENT_ERROR
     : SAFE_TRANSIENT_ERROR;
+}
+
+function buildFallbackPlan(input: {
+  channel: VideoProject["channel"];
+  objective: string;
+  message: string;
+  callToAction: string;
+  durationSeconds: VideoProject["durationSeconds"];
+}) {
+  const total = input.durationSeconds;
+  const first = Math.max(2, Math.floor(total * 0.35));
+  const second = Math.max(2, Math.floor(total * 0.4));
+  const third = Math.max(2, total - first - second);
+  const title = `${input.channel} video: ${input.objective}`.slice(0, 120);
+  const caption = `${input.objective}. ${input.callToAction}`.trim();
+
+  return {
+    title,
+    script: `${input.message}. ${input.callToAction}`.trim(),
+    caption,
+    renderPrompt: [
+      "Create an original 9:16 commercial video with no logos, copyrighted characters, or third-party marks.",
+      `Core message: ${input.message}`,
+      `Objective: ${input.objective}`,
+      `Channel style: ${input.channel}`,
+      `Duration: ${input.durationSeconds} seconds.`,
+      "Use clean typography, readable overlays, and product-focused visuals.",
+    ].join(" "),
+    complianceNote: SAFE_FALLBACK_COMPLIANCE_NOTE,
+    hashtags: ["#PostMotive", "#VideoMarketing"],
+    callToAction: input.callToAction,
+    scenes: [
+      {
+        order: 1,
+        seconds: first,
+        visual: "Open with a striking product moment and clear subject framing.",
+        narration: input.message,
+        onScreenText: input.objective,
+      },
+      {
+        order: 2,
+        seconds: second,
+        visual: "Show benefits in motion with quick cuts and close details.",
+        narration: "Show authentic use and practical value.",
+        onScreenText: "Built for real moments",
+      },
+      {
+        order: 3,
+        seconds: third,
+        visual: "Close with brand shot and direct call-to-action frame.",
+        narration: input.callToAction,
+        onScreenText: input.callToAction,
+      },
+    ],
+  };
+}
+
+function toSafeProviderMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  if (!raw) return getVideoProviderUnavailableMessage();
+  if (/^[A-Z_]+$/.test(raw)) {
+    return mapProviderErrorCodeToMessage(raw as never);
+  }
+  return getVideoProviderUnavailableMessage();
 }
 
 function logVideoPlanFailure(input: {
@@ -194,7 +261,7 @@ async function generatePlan(input: {
 }> {
   const env = getServerEnv();
   if (!env.openAiApiKey) {
-    throw new Error(SAFE_TRANSIENT_ERROR);
+    return buildFallbackPlan(input);
   }
 
   let response: Response;
@@ -260,7 +327,7 @@ async function generatePlan(input: {
       parseFailureCategory: null,
       model: env.openAiModel,
     });
-    throw new Error(SAFE_TRANSIENT_ERROR);
+    return buildFallbackPlan(input);
   }
 
   const payload = await response.json().catch(() => null);
@@ -279,7 +346,7 @@ async function generatePlan(input: {
       parseFailureCategory: parsedPlan.failureCategory,
       model: env.openAiModel,
     });
-    throw new Error(SAFE_TRANSIENT_ERROR);
+    return buildFallbackPlan(input);
   }
 
   const plan = parsedPlan.plan || parseVideoPlanResponse(extractedText);
@@ -292,7 +359,7 @@ async function generatePlan(input: {
       parseFailureCategory: parsedPlan.failureCategory,
       model: env.openAiModel,
     });
-    throw new Error(SAFE_TRANSIENT_ERROR);
+    return buildFallbackPlan(input);
   }
 
   return {
@@ -806,12 +873,20 @@ export async function POST(request: Request) {
       });
     }
 
-    const providerJob = await startVideoProviderJob({
-      providerKey: profile.providerKey,
-      model: profile.model,
-      prompt: plan.renderPrompt,
-      seconds: durationSeconds,
-    });
+    let providerJob: Awaited<ReturnType<typeof startVideoProviderJob>>;
+    try {
+      providerJob = await startVideoProviderJob({
+        providerKey: profile.providerKey,
+        model: profile.model,
+        prompt: plan.renderPrompt,
+        seconds: durationSeconds,
+      });
+    } catch (providerError) {
+      return NextResponse.json(
+        { ok: false, error: toSafeProviderMessage(providerError) },
+        { status: 503 },
+      );
+    }
 
     const { error: projectError } = await supabase.from("video_projects").upsert({
       id: projectId,
@@ -963,11 +1038,19 @@ export async function GET(request: Request) {
       });
     }
 
-    const providerJob = await fetchVideoProviderJob({
-      providerKey: project.provider,
-      model: project.provider_model || "",
-      providerJobId: project.provider_job_id,
-    });
+    let providerJob: Awaited<ReturnType<typeof fetchVideoProviderJob>>;
+    try {
+      providerJob = await fetchVideoProviderJob({
+        providerKey: project.provider,
+        model: project.provider_model || "",
+        providerJobId: project.provider_job_id,
+      });
+    } catch (providerError) {
+      return NextResponse.json(
+        { ok: false, error: toSafeProviderMessage(providerError) },
+        { status: 503 },
+      );
+    }
 
     if (providerJob.status === "failed") {
       if (project.credit_status !== "REFUNDED") {

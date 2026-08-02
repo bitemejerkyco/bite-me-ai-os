@@ -533,7 +533,7 @@ describe("video workflow route", () => {
     });
   });
 
-  it("returns sanitized 503 when plan response cannot be parsed", async () => {
+  it("falls back to deterministic plan when OpenAI plan response cannot be parsed", async () => {
     const harness = createHarness();
     createClientMock.mockResolvedValue(harness.supabase);
 
@@ -567,9 +567,12 @@ describe("video workflow route", () => {
       }),
     );
 
-    const payload = (await response.json()) as { error?: string };
-    expect(response.status).toBe(503);
-    expect(payload.error).toBe("Video generation is temporarily unavailable.");
+    const payload = (await response.json()) as { ok?: boolean; stage?: string; progress?: number };
+    expect(response.status).toBe(200);
+    expect(payload.ok).toBe(true);
+    expect(payload.stage).toBe("GENERATING_SCENES");
+    expect((payload.progress || 0) < 100).toBe(true);
+    expect(startVideoProviderJobMock).toHaveBeenCalledTimes(1);
   });
 
   it("starts workflow on replicate economy slug and reserves credits once", async () => {

@@ -95,6 +95,18 @@ function composeRenderPrompt(project: VideoProject): string {
   ].join("\n");
 }
 
+function formatWorkflowElapsed(startedAt?: string): string {
+  if (!startedAt) return "";
+  const start = new Date(startedAt).getTime();
+  if (!Number.isFinite(start)) return "";
+  const elapsedMs = Math.max(0, Date.now() - start);
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds}s elapsed`;
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s elapsed`;
+}
+
 export default function VideoStudio({
   workspace,
 }: {
@@ -351,6 +363,45 @@ export default function VideoStudio({
       if (!workflowKey) {
         setWorkflowKey(activeWorkflowKey);
       }
+
+      const now = new Date().toISOString();
+      const optimisticProject: VideoProject = {
+        id: project?.id || `pending-${crypto.randomUUID()}`,
+        title: project?.title || `Creating ${channel} video`,
+        channel,
+        objective,
+        prompt: project?.prompt || "",
+        script: project?.script || "",
+        caption: project?.caption || "",
+        hashtags: project?.hashtags || [],
+        callToAction: cta,
+        scenes: project?.scenes || [],
+        durationSeconds: duration,
+        aspectRatio: "9:16",
+        voice,
+        voiceDisclosure: true,
+        musicMode,
+        provider: "OPENAI_SORA_TEMPORARY",
+        providerJobStatus: "queued",
+        providerProgress: 5,
+        workflowKey: activeWorkflowKey,
+        workflowStage: "PREPARING_VIDEO_PLAN",
+        workflowProgress: 5,
+        creditStatus: project?.creditStatus || "NONE",
+        status: "GENERATING",
+        failureReason: undefined,
+        failureReferenceId: undefined,
+        workflowStartedAt: project?.workflowStartedAt || now,
+        createdAt: project?.createdAt || now,
+        updatedAt: now,
+      };
+      setProject(optimisticProject);
+      setProjects((current) => {
+        const exists = current.some((item) => item.id === optimisticProject.id);
+        return exists
+          ? current.map((item) => (item.id === optimisticProject.id ? optimisticProject : item))
+          : [optimisticProject, ...current];
+      });
 
       const response = await fetch("/api/ai/video-workflow", {
         method: "POST",
@@ -713,9 +764,9 @@ export default function VideoStudio({
           ...project,
           status: "FAILED",
           providerJobStatus: nextProviderStatus,
-          providerProgress: Math.min(89, providerProgress),
+          providerProgress: Math.min(94, providerProgress),
           workflowStage: payload.stage || "FAILED",
-          workflowProgress: Math.min(89, providerProgress),
+          workflowProgress: Math.min(94, providerProgress),
           creditStatus: payload.creditStatus || project.creditStatus || "REFUNDED",
           failureReferenceId: payload.failureReferenceId || project.failureReferenceId,
           failureReason: payload.error || "Video generation didn't complete.",
@@ -748,7 +799,7 @@ export default function VideoStudio({
         providerJobStatus: nextProviderStatus,
         providerProgress,
         workflowStage: payload.stage || (providerProgress >= 70 ? "RENDERING_FINAL_VIDEO" : "GENERATING_SCENES"),
-        workflowProgress: Math.min(89, providerProgress),
+        workflowProgress: Math.min(94, Math.max(providerProgress, Number(payload.progress || 0))),
         creditStatus: payload.creditStatus || project.creditStatus || "RESERVED",
         updatedAt: new Date().toISOString(),
       });
@@ -1020,10 +1071,13 @@ export default function VideoStudio({
     ? (project.status === "READY" || project.status === "APPROVED"
       ? 100
       : project.status === "FAILED"
-        ? Math.min(89, Math.max(0, Math.round(project.workflowProgress ?? project.providerProgress ?? 0)))
-        : Math.min(89, Math.max(0, Math.round(project.workflowProgress ?? project.providerProgress ?? 0))))
+        ? Math.min(94, Math.max(0, Math.round(project.workflowProgress ?? project.providerProgress ?? 0)))
+        : Math.min(94, Math.max(5, Math.round(project.workflowProgress ?? project.providerProgress ?? 5))))
     : 0;
   const workflowStageLabel = project ? WORKFLOW_STAGE_LABELS[inferredStage] : WORKFLOW_STAGE_LABELS.PREPARING_VIDEO_PLAN;
+  const workflowElapsed = project?.status === "GENERATING"
+    ? formatWorkflowElapsed(project.workflowStartedAt || project.createdAt)
+    : "";
   const workflowStatusText = project?.status === "FAILED"
     ? "Please retry this project or create a new video workflow."
     : project?.status === "READY" || project?.status === "APPROVED"
@@ -1187,6 +1241,9 @@ export default function VideoStudio({
               </p>
             </div>
             <p className="mt-2 text-xs text-slate-600">{workflowStatusText}</p>
+            {workflowElapsed ? (
+              <p className="mt-1 text-xs text-slate-500">{workflowElapsed}</p>
+            ) : null}
             <div
               className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200"
               role="progressbar"
@@ -1237,17 +1294,6 @@ export default function VideoStudio({
                 Monthly use: {creditStatus.monthlyUsedCredits}/
                 {creditStatus.monthlyLimitCredits} credits
               </span>
-              {creditStatus.billingExempt ? (
-                <span>
-                  Estimated platform cost: {" "}
-                  {(
-                    renderQuote.estimatedProviderCostCents / 100
-                  ).toLocaleString(undefined, {
-                    style: "currency",
-                    currency: "USD",
-                  })}
-                </span>
-              ) : null}
             </div>
           ) : null}
           {creditError ? (
