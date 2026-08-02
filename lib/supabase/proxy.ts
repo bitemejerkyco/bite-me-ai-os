@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSupabasePublicConfig } from "@/lib/env";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -13,10 +14,11 @@ const MAINTENANCE_REDIRECT_PATH = "/pricing";
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const { supabaseUrl, supabasePublishableKey } = getSupabasePublicConfig();
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    supabaseUrl,
+    supabasePublishableKey,
     {
       cookies: {
         getAll() {

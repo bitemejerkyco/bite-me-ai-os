@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import HelpRoot from "@/components/help/HelpRoot";
 import { loadHelpPreference } from "@/features/help/server";
 import { getViewerContext } from "@/lib/auth/server";
+import { getPublicEnv } from "@/lib/env";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,6 +28,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  getPublicEnv();
+
   const [viewer, preference] = await Promise.all([
     getViewerContext(),
     loadHelpPreference(),

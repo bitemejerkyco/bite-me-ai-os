@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import { createStripeCheckoutSession, createStripePortalSession } from "@/features/billing/stripe";
+import { getAppOrigin } from "@/lib/env";
 
 const ALLOWED_PLAN_KEYS = new Set(["starter", "professional", "business", "enterprise"]);
 
@@ -17,8 +18,7 @@ function stripePriceForPlan(planKey: string): string {
 }
 
 function safeOrigin(): string {
-  const configured = String(process.env.NEXT_PUBLIC_APP_URL || "").trim();
-  return configured || "http://localhost:3000";
+  return getAppOrigin();
 }
 
 export async function startCheckoutAction(formData: FormData) {
