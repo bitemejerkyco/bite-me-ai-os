@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadCloudVideoProjects,
   loadCloudCreativeVersions,
+  loadCloudMedia,
   resolveCloudMediaUrl,
   saveCloudCreativeVersion,
   saveCloudDraft,
@@ -44,6 +45,34 @@ type VideoPlanPayload = {
   complianceNote?: string;
   scenes?: VideoProject["scenes"];
   error?: string;
+};
+
+type ProductAssetChoice = {
+  id: string;
+  name: string;
+  storagePath: string;
+  type: string;
+  productMetadata?: {
+    productId?: string;
+    productName?: string;
+    assetRole?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+    isPrimaryProductImage?: boolean;
+    role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+    angle?: string;
+    locked?: boolean;
+    approvedForGeneration?: boolean;
+    transparentBackground?: boolean;
+    originalAssetId?: string;
+    exactProductMode?: boolean;
+    allowAiMotion?: boolean;
+    preserveOriginalAsset?: boolean;
+    originalStoragePath?: string;
+    background?: string;
+    position?: string;
+    scale?: string;
+    safeArea?: string;
+    notes?: string;
+  };
 };
 
 type WorkflowStatusPayload = {
@@ -95,6 +124,31 @@ function composeRenderPrompt(project: VideoProject): string {
   ].join("\n");
 }
 
+function applyProductSceneMetadata(
+  scenes: VideoProject["scenes"],
+  productAsset: ProductAssetChoice | null,
+  allowMotion: boolean,
+): VideoProject["scenes"] {
+  if (!productAsset) return scenes;
+  return scenes.map((scene) => ({
+    ...scene,
+    productAssetId: productAsset.id,
+    productAssetName: productAsset.name,
+    productMode: allowMotion ? "AI_PRODUCT_MOTION" : "EXACT_PRODUCT",
+    productPlacement: productAsset.productMetadata?.position || "center frame",
+    productScale: productAsset.productMetadata?.scale || "large and readable",
+    productOpacity: scene.productOpacity ?? 1,
+    productShadow: scene.productShadow ?? true,
+    productRotation: scene.productRotation ?? 0,
+    productEntrance: scene.productEntrance ?? "FADE_IN",
+    productExit: scene.productExit ?? "FADE_OUT",
+    productZoom: scene.productZoom ?? "NONE",
+    productBackground: productAsset.productMetadata?.background || "brand-safe neutral background",
+    productSafeArea: productAsset.productMetadata?.safeArea || "leave room for overlays",
+    productLocked: productAsset.productMetadata?.locked ?? true,
+    preserveOriginalAsset: productAsset.productMetadata?.preserveOriginalAsset ?? true,
+  }));
+}
 export function isDatabaseUuid(value: unknown): value is string {
   return typeof value === "string"
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -220,8 +274,19 @@ export default function VideoStudio({
   const [creditStatus, setCreditStatus] =
     useState<VideoCreditStatus | null>(null);
   const [creditError, setCreditError] = useState("");
+  const [productAssets, setProductAssets] = useState<ProductAssetChoice[]>([]);
+  const [selectedProductAssetId, setSelectedProductAssetId] = useState("");
+  const [selectedProductPreviewUrl, setSelectedProductPreviewUrl] = useState("");
+  const [exactProductMode, setExactProductMode] = useState(true);
+  const [lockProductAppearance, setLockProductAppearance] = useState(true);
+  const [allowAiProductMotion, setAllowAiProductMotion] = useState(false);
+  const [productPlacement, setProductPlacement] = useState("center frame");
+  const [productScale, setProductScale] = useState("large and readable");
+  const [productBackground, setProductBackground] = useState("brand-safe neutral background");
+  const [productSafeArea, setProductSafeArea] = useState("leave room for overlays");
   const checkRenderRef = useRef<() => Promise<void>>(async () => undefined);
   const renderCheckInFlightRef = useRef(false);
+  const sceneEditorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -253,6 +318,40 @@ export default function VideoStudio({
               : "Unable to load video projects.",
           ),
         );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void loadCloudMedia({ includeArchived: false })
+        .then((items) => {
+          const approvedProductAssets = items
+            .filter((item) => item.type.startsWith("image/"))
+            .filter((item) => item.productMetadata?.approvedForGeneration || item.tags.includes("product"))
+            .map((item) => ({
+              id: item.id,
+              name: item.name,
+              storagePath: item.storagePath || "",
+              type: item.type,
+              productMetadata: item.productMetadata,
+            }));
+          setProductAssets(approvedProductAssets);
+          const params = new URLSearchParams(window.location.search);
+          const assetId = params.get("assetId") || "";
+          const matched = approvedProductAssets.find((item) => item.id === assetId) || approvedProductAssets[0] || null;
+          if (matched) {
+            setSelectedProductAssetId(matched.id);
+            setExactProductMode(true);
+            setLockProductAppearance(true);
+            setAllowAiProductMotion(Boolean(matched.productMetadata?.allowAiMotion && matched.productMetadata?.exactProductMode === false));
+            setProductPlacement(matched.productMetadata?.position || "center frame");
+            setProductScale(matched.productMetadata?.scale || "large and readable");
+            setProductBackground(matched.productMetadata?.background || "brand-safe neutral background");
+            setProductSafeArea(matched.productMetadata?.safeArea || "leave room for overlays");
+          }
+        })
+        .catch(() => setProductAssets([]));
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -387,6 +486,55 @@ export default function VideoStudio({
         .map((item) => item.versionNumber),
     ) + 1;
 
+  const selectedProductAsset =
+    productAssets.find((item) => item.id === selectedProductAssetId) || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      if (!selectedProductAsset?.storagePath) {
+        if (!cancelled) setSelectedProductPreviewUrl("");
+        return;
+      }
+      void resolveCloudMediaUrl(selectedProductAsset.storagePath)
+        .then((url) => {
+          if (!cancelled) setSelectedProductPreviewUrl(url);
+        })
+        .catch(() => {
+          if (!cancelled) setSelectedProductPreviewUrl("");
+        });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [selectedProductAsset?.storagePath]);
+
+  const selectedProductAssetPayload = selectedProductAsset
+    ? {
+        id: selectedProductAsset.id,
+        name: selectedProductAsset.name,
+        storagePath: selectedProductAsset.storagePath,
+        productMetadata: {
+          ...selectedProductAsset.productMetadata,
+          assetRole: selectedProductAsset.productMetadata?.assetRole || selectedProductAsset.productMetadata?.role || "PRIMARY",
+          isPrimaryProductImage: selectedProductAsset.productMetadata?.isPrimaryProductImage ?? true,
+          approvedForGeneration: selectedProductAsset.productMetadata?.approvedForGeneration ?? true,
+          locked: lockProductAppearance,
+          transparentBackground: selectedProductAsset.productMetadata?.transparentBackground ?? true,
+          originalAssetId: selectedProductAsset.productMetadata?.originalAssetId || selectedProductAsset.id,
+          exactProductMode,
+          allowAiMotion: allowAiProductMotion,
+          preserveOriginalAsset: selectedProductAsset.productMetadata?.preserveOriginalAsset ?? true,
+          originalStoragePath: selectedProductAsset.productMetadata?.originalStoragePath || selectedProductAsset.storagePath,
+          position: productPlacement,
+          scale: productScale,
+          background: productBackground,
+          safeArea: productSafeArea,
+        },
+      }
+    : undefined;
+
   const addVersion = async (version: CreativeVersion) => {
     await saveCloudCreativeVersion(version);
     setVersions((current) => [version, ...current]);
@@ -418,7 +566,7 @@ export default function VideoStudio({
   };
 
   const createWorkflowKey = () =>
-    [workspace.id, channel, duration, crypto.randomUUID()].join("|").toLowerCase();
+    [workspace.id, channel, duration, selectedProductAssetId || "no-product", exactProductMode ? "exact" : "motion", crypto.randomUUID()].join("|").toLowerCase();
 
   const startNewVideo = () => {
     setProject(null);
@@ -440,6 +588,9 @@ export default function VideoStudio({
     setError("");
     setNotice("");
     try {
+      if (exactProductMode && !selectedProductAsset) {
+        throw new Error("Select an approved product image before generating an exact product video.");
+      }
       const retry = Boolean(options?.retry);
       const activeWorkflowKey = retry
         ? (project?.workflowKey || workflowKey || "")
@@ -481,6 +632,9 @@ export default function VideoStudio({
           workflowKey: activeWorkflowKey,
           projectId: resolveRetryProjectId(project, retry),
           retry,
+          productAsset: selectedProductAssetPayload,
+          exactProductMode,
+          allowAiProductMotion,
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -527,6 +681,9 @@ export default function VideoStudio({
     setError("");
     setNotice("");
     try {
+      if (exactProductMode && !selectedProductAsset) {
+        throw new Error("Select an approved product image before creating an exact product plan.");
+      }
       const response = await fetch("/api/ai/video-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -539,6 +696,9 @@ export default function VideoStudio({
           durationSeconds: duration,
           voice,
           musicMode,
+          productAsset: selectedProductAssetPayload,
+          exactProductMode,
+          allowAiProductMotion,
         }),
       });
       const payload = (await response.json()) as VideoPlanPayload;
@@ -553,6 +713,7 @@ export default function VideoStudio({
         throw new Error(payload.error || "Video planning failed.");
       }
       const now = new Date().toISOString();
+      const scenes = applyProductSceneMetadata(payload.scenes || [], selectedProductAsset, allowAiProductMotion);
       const next: VideoProject = {
         id: crypto.randomUUID(),
         title: payload.title,
@@ -563,7 +724,7 @@ export default function VideoStudio({
         caption: payload.caption,
         hashtags: [],
         callToAction: cta,
-        scenes: payload.scenes,
+        scenes,
         durationSeconds: duration,
         aspectRatio: "9:16",
         voice,
@@ -1134,6 +1295,41 @@ export default function VideoStudio({
     }
   };
 
+  const openEditor = () => {
+    sceneEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const downloadCompletedVideo = () => {
+    if (!previewUrl) {
+      setError("Video preview is still loading.");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = previewUrl;
+    link.download = `${(project?.title || "video").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.mp4`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const approveCompletedVideo = async () => {
+    if (!project || project.status !== "READY") return;
+    setWorking("approve");
+    setError("");
+    try {
+      await updateProject({
+        ...project,
+        status: "APPROVED",
+        updatedAt: new Date().toISOString(),
+      });
+      setNotice("Video approved. You can now schedule or post it.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to approve video.");
+    } finally {
+      setWorking("");
+    }
+  };
+
   const activeJob = project?.status === "GENERATING";
   const inferredStage: VideoWorkflowStage =
     project?.status === "READY"
@@ -1280,6 +1476,130 @@ export default function VideoStudio({
               </option>
             </select>
           </label>
+          <label className="block text-sm text-slate-700">
+            Select actual product image.
+            <select
+              value={selectedProductAssetId}
+              onChange={(event) => {
+                const assetId = event.target.value;
+                setSelectedProductPreviewUrl("");
+                setSelectedProductAssetId(assetId);
+                const asset = productAssets.find((item) => item.id === assetId) || null;
+                setExactProductMode(true);
+                setLockProductAppearance(true);
+                setAllowAiProductMotion(false);
+                setProductPlacement(asset?.productMetadata?.position || "center frame");
+                setProductScale(asset?.productMetadata?.scale || "large and readable");
+                setProductBackground(asset?.productMetadata?.background || "brand-safe neutral background");
+                setProductSafeArea(asset?.productMetadata?.safeArea || "leave room for overlays");
+              }}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+            >
+              <option value="">Select an approved product image</option>
+              {productAssets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.name}{asset.productMetadata?.productName ? ` · ${asset.productMetadata.productName}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selectedProductAsset ? (
+            <div className="rounded-2xl border border-sky-300 bg-sky-50 p-3">
+              <div className="flex items-center gap-3">
+                {selectedProductPreviewUrl ? (
+                  <img
+                    src={selectedProductPreviewUrl}
+                    alt={selectedProductAsset.name}
+                    className="h-16 w-16 rounded-lg border border-sky-200 object-cover"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-lg border border-sky-200 bg-white" />
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{selectedProductAsset.name}</p>
+                  <p className="mt-1 inline-flex rounded-full bg-sky-700 px-2 py-0.5 text-xs font-bold tracking-wide text-white">
+                    EXACT PRODUCT
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className="grid gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:grid-cols-2">
+            <label className="flex items-start gap-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={exactProductMode}
+                onChange={(event) => setExactProductMode(event.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <span>
+                <span className="block font-semibold text-slate-900">Exact product mode</span>
+                <span className="block text-xs text-slate-500">Default production method. Preserve the real product exactly.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={allowAiProductMotion}
+                onChange={(event) => {
+                  if (event.target.checked && !window.confirm("Allow AI product motion only if the product can stay visually faithful. Continue?")) {
+                    return;
+                  }
+                  setAllowAiProductMotion(event.target.checked);
+                }}
+                className="mt-1 h-4 w-4"
+                disabled={!selectedProductAsset}
+              />
+              <span>
+                <span className="block font-semibold text-slate-900">AI product motion</span>
+                <span className="block text-xs text-slate-500">Optional and only with explicit confirmation.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 text-sm text-slate-700 sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={lockProductAppearance}
+                onChange={(event) => setLockProductAppearance(event.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <span>
+                <span className="block font-semibold text-slate-900">Lock product appearance</span>
+                <span className="block text-xs text-slate-500">Keep product pixels, label, logo, and proportions unchanged.</span>
+              </span>
+            </label>
+            <label className="block text-sm text-slate-700">
+              Product placement
+              <input
+                value={productPlacement}
+                onChange={(event) => setProductPlacement(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+              />
+            </label>
+            <label className="block text-sm text-slate-700">
+              Product scale
+              <input
+                value={productScale}
+                onChange={(event) => setProductScale(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+              />
+            </label>
+            <label className="block text-sm text-slate-700">
+              Background
+              <input
+                value={productBackground}
+                onChange={(event) => setProductBackground(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+              />
+            </label>
+            <label className="block text-sm text-slate-700">
+              Safe area
+              <input
+                value={productSafeArea}
+                onChange={(event) => setProductSafeArea(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+              />
+            </label>
+          </div>
           <button
             disabled={Boolean(working) || activeJob}
             onClick={() => void startWorkflow()}
@@ -1475,7 +1795,7 @@ export default function VideoStudio({
                 className="mx-auto max-h-[520px] rounded-2xl bg-black"
               />
             ) : null}
-            <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-5">
+            <div ref={sceneEditorRef} className="rounded-2xl border border-slate-200/80 bg-white/70 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold">Editable scene plan</p>
@@ -1635,6 +1955,166 @@ export default function VideoStudio({
                           className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
                         />
                       </label>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <label className="block text-xs text-slate-700">
+                          Product position
+                          <input
+                            value={scene.productPlacement || "center frame"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productPlacement: event.target.value }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Product scale
+                          <input
+                            value={scene.productScale || "0.35"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productScale: event.target.value }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Product opacity (0-1)
+                          <input
+                            type="number"
+                            min={0.05}
+                            max={1}
+                            step={0.05}
+                            value={scene.productOpacity ?? 1}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productOpacity: Number(event.target.value) }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Product shadow
+                          <select
+                            value={scene.productShadow === false ? "OFF" : "ON"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productShadow: event.target.value === "ON" }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          >
+                            <option value="ON">ON</option>
+                            <option value="OFF">OFF</option>
+                          </select>
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Product rotation (-12 to 12 deg)
+                          <input
+                            type="number"
+                            min={-12}
+                            max={12}
+                            step={0.5}
+                            value={scene.productRotation ?? 0}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productRotation: Number(event.target.value) }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Entrance
+                          <select
+                            value={scene.productEntrance || "FADE_IN"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productEntrance: event.target.value as VideoProject["scenes"][number]["productEntrance"] }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          >
+                            <option value="NONE">None</option>
+                            <option value="FADE_IN">Fade in</option>
+                            <option value="SLIDE_UP">Slide up</option>
+                          </select>
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Exit
+                          <select
+                            value={scene.productExit || "FADE_OUT"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productExit: event.target.value as VideoProject["scenes"][number]["productExit"] }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          >
+                            <option value="NONE">None</option>
+                            <option value="FADE_OUT">Fade out</option>
+                          </select>
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Zoom
+                          <select
+                            value={scene.productZoom || "NONE"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, productZoom: event.target.value as VideoProject["scenes"][number]["productZoom"] }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          >
+                            <option value="NONE">None</option>
+                            <option value="ZOOM_IN">Zoom in</option>
+                            <option value="ZOOM_OUT">Zoom out</option>
+                          </select>
+                        </label>
+                      </div>
                     </div>
                   ))}
                   <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -1768,13 +2248,38 @@ export default function VideoStudio({
                       }`}
                 </button>
               ) : (
-                <button
-                  disabled={Boolean(working)}
-                  onClick={() => void schedule()}
-                  className="rounded-xl bg-violet-600 px-4 py-2 font-semibold disabled:opacity-60"
-                >
-                  Schedule / Post now
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={openEditor}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                  >
+                    Edit video
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadCompletedVideo}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                  >
+                    Download
+                  </button>
+                  {project.status === "READY" ? (
+                    <button
+                      disabled={Boolean(working)}
+                      onClick={() => void approveCompletedVideo()}
+                      className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60"
+                    >
+                      {working === "approve" ? "Approving…" : "Approve"}
+                    </button>
+                  ) : null}
+                  <button
+                    disabled={Boolean(working)}
+                    onClick={() => void schedule()}
+                    className="rounded-xl bg-violet-600 px-4 py-2 font-semibold disabled:opacity-60"
+                  >
+                    Schedule / Post now
+                  </button>
+                </>
               )}
               <button
                 type="button"

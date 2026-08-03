@@ -286,8 +286,82 @@ type MediaRow = {
   height: number | null;
   duration_seconds: number | null;
   archived_at: string | null;
+  metadata: Record<string, unknown> | null;
   is_favorite?: boolean | null;
 };
+
+function readProductMetadata(row: MediaRow): MediaAsset["productMetadata"] {
+  const rawMetadata = row.metadata && typeof row.metadata === "object"
+    ? (row.metadata.productAsset && typeof row.metadata.productAsset === "object"
+      ? row.metadata.productAsset
+      : row.metadata)
+    : null;
+  if (!rawMetadata || typeof rawMetadata !== "object") return undefined;
+  const metadata = rawMetadata as Record<string, unknown>;
+  const role =
+    metadata.role === "PRIMARY" || metadata.role === "ALTERNATE" || metadata.role === "REFERENCE"
+      ? metadata.role
+      : metadata.assetRole === "PRIMARY" || metadata.assetRole === "ALTERNATE" || metadata.assetRole === "REFERENCE"
+        ? metadata.assetRole
+        : undefined;
+  return {
+    productId: typeof metadata.productId === "string" ? metadata.productId : undefined,
+    productName: typeof metadata.productName === "string" ? metadata.productName : undefined,
+    assetRole: role,
+    isPrimaryProductImage: typeof metadata.isPrimaryProductImage === "boolean"
+      ? metadata.isPrimaryProductImage
+      : role === "PRIMARY"
+        ? true
+        : undefined,
+    role,
+    angle: typeof metadata.angle === "string" ? metadata.angle : undefined,
+    locked: typeof metadata.locked === "boolean" ? metadata.locked : undefined,
+    approvedForGeneration: typeof metadata.approvedForGeneration === "boolean" ? metadata.approvedForGeneration : undefined,
+    transparentBackground: typeof metadata.transparentBackground === "boolean" ? metadata.transparentBackground : undefined,
+    originalAssetId: typeof metadata.originalAssetId === "string" ? metadata.originalAssetId : undefined,
+    exactProductMode: typeof metadata.exactProductMode === "boolean" ? metadata.exactProductMode : undefined,
+    allowAiMotion: typeof metadata.allowAiMotion === "boolean" ? metadata.allowAiMotion : undefined,
+    preserveOriginalAsset: typeof metadata.preserveOriginalAsset === "boolean" ? metadata.preserveOriginalAsset : undefined,
+    originalStoragePath: typeof metadata.originalStoragePath === "string" ? metadata.originalStoragePath : undefined,
+    background: typeof metadata.background === "string" ? metadata.background : undefined,
+    position: typeof metadata.position === "string" ? metadata.position : undefined,
+    scale: typeof metadata.scale === "string" ? metadata.scale : undefined,
+    safeArea: typeof metadata.safeArea === "string" ? metadata.safeArea : undefined,
+    notes: typeof metadata.notes === "string" ? metadata.notes : undefined,
+  };
+}
+
+function normalizeProductMetadataForStorage(
+  productMetadata: MediaAsset["productMetadata"],
+): Record<string, unknown> {
+  if (!productMetadata) return {};
+  const role = productMetadata.assetRole || productMetadata.role;
+  return {
+    ...productMetadata,
+    role,
+    assetRole: role,
+    isPrimaryProductImage:
+      typeof productMetadata.isPrimaryProductImage === "boolean"
+        ? productMetadata.isPrimaryProductImage
+        : role === "PRIMARY"
+          ? true
+          : undefined,
+  };
+}
+
+function mergedMetadataPayload(
+  existing: Record<string, unknown> | null | undefined,
+  productMetadata?: MediaAsset["productMetadata"],
+): Record<string, unknown> | null | undefined {
+  if (productMetadata === undefined) return undefined;
+  const next = { ...(existing || {}) };
+  if (productMetadata === null) {
+    delete next.productAsset;
+    return next;
+  }
+  next.productAsset = normalizeProductMetadataForStorage(productMetadata);
+  return next;
+}
 
 function mediaFromRow(row: MediaRow): MediaAsset {
   return {
@@ -311,6 +385,7 @@ function mediaFromRow(row: MediaRow): MediaAsset {
       : undefined,
     archivedAt: row.archived_at || undefined,
     isFavorite: row.is_favorite ?? false,
+    productMetadata: readProductMetadata(row),
   };
 }
 
@@ -349,6 +424,7 @@ export async function uploadCloudMedia(
     width?: number;
     height?: number;
     durationSeconds?: number;
+    productMetadata?: MediaAsset["productMetadata"];
   },
 ): Promise<MediaAsset> {
   if (isDemoMode()) {
@@ -369,6 +445,7 @@ export async function uploadCloudMedia(
       height: options?.height,
       durationSeconds: options?.durationSeconds,
       isFavorite: false,
+      productMetadata: options?.productMetadata,
     };
     const media = loadLocal<MediaAsset[]>(STORAGE_KEYS.demoMedia, []);
     saveLocal(STORAGE_KEYS.demoMedia, [asset, ...media]);
@@ -407,6 +484,7 @@ export async function uploadCloudMedia(
       duration_seconds: Number.isFinite(options?.durationSeconds)
         ? options?.durationSeconds
         : null,
+      metadata: options?.productMetadata ? { productAsset: normalizeProductMetadataForStorage(options.productMetadata) } : {},
       is_favorite: false,
     })
     .select("*")
@@ -577,6 +655,7 @@ export async function updateCloudMediaAsset(
     folderId?: string;
     archivedAt?: string | null;
     isFavorite?: boolean;
+    productMetadata?: MediaAsset["productMetadata"];
   },
 ): Promise<void> {
   if (isDemoMode()) {
@@ -592,6 +671,8 @@ export async function updateCloudMediaAsset(
           updates.archivedAt === undefined ? item.archivedAt : updates.archivedAt || undefined,
         isFavorite:
           updates.isFavorite === undefined ? item.isFavorite : updates.isFavorite,
+        productMetadata:
+          updates.productMetadata === undefined ? item.productMetadata : updates.productMetadata || undefined,
       };
     });
     saveLocal(STORAGE_KEYS.demoMedia, next);
@@ -604,6 +685,17 @@ export async function updateCloudMediaAsset(
   if (updates.folderId !== undefined) payload.folder_id = updates.folderId || null;
   if (updates.archivedAt !== undefined) payload.archived_at = updates.archivedAt;
   if (updates.isFavorite !== undefined) payload.is_favorite = updates.isFavorite;
+  if (updates.productMetadata !== undefined) {
+    const { data: current } = await createClient()
+      .from("media_assets")
+      .select("metadata")
+      .eq("id", assetId)
+      .maybeSingle();
+    payload.metadata = mergedMetadataPayload(
+      (current as { metadata?: Record<string, unknown> | null } | null)?.metadata,
+      updates.productMetadata,
+    ) || {};
+  }
   if (!Object.keys(payload).length) return;
 
   const { error } = await createClient().from("media_assets").update(payload).eq("id", assetId);

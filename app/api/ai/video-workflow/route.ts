@@ -23,6 +23,7 @@ import {
   startVideoProviderJob,
 } from "@/features/core/video-provider";
 import { buildShortVideoWorkflowKey } from "@/features/core/video-idempotency";
+import { composeVideoWithExactProduct, type ProductLayerScene, type VideoCompositionManifest } from "@/features/core/video-compositor";
 
 type WorkflowBody = {
   channel?: unknown;
@@ -35,6 +36,9 @@ type WorkflowBody = {
   workflowKey?: unknown;
   projectId?: unknown;
   retry?: unknown;
+  productAsset?: unknown;
+  exactProductMode?: unknown;
+  allowAiProductMotion?: unknown;
 };
 
 type VideoProjectRow = {
@@ -78,10 +82,41 @@ type VideoProjectRow = {
 type MediaAssetRow = {
   id: string;
   storage_path: string;
+  metadata?: Record<string, unknown> | null;
+  file_name?: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+};
+
+type ProductMetadata = {
+  productId?: string;
+  productName?: string;
+  assetRole?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+  isPrimaryProductImage?: boolean;
+  role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+  angle?: string;
+  locked?: boolean;
+  approvedForGeneration?: boolean;
+  transparentBackground?: boolean;
+  originalAssetId?: string;
+  exactProductMode?: boolean;
+  allowAiMotion?: boolean;
+  preserveOriginalAsset?: boolean;
+  originalStoragePath?: string;
+  background?: string;
+  position?: string;
+  scale?: string;
+  safeArea?: string;
+  notes?: string;
 };
 
 const SAFE_FAILURE_MESSAGE = "Video generation didn't complete.";
 const SAFE_TRANSIENT_ERROR = "Video generation is temporarily unavailable.";
+const SAFE_COMPOSITION_BLOCKED_MESSAGE = "Exact Product Mode is temporarily unavailable in this runtime. Product image compositing could not run.";
+const MAX_PROVIDER_OUTPUT_BYTES = 250 * 1024 * 1024;
+const MAX_PRODUCT_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_COMPOSED_VIDEO_BYTES = 300 * 1024 * 1024;
+const SUPPORTED_PRODUCT_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const SAFE_FALLBACK_COMPLIANCE_NOTE =
   "Human review required before publishing. Verify claims, visuals, captions, and rights compliance.";
 const STAGE_PROGRESS: Record<VideoWorkflowStage, number> = {
@@ -141,17 +176,273 @@ function safeError(message?: string): string {
     : SAFE_TRANSIENT_ERROR;
 }
 
+function isSafeStoragePathForWorkspace(workspaceId: string, storagePath: string): boolean {
+  const normalized = storagePath.replace(/\\/g, "/").trim();
+  if (!normalized) return false;
+  if (normalized.includes("..")) return false;
+  if (normalized.startsWith("/") || normalized.startsWith("./")) return false;
+  return normalized.startsWith(`${workspaceId}/`);
+}
+
+function mapCompositionErrorToSafeReason(error: unknown): {
+  reasonCode: string;
+  message: string;
+  blockedExactProduct: boolean;
+} {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  if (
+    raw === "FFMPEG_RUNTIME_UNAVAILABLE"
+    || raw === "FFMPEG_NOT_AVAILABLE"
+    || raw === "FFMPEG_START_FAILED"
+    || raw === "FFMPEG_TIMEOUT"
+    || raw === "FFMPEG_MEMORY_LIMIT"
+    || raw === "FFMPEG_COMPOSE_FAILED"
+  ) {
+    return {
+      reasonCode: raw,
+      message: SAFE_COMPOSITION_BLOCKED_MESSAGE,
+      blockedExactProduct: true,
+    };
+  }
+  if (
+    raw === "PRODUCT_ASSET_MIME_UNSUPPORTED"
+    || raw === "PRODUCT_ASSET_TOO_LARGE"
+    || raw === "PRODUCT_ASSET_UNAVAILABLE"
+    || raw === "PRODUCT_ASSET_NOT_APPROVED"
+    || raw === "PRODUCT_ASSET_PATH_INVALID"
+    || raw === "EXACT_PRODUCT_LAYER_MISSING"
+  ) {
+    return {
+      reasonCode: raw,
+      message: "The selected product image cannot be used for exact product rendering.",
+      blockedExactProduct: false,
+    };
+  }
+  return {
+    reasonCode: "VIDEO_PROVIDER_UNAVAILABLE",
+    message: SAFE_TRANSIENT_ERROR,
+    blockedExactProduct: false,
+  };
+}
+
+function normalizeProductMetadata(raw: unknown): ProductMetadata {
+  if (!raw || typeof raw !== "object") return {};
+  const metadata = raw as Record<string, unknown>;
+  const role =
+    metadata.role === "PRIMARY" || metadata.role === "ALTERNATE" || metadata.role === "REFERENCE"
+      ? metadata.role
+      : metadata.assetRole === "PRIMARY" || metadata.assetRole === "ALTERNATE" || metadata.assetRole === "REFERENCE"
+        ? metadata.assetRole
+        : undefined;
+  return {
+    productId: typeof metadata.productId === "string" ? metadata.productId : undefined,
+    productName: typeof metadata.productName === "string" ? metadata.productName : undefined,
+    role,
+    assetRole: role,
+    isPrimaryProductImage:
+      typeof metadata.isPrimaryProductImage === "boolean"
+        ? metadata.isPrimaryProductImage
+        : role === "PRIMARY"
+          ? true
+          : undefined,
+    angle: typeof metadata.angle === "string" ? metadata.angle : undefined,
+    locked: typeof metadata.locked === "boolean" ? metadata.locked : undefined,
+    approvedForGeneration: typeof metadata.approvedForGeneration === "boolean" ? metadata.approvedForGeneration : undefined,
+    transparentBackground:
+      typeof metadata.transparentBackground === "boolean"
+        ? metadata.transparentBackground
+        : undefined,
+    originalAssetId: typeof metadata.originalAssetId === "string" ? metadata.originalAssetId : undefined,
+    exactProductMode: typeof metadata.exactProductMode === "boolean" ? metadata.exactProductMode : undefined,
+    allowAiMotion: typeof metadata.allowAiMotion === "boolean" ? metadata.allowAiMotion : undefined,
+    preserveOriginalAsset:
+      typeof metadata.preserveOriginalAsset === "boolean" ? metadata.preserveOriginalAsset : undefined,
+    originalStoragePath: typeof metadata.originalStoragePath === "string" ? metadata.originalStoragePath : undefined,
+    background: typeof metadata.background === "string" ? metadata.background : undefined,
+    position: typeof metadata.position === "string" ? metadata.position : undefined,
+    scale: typeof metadata.scale === "string" ? metadata.scale : undefined,
+    safeArea: typeof metadata.safeArea === "string" ? metadata.safeArea : undefined,
+    notes: typeof metadata.notes === "string" ? metadata.notes : undefined,
+  };
+}
+
+function readSceneProductLayer(scenes: unknown): {
+  assetId: string;
+  mode: "EXACT_PRODUCT" | "AI_PRODUCT_MOTION";
+  scenes: ProductLayerScene[];
+} | null {
+  if (!Array.isArray(scenes)) return null;
+  let elapsed = 0;
+  let assetId = "";
+  let mode: "EXACT_PRODUCT" | "AI_PRODUCT_MOTION" = "EXACT_PRODUCT";
+
+  const mapped = scenes
+    .map((scene, index) => {
+      const item = scene && typeof scene === "object" ? (scene as Record<string, unknown>) : {};
+      const seconds = Math.max(0.2, Number(item.seconds) || 1);
+      const startSeconds = elapsed;
+      const endSeconds = elapsed + seconds;
+      elapsed = endSeconds;
+      const sceneAssetId = typeof item.productAssetId === "string" ? item.productAssetId : "";
+      if (!assetId && sceneAssetId) assetId = sceneAssetId;
+
+      const sceneMode = item.productMode === "AI_PRODUCT_MOTION" ? "AI_PRODUCT_MOTION" : "EXACT_PRODUCT";
+      if (sceneMode === "AI_PRODUCT_MOTION") mode = "AI_PRODUCT_MOTION";
+
+      return {
+        order: Number(item.order) || index + 1,
+        startSeconds,
+        endSeconds,
+        position: typeof item.productPlacement === "string" ? item.productPlacement : undefined,
+        scale: typeof item.productScale === "string" ? item.productScale : undefined,
+        opacity: Number.isFinite(Number(item.productOpacity)) ? Number(item.productOpacity) : 1,
+        shadow: typeof item.productShadow === "boolean" ? item.productShadow : true,
+        rotationDegrees: Number.isFinite(Number(item.productRotation)) ? Number(item.productRotation) : undefined,
+        entrance:
+          item.productEntrance === "FADE_IN" || item.productEntrance === "SLIDE_UP"
+            ? item.productEntrance
+            : "NONE",
+        exit: item.productExit === "FADE_OUT" ? "FADE_OUT" : "NONE",
+        zoom:
+          item.productZoom === "ZOOM_IN" || item.productZoom === "ZOOM_OUT"
+            ? item.productZoom
+            : "NONE",
+      } satisfies ProductLayerScene;
+    })
+    .filter((scene) => scene.endSeconds > scene.startSeconds);
+
+  if (!assetId || !mapped.length) return null;
+  return { assetId, mode, scenes: mapped };
+}
+
+async function resolveSignedMediaUrl(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  storagePath: string,
+): Promise<string> {
+  const signed = await supabase.storage
+    .from("brand-media")
+    .createSignedUrl(storagePath, 60 * 60);
+  if (signed.error || !signed.data?.signedUrl) {
+    throw new Error("PRODUCT_ASSET_URL_UNAVAILABLE");
+  }
+  return signed.data.signedUrl;
+}
+
+async function buildCompositionOutput(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  workspaceId: string;
+  project: VideoProjectRow;
+  providerOutputUrl: string;
+}): Promise<{ videoBytes: Uint8Array; manifest: VideoCompositionManifest }> {
+  const expectsExactLayer = Array.isArray(input.project.scenes)
+    && input.project.scenes.some((scene) => {
+      const item = scene && typeof scene === "object" ? (scene as Record<string, unknown>) : null;
+      return item
+        && (item.productMode === "EXACT_PRODUCT"
+          || (typeof item.productAssetId === "string" && item.productAssetId.trim().length > 0));
+    });
+
+  const productLayer = readSceneProductLayer(input.project.scenes);
+  if (expectsExactLayer && !productLayer) {
+    throw new Error("EXACT_PRODUCT_LAYER_MISSING");
+  }
+  if (!productLayer || productLayer.mode !== "EXACT_PRODUCT") {
+    return composeVideoWithExactProduct({ providerOutputUrl: input.providerOutputUrl });
+  }
+
+  const { data: productAsset, error: productError } = await input.supabase
+    .from("media_assets")
+    .select("id,storage_path,metadata,file_name,mime_type,size_bytes")
+    .eq("workspace_id", input.workspaceId)
+    .eq("id", productLayer.assetId)
+    .maybeSingle();
+  if (productError || !productAsset?.storage_path) {
+    throw new Error("PRODUCT_ASSET_UNAVAILABLE");
+  }
+  if (!isSafeStoragePathForWorkspace(input.workspaceId, productAsset.storage_path)) {
+    throw new Error("PRODUCT_ASSET_PATH_INVALID");
+  }
+
+  const productMimeType = String(productAsset.mime_type || "").toLowerCase();
+  if (!SUPPORTED_PRODUCT_IMAGE_MIME_TYPES.has(productMimeType)) {
+    throw new Error("PRODUCT_ASSET_MIME_UNSUPPORTED");
+  }
+  if (Number(productAsset.size_bytes || 0) > MAX_PRODUCT_IMAGE_BYTES) {
+    throw new Error("PRODUCT_ASSET_TOO_LARGE");
+  }
+
+  const productMetadata = normalizeProductMetadata(
+    productAsset.metadata && typeof productAsset.metadata === "object"
+      ? ((productAsset.metadata as Record<string, unknown>).productAsset && typeof (productAsset.metadata as Record<string, unknown>).productAsset === "object"
+        ? (productAsset.metadata as Record<string, unknown>).productAsset
+        : productAsset.metadata)
+      : null,
+  );
+
+  if (productMetadata.approvedForGeneration !== true) {
+    throw new Error("PRODUCT_ASSET_NOT_APPROVED");
+  }
+
+  const productAssetUrl = await resolveSignedMediaUrl(input.supabase, productAsset.storage_path);
+  return composeVideoWithExactProduct({
+    providerOutputUrl: input.providerOutputUrl,
+    providerOutputSizeBytes: MAX_PROVIDER_OUTPUT_BYTES,
+    expectedDurationSeconds: Number(input.project.duration_seconds || 0),
+    productLayer: {
+      assetId: productAsset.id,
+      assetUrl: productAssetUrl,
+      assetMimeType: productMimeType,
+      assetSizeBytes: Number(productAsset.size_bytes || 0),
+      originalAssetId: productMetadata.originalAssetId || productAsset.id,
+      locked: productMetadata.locked ?? true,
+      approvedForGeneration: productMetadata.approvedForGeneration ?? false,
+      transparentBackground: productMetadata.transparentBackground ?? true,
+      scenes: productLayer.scenes,
+    },
+  });
+}
+
 function buildFallbackPlan(input: {
   channel: VideoProject["channel"];
   objective: string;
   message: string;
   callToAction: string;
   durationSeconds: VideoProject["durationSeconds"];
+  productAsset?: {
+    id: string;
+    name: string;
+    storagePath: string;
+    productMetadata?: {
+      productId?: string;
+      productName?: string;
+      role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+      angle?: string;
+      locked?: boolean;
+      approvedForGeneration?: boolean;
+      exactProductMode?: boolean;
+      allowAiMotion?: boolean;
+      preserveOriginalAsset?: boolean;
+      originalStoragePath?: string;
+      background?: string;
+      position?: string;
+      scale?: string;
+      safeArea?: string;
+      notes?: string;
+    };
+  };
+  exactProductMode?: boolean;
+  allowAiProductMotion?: boolean;
 }) {
   const total = input.durationSeconds;
   const first = Math.max(2, Math.floor(total * 0.35));
   const second = Math.max(2, Math.floor(total * 0.4));
   const third = Math.max(2, total - first - second);
+  const productMode: VideoProject["scenes"][number]["productMode"] = input.allowAiProductMotion
+    ? "AI_PRODUCT_MOTION"
+    : "EXACT_PRODUCT";
+  const defaultEntrance: NonNullable<VideoProject["scenes"][number]["productEntrance"]> = "FADE_IN";
+  const defaultExit: NonNullable<VideoProject["scenes"][number]["productExit"]> = "FADE_OUT";
+  const defaultZoom: NonNullable<VideoProject["scenes"][number]["productZoom"]> = "NONE";
   const title = `${input.channel} video: ${input.objective}`.slice(0, 120);
   const caption = `${input.objective}. ${input.callToAction}`.trim();
 
@@ -166,6 +457,8 @@ function buildFallbackPlan(input: {
       `Channel style: ${input.channel}`,
       `Duration: ${input.durationSeconds} seconds.`,
       "Use clean typography, readable overlays, and product-focused visuals.",
+      input.productAsset ? `Product asset: ${input.productAsset.name} (${input.productAsset.id})` : "",
+      input.exactProductMode ? "Exact product mode is required. Preserve the real product asset and keep logos and packaging copy unchanged." : "",
     ].join(" "),
     complianceNote: SAFE_FALLBACK_COMPLIANCE_NOTE,
     hashtags: ["#PostMotive", "#VideoMarketing"],
@@ -174,9 +467,23 @@ function buildFallbackPlan(input: {
       {
         order: 1,
         seconds: first,
-        visual: "Open with a striking product moment and clear subject framing.",
+        visual: input.productAsset ? `Open with ${input.productAsset.name} as the exact product reference and clear subject framing.` : "Open with a striking product moment and clear subject framing.",
         narration: input.message,
         onScreenText: input.objective,
+        productAssetId: input.productAsset?.id,
+        productAssetName: input.productAsset?.name,
+        productMode,
+        productPlacement: input.productAsset?.productMetadata?.position || "center frame",
+        productScale: input.productAsset?.productMetadata?.scale || "large and readable",
+        productOpacity: 1,
+        productShadow: true,
+        productEntrance: defaultEntrance,
+        productExit: defaultExit,
+        productZoom: defaultZoom,
+        productBackground: input.productAsset?.productMetadata?.background || "brand-safe neutral background",
+        productSafeArea: input.productAsset?.productMetadata?.safeArea || "leave room for overlays",
+        productLocked: input.productAsset?.productMetadata?.locked ?? true,
+        preserveOriginalAsset: input.productAsset?.productMetadata?.preserveOriginalAsset ?? true,
       },
       {
         order: 2,
@@ -184,6 +491,20 @@ function buildFallbackPlan(input: {
         visual: "Show benefits in motion with quick cuts and close details.",
         narration: "Show authentic use and practical value.",
         onScreenText: "Built for real moments",
+        productAssetId: input.productAsset?.id,
+        productAssetName: input.productAsset?.name,
+        productMode,
+        productPlacement: input.productAsset?.productMetadata?.position || "center frame",
+        productScale: input.productAsset?.productMetadata?.scale || "large and readable",
+        productOpacity: 1,
+        productShadow: true,
+        productEntrance: defaultEntrance,
+        productExit: defaultExit,
+        productZoom: defaultZoom,
+        productBackground: input.productAsset?.productMetadata?.background || "brand-safe neutral background",
+        productSafeArea: input.productAsset?.productMetadata?.safeArea || "leave room for overlays",
+        productLocked: input.productAsset?.productMetadata?.locked ?? true,
+        preserveOriginalAsset: input.productAsset?.productMetadata?.preserveOriginalAsset ?? true,
       },
       {
         order: 3,
@@ -191,6 +512,20 @@ function buildFallbackPlan(input: {
         visual: "Close with brand shot and direct call-to-action frame.",
         narration: input.callToAction,
         onScreenText: input.callToAction,
+        productAssetId: input.productAsset?.id,
+        productAssetName: input.productAsset?.name,
+        productMode,
+        productPlacement: input.productAsset?.productMetadata?.position || "center frame",
+        productScale: input.productAsset?.productMetadata?.scale || "large and readable",
+        productOpacity: 1,
+        productShadow: true,
+        productEntrance: defaultEntrance,
+        productExit: defaultExit,
+        productZoom: defaultZoom,
+        productBackground: input.productAsset?.productMetadata?.background || "brand-safe neutral background",
+        productSafeArea: input.productAsset?.productMetadata?.safeArea || "leave room for overlays",
+        productLocked: input.productAsset?.productMetadata?.locked ?? true,
+        preserveOriginalAsset: input.productAsset?.productMetadata?.preserveOriginalAsset ?? true,
       },
     ],
   };
@@ -329,6 +664,30 @@ async function generatePlan(input: {
   durationSeconds: VideoProject["durationSeconds"];
   voice: VideoProject["voice"];
   musicMode: VideoProject["musicMode"];
+  productAsset?: {
+    id: string;
+    name: string;
+    storagePath: string;
+    productMetadata?: {
+      productId?: string;
+      productName?: string;
+      role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+      angle?: string;
+      locked?: boolean;
+      approvedForGeneration?: boolean;
+      exactProductMode?: boolean;
+      allowAiMotion?: boolean;
+      preserveOriginalAsset?: boolean;
+      originalStoragePath?: string;
+      background?: string;
+      position?: string;
+      scale?: string;
+      safeArea?: string;
+      notes?: string;
+    };
+  };
+  exactProductMode?: boolean;
+  allowAiProductMotion?: boolean;
 }): Promise<{
   title: string;
   script: string;
@@ -371,12 +730,14 @@ async function generatePlan(input: {
             `Voice: ${input.voice}`,
             `Music mode: ${input.musicMode}`,
             `Call to action: ${input.callToAction}`,
+            input.productAsset ? `Product asset: ${input.productAsset.name} (${input.productAsset.id})` : "Product asset: none supplied",
           ],
           constraints: [
             "Create original 9:16 vertical-video material.",
             "Do not use real-person likenesses, celebrities, copyrighted characters, copyrighted music, or third-party watermarks.",
             "Never invent prices, discounts, certifications, testimonials, legal approval, or product claims.",
             "Include readable on-screen captions and a safe human-review note.",
+            input.productAsset ? "Use the supplied product asset as the authoritative visual reference and preserve packaging copy exactly." : "",
           ],
           requiredOutput: [
             "Return strict JSON only.",
@@ -392,6 +753,9 @@ async function generatePlan(input: {
             durationSeconds: input.durationSeconds,
             voice: input.voice,
             musicMode: input.musicMode,
+            productAsset: input.productAsset,
+            exactProductMode: input.exactProductMode,
+            allowAiProductMotion: input.allowAiProductMotion,
           }),
         }),
         max_output_tokens: 1800,
@@ -613,7 +977,8 @@ async function ensureGeneratedMediaAsset(input: {
   workspaceId: string;
   userId: string;
   project: VideoProjectRow;
-  outputUrl: string;
+  finalVideoBytes: Uint8Array;
+  manifest: VideoCompositionManifest;
 }): Promise<MediaAssetRow> {
   const existing = await input.supabase
     .from("media_assets")
@@ -626,12 +991,10 @@ async function ensureGeneratedMediaAsset(input: {
     return existing.data as MediaAssetRow;
   }
 
-  const upstream = await fetch(input.outputUrl, { cache: "no-store" });
-  if (!upstream.ok) {
-    throw new Error("VIDEO_OUTPUT_UNAVAILABLE");
+  const bytes = input.finalVideoBytes;
+  if (bytes.byteLength > MAX_COMPOSED_VIDEO_BYTES) {
+    throw new Error("COMPOSITION_OUTPUT_TOO_LARGE");
   }
-
-  const bytes = new Uint8Array(await upstream.arrayBuffer());
   const storagePath = `${input.workspaceId}/${input.userId}/generated-${input.project.id}.mp4`;
   const upload = await input.supabase
     .storage
@@ -660,6 +1023,7 @@ async function ensureGeneratedMediaAsset(input: {
       metadata: {
         videoProjectId: input.project.id,
         workflowKey: input.project.workflow_key,
+        compositionManifest: input.manifest,
       },
     } as never)
     .select("id,storage_path")
@@ -684,6 +1048,48 @@ async function ensureGeneratedMediaAsset(input: {
   return inserted.data as MediaAssetRow;
 }
 
+async function failFinalizationAndRefund(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  project: VideoProjectRow;
+  workflowKey: string;
+  error: unknown;
+}): Promise<{ failureReferenceId: string; reasonCode: string; message: string; refunded: boolean; blockedExactProduct: boolean }> {
+  const mapped = mapCompositionErrorToSafeReason(input.error);
+  let refunded = false;
+
+  if (input.project.credit_status !== "REFUNDED" && input.project.credit_request_id) {
+    const refund = await input.supabase.rpc("refund_my_video_credits", {
+      credit_request_id: input.project.credit_request_id,
+      refund_reason: "workflow-composition-failed",
+    });
+    refunded = !refund.error;
+  }
+
+  const failureReferenceId = input.project.failure_reference_id || newFailureReferenceId();
+  await updateProjectWorkflow({
+    supabase: input.supabase,
+    projectId: input.project.id,
+    workflowKey: input.workflowKey,
+    stage: "FAILED",
+    progress: Math.max(0, Math.min(89, input.project.workflow_percentage ?? input.project.provider_progress ?? 0)),
+    status: "FAILED",
+    providerStatus: "failed",
+    providerProgress: input.project.provider_progress ?? 0,
+    creditStatus: refunded || input.project.credit_status === "REFUNDED" ? "REFUNDED" : (input.project.credit_status || "RESERVED"),
+    creditRefundedAt: refunded ? new Date().toISOString() : input.project.credit_refunded_at,
+    failureReason: mapped.reasonCode,
+    failureReferenceId,
+  });
+
+  return {
+    failureReferenceId,
+    reasonCode: mapped.reasonCode,
+    message: mapped.message,
+    refunded: refunded || input.project.credit_status === "REFUNDED",
+    blockedExactProduct: mapped.blockedExactProduct,
+  };
+}
+
 async function finalizeCompletedProject(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   project: VideoProjectRow;
@@ -692,6 +1098,13 @@ async function finalizeCompletedProject(input: {
   providerOutputUrl: string;
   workflowKey: string;
 }) {
+  const composedOutput = await buildCompositionOutput({
+    supabase: input.supabase,
+    workspaceId: input.workspaceId,
+    project: input.project,
+    providerOutputUrl: input.providerOutputUrl,
+  });
+
   const existingMedia = input.project.media_asset_id && input.project.video_storage_path
     ? { id: input.project.media_asset_id, storage_path: input.project.video_storage_path }
     : await ensureGeneratedMediaAsset({
@@ -699,7 +1112,8 @@ async function finalizeCompletedProject(input: {
         workspaceId: input.workspaceId,
         userId: input.userId,
         project: input.project,
-        outputUrl: input.providerOutputUrl,
+        finalVideoBytes: composedOutput.videoBytes,
+        manifest: composedOutput.manifest,
       });
 
   await updateProjectWorkflow({
@@ -777,6 +1191,14 @@ export async function POST(request: Request) {
     const musicMode = text(body?.musicMode) as VideoProject["musicMode"];
     const requestedWorkflowKey = sanitizeWorkflowKey(body?.workflowKey);
     const requestedProjectId = text(body?.projectId);
+    const requestedProductAsset = body?.productAsset && typeof body.productAsset === "object"
+      ? (body.productAsset as {
+          id?: unknown;
+          name?: unknown;
+          storagePath?: unknown;
+          productMetadata?: unknown;
+        })
+      : null;
 
     if (
       !durationSeconds
@@ -791,6 +1213,114 @@ export async function POST(request: Request) {
     const { data: workspaceId, error: workspaceError } = await supabase.rpc("my_primary_workspace_id");
     if (workspaceError || !workspaceId) {
       return NextResponse.json({ error: "Save Business Setup before generating video." }, { status: 400 });
+    }
+
+    let planProductAsset:
+      | {
+          id: string;
+          name: string;
+          storagePath: string;
+          productMetadata?: {
+            productId?: string;
+            productName?: string;
+            role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+            angle?: string;
+            locked?: boolean;
+            approvedForGeneration?: boolean;
+            exactProductMode?: boolean;
+            allowAiMotion?: boolean;
+            preserveOriginalAsset?: boolean;
+            originalStoragePath?: string;
+            background?: string;
+            position?: string;
+            scale?: string;
+            safeArea?: string;
+            notes?: string;
+          };
+        }
+      | undefined;
+    const exactProductMode = Boolean(body?.exactProductMode ?? requestedProductAsset);
+    const allowAiProductMotion = Boolean(body?.allowAiProductMotion);
+
+    if (requestedProductAsset?.id) {
+      const { data: mediaRow, error: mediaError } = await supabase
+        .from("media_assets")
+        .select("id,file_name,storage_path,metadata,mime_type,size_bytes")
+        .eq("workspace_id", String(workspaceId))
+        .eq("id", text(requestedProductAsset.id))
+        .maybeSingle();
+      if (mediaError) {
+        const safeMessage = safeError((mediaError as { message?: string } | null | undefined)?.message) || "Selected product image could not be validated.";
+        return NextResponse.json({ error: safeMessage }, { status: 400 });
+      }
+      if (!mediaRow?.storage_path || !isSafeStoragePathForWorkspace(String(workspaceId), mediaRow.storage_path)) {
+        return NextResponse.json({ error: "Selected product image path is invalid." }, { status: 400 });
+      }
+      const mimeType = String(mediaRow.mime_type || "").toLowerCase();
+      if (!SUPPORTED_PRODUCT_IMAGE_MIME_TYPES.has(mimeType)) {
+        return NextResponse.json({ error: "Unsupported product image type. Use PNG, JPEG, or WEBP." }, { status: 400 });
+      }
+      if (Number(mediaRow.size_bytes || 0) > MAX_PRODUCT_IMAGE_BYTES) {
+        return NextResponse.json({ error: "Product image is too large for exact product rendering." }, { status: 400 });
+      }
+      const rawMetadata = mediaRow?.metadata && typeof mediaRow.metadata === "object"
+        ? (mediaRow.metadata.productAsset && typeof mediaRow.metadata.productAsset === "object"
+          ? mediaRow.metadata.productAsset
+          : mediaRow.metadata)
+        : null;
+      const requestMetadata = (requestedProductAsset.productMetadata && typeof requestedProductAsset.productMetadata === "object")
+        ? requestedProductAsset.productMetadata as {
+            productId?: string;
+            productName?: string;
+            role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+            angle?: string;
+            locked?: boolean;
+            approvedForGeneration?: boolean;
+            exactProductMode?: boolean;
+            allowAiMotion?: boolean;
+            preserveOriginalAsset?: boolean;
+            originalStoragePath?: string;
+            background?: string;
+            position?: string;
+            scale?: string;
+            safeArea?: string;
+            notes?: string;
+          }
+        : {};
+      const productMetadata = {
+        ...(rawMetadata && typeof rawMetadata === "object" ? rawMetadata : {}),
+        ...requestMetadata,
+      } as {
+        productId?: string;
+        productName?: string;
+        role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+        angle?: string;
+        locked?: boolean;
+        approvedForGeneration?: boolean;
+        exactProductMode?: boolean;
+        allowAiMotion?: boolean;
+        preserveOriginalAsset?: boolean;
+        originalStoragePath?: string;
+        background?: string;
+        position?: string;
+        scale?: string;
+        safeArea?: string;
+        notes?: string;
+      };
+      if (!productMetadata?.approvedForGeneration) {
+        return NextResponse.json({ error: "Select an approved product image before generating an exact product video." }, { status: 400 });
+      }
+      if (allowAiProductMotion && productMetadata.allowAiMotion !== true) {
+        return NextResponse.json({ error: "AI product motion needs explicit approval on the selected product image." }, { status: 400 });
+      }
+      planProductAsset = mediaRow
+        ? {
+            id: mediaRow.id,
+            name: mediaRow.file_name,
+            storagePath: mediaRow.storage_path,
+            productMetadata,
+          }
+        : undefined;
     }
 
     const workflowKey = requestedWorkflowKey || buildShortVideoWorkflowKey({
@@ -897,7 +1427,46 @@ export async function POST(request: Request) {
       durationSeconds,
       voice,
       musicMode,
+      productAsset: planProductAsset,
+      exactProductMode,
+      allowAiProductMotion,
     });
+    const defaultSceneEntrance: NonNullable<VideoProject["scenes"][number]["productEntrance"]> = "FADE_IN";
+    const defaultSceneExit: NonNullable<VideoProject["scenes"][number]["productExit"]> = "FADE_OUT";
+    const defaultSceneZoom: NonNullable<VideoProject["scenes"][number]["productZoom"]> = "NONE";
+    const scenes = plan.scenes.map((scene) =>
+      planProductAsset
+        ? {
+            ...scene,
+            productAssetId: planProductAsset.id,
+            productAssetName: planProductAsset.name,
+            productMode: allowAiProductMotion ? "AI_PRODUCT_MOTION" : "EXACT_PRODUCT",
+            productPlacement: planProductAsset.productMetadata?.position || "center frame",
+            productScale: planProductAsset.productMetadata?.scale || "large and readable",
+            productOpacity: Number.isFinite(Number((scene as { productOpacity?: unknown }).productOpacity))
+              ? Number((scene as { productOpacity?: unknown }).productOpacity)
+              : 1,
+            productShadow: typeof (scene as { productShadow?: unknown }).productShadow === "boolean"
+              ? Boolean((scene as { productShadow?: boolean }).productShadow)
+              : true,
+            productEntrance: (scene as { productEntrance?: unknown }).productEntrance === "FADE_IN"
+              || (scene as { productEntrance?: unknown }).productEntrance === "SLIDE_UP"
+              ? ((scene as { productEntrance?: "FADE_IN" | "SLIDE_UP" }).productEntrance)
+              : defaultSceneEntrance,
+            productExit: (scene as { productExit?: unknown }).productExit === "FADE_OUT"
+              ? "FADE_OUT"
+              : defaultSceneExit,
+            productZoom: (scene as { productZoom?: unknown }).productZoom === "ZOOM_IN"
+              || (scene as { productZoom?: unknown }).productZoom === "ZOOM_OUT"
+              ? ((scene as { productZoom?: "ZOOM_IN" | "ZOOM_OUT" }).productZoom)
+              : defaultSceneZoom,
+            productBackground: planProductAsset.productMetadata?.background || "brand-safe neutral background",
+            productSafeArea: planProductAsset.productMetadata?.safeArea || "leave room for overlays",
+            productLocked: planProductAsset.productMetadata?.locked ?? true,
+            preserveOriginalAsset: planProductAsset.productMetadata?.preserveOriginalAsset ?? true,
+          }
+        : scene,
+    );
 
     await updateProjectWorkflow({
       supabase,
@@ -991,7 +1560,7 @@ export async function POST(request: Request) {
       caption: plan.caption,
       hashtags: plan.hashtags,
       call_to_action: plan.callToAction,
-      scenes: plan.scenes,
+      scenes,
       duration_seconds: durationSeconds,
       aspect_ratio: "9:16",
       voice,
@@ -1192,14 +1761,38 @@ export async function GET(request: Request) {
         throw new Error("VIDEO_OUTPUT_UNAVAILABLE");
       }
 
-      const finalized = await finalizeCompletedProject({
-        supabase,
-        project,
-        workspaceId: String(workspaceId),
-        userId: user.sub,
-        providerOutputUrl: providerJob.outputUrl,
-        workflowKey: stableWorkflowKey,
-      });
+      let finalized: Awaited<ReturnType<typeof finalizeCompletedProject>>;
+      try {
+        finalized = await finalizeCompletedProject({
+          supabase,
+          project,
+          workspaceId: String(workspaceId),
+          userId: user.sub,
+          providerOutputUrl: providerJob.outputUrl,
+          workflowKey: stableWorkflowKey,
+        });
+      } catch (finalizeError) {
+        const failed = await failFinalizationAndRefund({
+          supabase,
+          project,
+          workflowKey: stableWorkflowKey,
+          error: finalizeError,
+        });
+        return NextResponse.json({
+          ok: true,
+          projectId: project.id,
+          workflowKey: stableWorkflowKey,
+          status: "failed",
+          stage: "FAILED",
+          progress: Math.max(0, Math.min(89, project.workflow_percentage ?? project.provider_progress ?? 0)),
+          providerStatus: "failed",
+          creditStatus: failed.refunded ? "REFUNDED" : (project.credit_status || "RESERVED"),
+          refunded: failed.refunded,
+          failureReferenceId: failed.failureReferenceId,
+          error: failed.message,
+          blockedExactProduct: failed.blockedExactProduct,
+        });
+      }
 
       return NextResponse.json({
         ok: true,
@@ -1212,6 +1805,7 @@ export async function GET(request: Request) {
         creditStatus: project.credit_status || "RESERVED",
         refunded: false,
         mediaAssetId: finalized.mediaAssetId,
+        videoStoragePath: finalized.storagePath,
         draftId: finalized.draftId,
       });
     }

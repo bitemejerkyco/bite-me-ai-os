@@ -494,6 +494,64 @@ export default function MediaLibrary({
     }
   };
 
+  const editProductAsset = async (asset: MediaAsset) => {
+    if (!capabilities.canEditTags) return;
+    const current = asset.productMetadata || {};
+    const productName = window.prompt("Product name", current.productName || asset.name);
+    if (productName === null) return;
+    const productId = window.prompt("Product ID", current.productId || "");
+    if (productId === null) return;
+    const role = window.prompt("Product role (PRIMARY, ALTERNATE, REFERENCE)", current.role || "PRIMARY");
+    if (role === null) return;
+    const angle = window.prompt("Product angle", current.angle || "FRONT");
+    if (angle === null) return;
+    const background = window.prompt("Product background", current.background || "brand-safe neutral background");
+    if (background === null) return;
+    const position = window.prompt("Product position", current.position || "center frame");
+    if (position === null) return;
+    const scale = window.prompt("Product scale", current.scale || "large and readable");
+    if (scale === null) return;
+    const safeArea = window.prompt("Product safe area", current.safeArea || "leave room for overlays");
+    if (safeArea === null) return;
+    const approvedForGeneration = window.confirm("Approve this image for exact product generation?");
+    const locked = window.confirm("Lock the product asset so it cannot be visually rewritten?");
+    const exactProductMode = window.confirm("Mark this as the default exact-product asset?");
+    const allowAiMotion = window.confirm("Allow AI product motion for this asset with explicit confirmation?");
+    const preserveOriginalAsset = window.confirm("Preserve the original uploaded file path?");
+    const nextMetadata: NonNullable<MediaAsset["productMetadata"]> = {
+      productId: productId.trim() || undefined,
+      productName: productName.trim() || undefined,
+      assetRole: (role === "ALTERNATE" || role === "REFERENCE" ? role : "PRIMARY") as NonNullable<MediaAsset["productMetadata"]>["assetRole"],
+      isPrimaryProductImage: (role === "ALTERNATE" || role === "REFERENCE") ? false : true,
+      role: (role === "ALTERNATE" || role === "REFERENCE" ? role : "PRIMARY") as NonNullable<MediaAsset["productMetadata"]>["role"],
+      angle: angle.trim() || undefined,
+      locked,
+      approvedForGeneration,
+      transparentBackground: true,
+      originalAssetId: asset.id,
+      exactProductMode,
+      allowAiMotion,
+      preserveOriginalAsset,
+      originalStoragePath: asset.storagePath,
+      background: background.trim() || undefined,
+      position: position.trim() || undefined,
+      scale: scale.trim() || undefined,
+      safeArea: safeArea.trim() || undefined,
+      notes: "Locked product asset for exact product generation.",
+    };
+    try {
+      await updateCloudMediaAsset(asset.id, { productMetadata: nextMetadata });
+      setAssets((currentAssets) =>
+        currentAssets.map((item) =>
+          item.id === asset.id ? { ...item, productMetadata: nextMetadata } : item,
+        ),
+      );
+      setMessage("Product metadata saved.");
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Unable to update product metadata.");
+    }
+  };
+
   const toggleFavorite = async (asset: MediaAsset) => {
     if (!capabilities.canFavorite) return;
     const nextFavorite = !asset.isFavorite;
@@ -1067,6 +1125,13 @@ export default function MediaLibrary({
                     {resolved?.usageRightsStatus === "EXPIRING" ? (
                       <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">Usage rights expiring soon</p>
                     ) : null}
+                    {asset.productMetadata ? (
+                      <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
+                        <p className="font-semibold">Locked product asset</p>
+                        <p className="mt-1">{asset.productMetadata.productName || asset.name} · {asset.productMetadata.role || "PRIMARY"} · {asset.productMetadata.angle || "FRONT"}</p>
+                        <p className="mt-1">{asset.productMetadata.approvedForGeneration ? "Approved for exact product generation" : "Not approved for generation"}</p>
+                      </div>
+                    ) : null}
 
                     {previewUnavailable ? (
                       <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
@@ -1083,6 +1148,7 @@ export default function MediaLibrary({
                     <div className="flex flex-wrap gap-2 text-xs">
                       <button type="button" onClick={() => openPreview(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">View</button>
                       <button type="button" onClick={() => void downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Download</button>
+                      <button type="button" onClick={() => void editProductAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Product settings</button>
                       {capabilities.canRename ? <button type="button" onClick={() => void renameAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Rename</button> : null}
                       {capabilities.canEditTags ? <button type="button" onClick={() => void addTags(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Edit tags</button> : null}
                       {capabilities.canMoveFolder ? (
