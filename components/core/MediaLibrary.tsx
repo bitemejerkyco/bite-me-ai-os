@@ -46,6 +46,7 @@ import {
   applyArchiveUpdate,
   applyFavoriteUpdate,
 } from "@/features/media/media-asset-updates";
+import { isExplicitProductAsset } from "@/features/core/product-asset-selector";
 import {
   DEFAULT_MEDIA_CAPABILITIES,
   type MediaCapabilities,
@@ -578,7 +579,7 @@ export default function MediaLibrary({
   };
 
   const editProductAsset = async (asset: MediaAsset) => {
-    if (!capabilities.canEditTags) return;
+    if (!capabilities.canEditTags || !isExplicitProductAsset(asset)) return;
     const current = asset.productMetadata || {};
     const productName = window.prompt("Product name", current.productName || asset.name);
     if (productName === null) return;
@@ -1275,11 +1276,16 @@ export default function MediaLibrary({
                     {resolved?.usageRightsStatus === "EXPIRING" ? (
                       <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">Usage rights expiring soon</p>
                     ) : null}
-                    {asset.productMetadata ? (
+                    {isExplicitProductAsset(asset) && asset.productMetadata ? (
                       <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
                         <p className="font-semibold">Locked product asset</p>
                         <p className="mt-1">{asset.productMetadata.productName || asset.name} · {asset.productMetadata.role || "PRIMARY"} · {asset.productMetadata.angle || "FRONT"}</p>
                         <p className="mt-1">{asset.productMetadata.approvedForGeneration ? "Approved for exact product generation" : "Not approved for generation"}</p>
+                      </div>
+                    ) : asset.createdWithLockedProduct ? (
+                      <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+                        <p className="font-semibold">Created with locked product</p>
+                        <p className="mt-1">This asset was rendered from a locked product reference.</p>
                       </div>
                     ) : null}
 
@@ -1298,7 +1304,7 @@ export default function MediaLibrary({
                     <div className="flex flex-wrap gap-2 text-xs">
                       <button type="button" onClick={() => openPreview(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">View</button>
                       <button type="button" onClick={() => void downloadAsset(asset.id)} className="rounded border border-slate-200 bg-white px-2 py-1">Download</button>
-                      <button type="button" onClick={() => void editProductAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Product settings</button>
+                      {isExplicitProductAsset(asset) ? <button type="button" onClick={() => void editProductAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Product settings</button> : null}
                       {capabilities.canRename ? <button type="button" onClick={() => void renameAsset(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Rename</button> : null}
                       {capabilities.canEditTags ? <button type="button" onClick={() => void addTags(asset)} className="rounded border border-slate-200 bg-white px-2 py-1">Edit tags</button> : null}
                       {capabilities.canMoveFolder ? (

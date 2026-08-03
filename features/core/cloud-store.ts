@@ -16,6 +16,10 @@ import {
   type ScheduledPost,
   type WorkspaceProfile,
 } from "@/features/core/local-os";
+import {
+  hasLockedProductUsage,
+  isExplicitProductAsset,
+} from "@/features/core/product-asset-selector";
 import type {
   CreativeVersion,
   VideoProject,
@@ -269,6 +273,7 @@ export async function saveCloudCampaign(campaign: CampaignPlan): Promise<void> {
 
 type MediaRow = {
   id: string;
+  workspace_id: string;
   storage_path: string;
   file_name: string;
   asset_type: string;
@@ -364,13 +369,15 @@ function mergedMetadataPayload(
 }
 
 function mediaFromRow(row: MediaRow): MediaAsset {
-  return {
+  const productMetadata = readProductMetadata(row);
+  const asset: MediaAsset = {
     id: row.id,
     name: row.file_name,
     type: row.mime_type || row.asset_type || "application/octet-stream",
     size: Number(row.size_bytes),
     tags: row.tags || [],
     createdAt: row.created_at,
+    workspaceId: row.workspace_id,
     storagePath: row.storage_path,
     folderId: row.folder_id || undefined,
     source: row.source || undefined,
@@ -385,7 +392,13 @@ function mediaFromRow(row: MediaRow): MediaAsset {
       : undefined,
     archivedAt: row.archived_at || undefined,
     isFavorite: row.is_favorite ?? false,
-    productMetadata: readProductMetadata(row),
+    productMetadata,
+    createdWithLockedProduct: hasLockedProductUsage(row.metadata),
+  };
+
+  return {
+    ...asset,
+    productMetadata: isExplicitProductAsset(asset) ? productMetadata : undefined,
   };
 }
 

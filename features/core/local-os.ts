@@ -98,6 +98,7 @@ export type MediaAsset = {
   size: number;
   tags: string[];
   createdAt: string;
+  workspaceId?: string;
   storagePath?: string;
   folderId?: string;
   isFavorite?: boolean;
@@ -110,6 +111,7 @@ export type MediaAsset = {
   height?: number;
   durationSeconds?: number;
   archivedAt?: string;
+  createdWithLockedProduct?: boolean;
   productMetadata?: {
     productId?: string;
     productName?: string;

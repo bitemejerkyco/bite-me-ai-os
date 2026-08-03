@@ -4,9 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
 import { getWorkspaceRole } from "@/features/platform/workspace-roles";
 import { mediaCapabilitiesForRole } from "@/features/media/media-capabilities";
+import {
+  hasLockedProductUsage,
+  isExplicitProductAsset,
+} from "@/features/core/product-asset-selector";
 
 type MediaAssetRow = {
   id: string;
+  workspace_id: string;
   storage_path: string;
   file_name: string;
   asset_type: string;
@@ -51,7 +56,7 @@ export default async function MediaPage({
     getWorkspaceRole({ workspaceId: context.workspaceId, userId: context.userId }),
     supabase
       .from("media_assets")
-      .select("id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at,is_favorite,metadata")
+      .select("id,workspace_id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at,is_favorite,metadata")
       .eq("workspace_id", context.workspaceId)
       .order("created_at", { ascending: false }),
     supabase
@@ -72,6 +77,7 @@ export default async function MediaPage({
     size: Number(row.size_bytes),
     tags: row.tags || [],
     createdAt: row.created_at,
+    workspaceId: row.workspace_id,
     storagePath: row.storage_path,
     folderId: row.folder_id || undefined,
     source: row.source || undefined,
@@ -84,6 +90,7 @@ export default async function MediaPage({
     durationSeconds: Number.isFinite(row.duration_seconds) ? Number(row.duration_seconds) : undefined,
     archivedAt: row.archived_at || undefined,
     isFavorite: row.is_favorite ?? false,
+    createdWithLockedProduct: hasLockedProductUsage(row.metadata),
     productMetadata: row.metadata && typeof row.metadata === "object"
       ? ((row.metadata.productAsset && typeof row.metadata.productAsset === "object"
         ? row.metadata.productAsset
@@ -109,6 +116,9 @@ export default async function MediaPage({
           notes?: string;
         })
       : undefined,
+  })).map((asset) => ({
+    ...asset,
+    productMetadata: isExplicitProductAsset(asset, context.workspaceId) ? asset.productMetadata : undefined,
   }));
 
   const initialFolders = ((foldersData || []) as LibraryFolderRow[]).map((row) => ({

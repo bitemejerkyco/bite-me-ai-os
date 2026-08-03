@@ -3,6 +3,7 @@ import { requireWorkspaceContext } from "@/features/marketing-director/workspace
 import { rowBelongsToWorkspace } from "@/features/media/workspace-access";
 import {
   MAX_PRODUCT_IMAGE_BYTES,
+  isExplicitProductAsset,
   isProductImageType,
 } from "@/features/core/product-asset-selector";
 
@@ -108,6 +109,7 @@ function mapAsset(row: MediaAssetRow) {
   const metadata = readProductMetadata(row);
   return {
     id: row.id,
+    workspaceId: row.workspace_id,
     name: row.file_name,
     storagePath: row.storage_path,
     type: row.mime_type || "",
@@ -138,12 +140,13 @@ export async function GET(request: Request) {
 
     const rows = ((data || []) as MediaAssetRow[])
       .filter((row) => rowBelongsToWorkspace(context.workspaceId, row.workspace_id))
+      .filter((row) => row.archived_at === null)
       .filter((row) => isProductImageType(text(row.mime_type).toLowerCase()))
       .filter((row) => isSafeStoragePathForWorkspace(context.workspaceId, row.storage_path));
 
     const assets = rows
       .map(mapAsset)
-      .filter((asset) => includeAll || asset.approvedForGeneration);
+      .filter((asset) => includeAll || isExplicitProductAsset(asset, context.workspaceId));
 
     return NextResponse.json({ ok: true, assets }, { headers: { "cache-control": "no-store" } });
   } catch (caught) {

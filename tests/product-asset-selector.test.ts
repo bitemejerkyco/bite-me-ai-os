@@ -6,6 +6,8 @@ import {
   applyProductSceneMetadata,
   buildProductAssetChoices,
   deriveSelectedProductAssetFromProject,
+  hasLockedProductUsage,
+  isExplicitProductAsset,
   validateProductImageUpload,
 } from "@/features/core/product-asset-selector";
 
@@ -52,34 +54,155 @@ describe("product asset selector helpers", () => {
   it("shows only approved workspace images by default", () => {
     const choices = buildProductAssetChoices([
       media({
-        id: "asset-approved",
+        id: "asset-approved-png",
+        name: "approved-a.png",
+        workspaceId: "workspace-1",
+        productMetadata: { approvedForGeneration: true },
+      }),
+      media({
+        id: "asset-approved-jpeg",
+        name: "approved-b.jpeg",
+        type: "image/jpeg",
+        workspaceId: "workspace-1",
+        productMetadata: { approvedForGeneration: true },
+      }),
+      media({
+        id: "asset-approved-webp",
+        name: "approved-c.webp",
+        type: "image/webp",
+        workspaceId: "workspace-1",
         productMetadata: { approvedForGeneration: true },
       }),
       media({
         id: "asset-unapproved",
+        workspaceId: "workspace-1",
         productMetadata: { approvedForGeneration: false },
       }),
       media({
         id: "asset-video",
+        workspaceId: "workspace-1",
         type: "video/mp4",
       }),
-    ]);
+      media({
+        id: "asset-archived",
+        workspaceId: "workspace-1",
+        archivedAt: new Date().toISOString(),
+        productMetadata: { approvedForGeneration: true },
+      }),
+      media({
+        id: "asset-other-workspace",
+        workspaceId: "workspace-2",
+        productMetadata: { approvedForGeneration: true },
+      }),
+    ], { activeWorkspaceId: "workspace-1" });
 
-    expect(choices.map((item) => item.id)).toEqual(["asset-approved"]);
+    expect(choices.map((item) => item.id).sort()).toEqual([
+      "asset-approved-jpeg",
+      "asset-approved-png",
+      "asset-approved-webp",
+    ]);
   });
 
   it("can include unapproved workspace images for approval workflows", () => {
     const choices = buildProductAssetChoices(
       [
-        media({ id: "approved", productMetadata: { approvedForGeneration: true } }),
-        media({ id: "unapproved", productMetadata: { approvedForGeneration: false } }),
+        media({ id: "approved", workspaceId: "workspace-1", productMetadata: { approvedForGeneration: true } }),
+        media({ id: "unapproved", workspaceId: "workspace-1", productMetadata: { approvedForGeneration: false } }),
       ],
-      { includeUnapproved: true },
+      { includeUnapproved: true, activeWorkspaceId: "workspace-1" },
     );
 
     expect(choices.map((item) => item.id)).toEqual(["approved", "unapproved"]);
   });
 
+  it("treats only approved workspace images as explicit product assets", () => {
+    expect(
+      isExplicitProductAsset(
+        media({
+          id: "family.png",
+          workspaceId: "workspace-1",
+          productMetadata: { productName: "family", approvedForGeneration: true },
+        }),
+        "workspace-1",
+      ),
+    ).toBe(true);
+
+    expect(
+      isExplicitProductAsset(
+        media({
+          id: "draft.png",
+          workspaceId: "workspace-1",
+          productMetadata: { productName: "draft", approvedForGeneration: false },
+        }),
+        "workspace-1",
+      ),
+    ).toBe(false);
+
+    expect(
+      isExplicitProductAsset(
+        media({
+          id: "render.mp4",
+          workspaceId: "workspace-1",
+          type: "video/mp4",
+          productMetadata: { approvedForGeneration: true },
+        }),
+        "workspace-1",
+      ),
+    ).toBe(false);
+
+    expect(
+      isExplicitProductAsset(
+        media({
+          id: "foreign.png",
+          workspaceId: "workspace-2",
+          productMetadata: { approvedForGeneration: true },
+        }),
+        "workspace-1",
+      ),
+    ).toBe(false);
+
+    expect(
+      isExplicitProductAsset(
+        media({
+          id: "archived.png",
+          workspaceId: "workspace-1",
+          archivedAt: new Date().toISOString(),
+          productMetadata: { approvedForGeneration: true },
+        }),
+        "workspace-1",
+      ),
+    ).toBe(false);
+  });
+
+  it("tracks locked-product usage separately from explicit product assets", () => {
+    expect(
+      hasLockedProductUsage({
+        compositionManifest: {
+          layers: [
+            {
+              type: "product",
+              locked: true,
+              approvedForGeneration: true,
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      hasLockedProductUsage({
+        compositionManifest: {
+          layers: [
+            {
+              type: "video",
+              locked: true,
+              approvedForGeneration: true,
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+  });
   it("rejects unsupported upload types and oversized uploads", () => {
     expect(
       validateProductImageUpload({
@@ -114,6 +237,7 @@ describe("product asset selector helpers", () => {
         name: "asset-1.png",
         storagePath: "workspace-1/user-1/asset-1.png",
         type: "image/png",
+        workspaceId: "workspace-1",
         tags: ["product"],
         productMetadata: { approvedForGeneration: true },
       },
