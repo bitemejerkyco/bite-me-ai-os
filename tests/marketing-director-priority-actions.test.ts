@@ -123,7 +123,7 @@ describe("marketing director priority actions", () => {
 
     const approvalAction = actions.find((action) => action.id === "approve-content-drafts");
     expect(approvalAction).toBeTruthy();
-    expect(approvalAction?.href).toBe("/content-library?status=awaiting-approval");
+    expect(approvalAction?.href).toBe("/media?tab=CONTENT_DRAFTS");
     expect(approvalAction?.ctaLabel.trim().length).toBeGreaterThan(0);
     expect(approvalAction?.supportingMetric).toContain("awaiting approval");
   });

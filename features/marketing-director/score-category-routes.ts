@@ -2,8 +2,8 @@ import { type MarketingScoreCategoryKey } from "@/features/marketing-director/ma
 
 export const SCORE_CATEGORY_DESTINATIONS: Record<MarketingScoreCategoryKey, string> = {
   brandFoundation: "/onboarding",
-  contentConsistency: "/content-library",
-  contentReadiness: "/content-library?status=awaiting-approval",
+  contentConsistency: "/media?tab=CONTENT_DRAFTS",
+  contentReadiness: "/media?tab=CONTENT_DRAFTS",
   channelConnections: "/integrations",
   campaignActivity: "/marketing/campaigns",
   analyticsCoverage: "/analytics",
@@ -25,9 +25,9 @@ export function recommendationActionForCategory(category: MarketingScoreCategory
     case "analyticsCoverage":
       return { label: "Connect analytics", href: "/integrations" };
     case "audienceEngagement":
-      return { label: "Open content recommendations", href: "/content-library" };
+      return { label: "Open content recommendations", href: "/media?tab=CONTENT_DRAFTS" };
     case "contentReadiness":
-      return { label: "Review drafts", href: "/content-library?status=awaiting-approval" };
+      return { label: "Review drafts", href: "/media?tab=CONTENT_DRAFTS" };
     case "paidMediaHealth":
       return { label: "Open integrations", href: "/integrations" };
     case "emailHealth":
@@ -42,6 +42,6 @@ export function recommendationActionForCategory(category: MarketingScoreCategory
       return { label: "Review settings", href: "/settings" };
     case "contentConsistency":
     default:
-      return { label: "Open content library", href: "/content-library" };
+      return { label: "Open content library", href: "/media?tab=CONTENT_DRAFTS" };
   }
 }

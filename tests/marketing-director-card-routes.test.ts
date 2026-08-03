@@ -17,7 +17,7 @@ describe("marketing director card routes", () => {
     expect(EXECUTIVE_CARD_DESTINATIONS.biggest_opportunity).toBe("/analytics/executive-brief");
     expect(EXECUTIVE_CARD_DESTINATIONS.biggest_risk).toBe("/analytics/executive-brief");
     expect(EXECUTIVE_CARD_DESTINATIONS.active_campaigns).toBe("/marketing/campaigns");
-    expect(EXECUTIVE_CARD_DESTINATIONS.content_awaiting_approval).toBe("/content-library?status=awaiting-approval");
+    expect(EXECUTIVE_CARD_DESTINATIONS.content_awaiting_approval).toBe("/media?tab=CONTENT_DRAFTS");
     expect(EXECUTIVE_CARD_DESTINATIONS.scheduled_posts).toBe("/calendar?view=scheduled");
     expect(EXECUTIVE_CARD_DESTINATIONS.connected_channels).toBe("/integrations");
   });

@@ -36,9 +36,7 @@ export default function ExecutiveDashboard() {
           cloudDrafts.length ? cloudDrafts : loadLocal(scopedDraftKey, []),
         );
         setCampaigns(
-          cloudCampaigns.length
-            ? cloudCampaigns
-            : loadLocal(scopedCampaignKey, []),
+          cloudCampaigns.length ? cloudCampaigns : loadLocal(scopedCampaignKey, []),
         );
         setMedia(
           cloudMedia.length ? cloudMedia : loadLocal(scopedMediaKey, []),
@@ -80,8 +78,8 @@ export default function ExecutiveDashboard() {
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             ["Active campaigns", active, "/marketing"],
-            ["Content drafts", drafts.length, "/content?status=DRAFT"],
-            ["Approved content", approved, "/content?status=APPROVED"],
+            ["Content drafts", drafts.length, "/media?tab=CONTENT_DRAFTS"],
+            ["Approved content", approved, "/media?tab=APPROVED"],
             ["Media assets", media.length, "/media"],
           ].map(([label, value, href]) => (
             <Link

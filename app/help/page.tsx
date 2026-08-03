@@ -5,7 +5,7 @@ import { buildDocumentationMetadata } from "@/features/help/documentation-metada
 
 export default function HelpPage() {
   const metadata = buildDocumentationMetadata();
-  const gettingStarted = metadata.pages.filter((page) => ["/", "/onboarding", "/integrations", "/studio", "/content"].includes(page.route));
+  const gettingStarted = metadata.pages.filter((page) => ["/", "/onboarding", "/integrations", "/studio", "/media?tab=CONTENT_DRAFTS"].includes(page.route));
 
   return (
     <AppShell title="Help & Academy" eyebrow="Interactive guidance and searchable support">

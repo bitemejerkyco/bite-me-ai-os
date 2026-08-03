@@ -346,7 +346,7 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
             recommendationId,
             kind: "VIEW_DRAFT",
             label: "View Draft",
-            href: input.draftId ? `/content-library?draft=${input.draftId}` : "/content-library",
+            href: input.draftId ? `/media?tab=CONTENT_DRAFTS&draft=${input.draftId}` : "/media?tab=CONTENT_DRAFTS",
             primary: true,
             disabled: !input.draftId,
             disabledReason: !input.draftId ? "Draft not available yet." : undefined,
@@ -355,7 +355,7 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
             recommendationId,
             kind: "EDIT_DRAFT",
             label: "Edit",
-            href: input.draftId ? `/content-library?draft=${input.draftId}&edit=true` : "/content-library",
+            href: input.draftId ? `/media?tab=CONTENT_DRAFTS&draft=${input.draftId}&edit=true` : "/media?tab=CONTENT_DRAFTS",
             disabled: !input.draftId,
             disabledReason: !input.draftId ? "Draft not available yet." : undefined,
           }),
@@ -398,7 +398,7 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
             recommendationId,
             kind: "VIEW_DRAFT",
             label: "View Draft",
-            href: input.draftId ? `/content-library?draft=${input.draftId}` : "/content-library",
+            href: input.draftId ? `/media?tab=CONTENT_DRAFTS&draft=${input.draftId}` : "/media?tab=CONTENT_DRAFTS",
             primary: true,
           }),
           buildAction({
@@ -437,7 +437,7 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
           recommendationId,
           kind: "VIEW_DRAFT",
           label: "Open Content Library",
-          href: "/content-library?status=awaiting-approval",
+          href: "/media?tab=CONTENT_DRAFTS",
         }),
       );
       addDismissAndDefer();
@@ -499,7 +499,7 @@ export function resolveRecommendationActions(input: ResolveRecommendationActions
           recommendationId,
           kind: "DUPLICATE_CONTENT",
           label: "Duplicate",
-          href: input.draftId ? `/content-library?draft=${input.draftId}&duplicate=true` : "/content-library",
+          href: input.draftId ? `/media?tab=CONTENT_DRAFTS&draft=${input.draftId}&duplicate=true` : "/media?tab=CONTENT_DRAFTS",
         }),
         buildAction({
           recommendationId,

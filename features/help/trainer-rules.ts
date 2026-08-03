@@ -47,7 +47,7 @@ export function resolveTrainerPrompt(input: TrainerSignalInput): TrainerPrompt |
     };
   }
 
-  if (input.route === "/content" && input.visitCount >= 2 && input.secondsOnPage >= 35) {
+  if (input.route === "/media?tab=CONTENT_DRAFTS" && input.visitCount >= 2 && input.secondsOnPage >= 35) {
     return {
       promptKey: "content-review-help",
       title: "Need help moving a draft forward?",

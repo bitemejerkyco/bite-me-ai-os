@@ -10,7 +10,7 @@ export function buildUserGuideSections() {
     { title: "Dashboard", routes: ["/"] },
     { title: "Marketing Director", routes: ["/", "/settings/marketing-director"] },
     { title: "Content Generation", routes: ["/studio"] },
-    { title: "Content Library", routes: ["/content"] },
+    { title: "Content Library", routes: ["/media?tab=CONTENT_DRAFTS"] },
     { title: "Media Library", routes: ["/media"] },
     { title: "Campaigns", routes: ["/marketing/campaigns"] },
     { title: "Creator Hub", routes: ["/creators", "/creators/discover", "/creators/pipeline", "/creators/campaigns", "/creators/content-review", "/creators/ugc", "/creators/analytics"] },

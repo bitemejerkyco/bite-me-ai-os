@@ -9,7 +9,7 @@ describe("help registry coverage", () => {
     const routes = new Set(PAGE_HELP_REGISTRY.map((entry) => entry.route));
     [
       "/",
-      "/content",
+      "/media?tab=CONTENT_DRAFTS",
       "/media",
       "/calendar",
       "/integrations",
@@ -46,7 +46,7 @@ describe("help registry coverage", () => {
 
   it("provides walkthroughs for Monday priority flows", () => {
     const walkthroughRoutes = new Set(WALKTHROUGH_REGISTRY.map((item) => item.route));
-    ["/", "/content", "/integrations"].forEach((route) => {
+    ["/", "/media?tab=CONTENT_DRAFTS", "/integrations"].forEach((route) => {
       expect(walkthroughRoutes.has(route)).toBe(true);
     });
   });

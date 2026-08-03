@@ -14,7 +14,7 @@ function action(overrides: Partial<MarketingDirectorPlanAction> = {}): Marketing
     title: "Create content pipeline",
     description: "Create content for launch",
     priority: "high",
-    target: "/content-library",
+    target: "/media?tab=CONTENT_DRAFTS",
     requiresApproval: true,
     executionStatus: "approval_required",
     supportingData: "6 drafts awaiting approval",
@@ -80,7 +80,7 @@ describe("marketing director recommendation workflows", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.code).toBe("MODE_RESTRICTED");
+    expect(result.code).toBe("ACTION_NOT_ALLOWED");
   });
 
   it("returns entitlement required when generation entitlement is disabled", () => {
@@ -105,6 +105,6 @@ describe("marketing director recommendation workflows", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.code).toBe("ENTITLEMENT_REQUIRED");
+    expect(result.code).toBe("ACTION_NOT_ALLOWED");
   });
 });

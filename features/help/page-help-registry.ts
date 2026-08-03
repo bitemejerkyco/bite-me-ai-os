@@ -69,14 +69,14 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
     ],
     relatedPages: [
       { label: "Business Setup", href: "/onboarding" },
-      { label: "Content Library", href: "/content" },
+      { label: "Content Library", href: "/media?tab=CONTENT_DRAFTS" },
       { label: "Integrations", href: "/integrations" },
     ],
     academyLessonId: "welcome-postmotive",
   },
   {
     id: "content-library",
-    route: "/content",
+    route: "/media?tab=CONTENT_DRAFTS",
     title: "Content Library",
     shortDescription: "Review, organize, and prepare drafts before they move into approval or scheduling.",
     purpose: "This page stores saved drafts, folders, media associations, and approval-ready content states.",
@@ -162,7 +162,7 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
     relatedPages: [
       { label: "Publishing Queue", href: "/publishing-queue" },
       { label: "Knowledge Base", href: "/knowledge" },
-      { label: "Content Library", href: "/content" },
+      { label: "Content Library", href: "/media?tab=CONTENT_DRAFTS" },
     ],
     academyLessonId: "schedule-first-post",
   },
@@ -191,7 +191,7 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
     ],
     relatedPages: [
       { label: "AI Studio", href: "/studio" },
-      { label: "Content Library", href: "/content" },
+      { label: "Content Library", href: "/media?tab=CONTENT_DRAFTS" },
     ],
     academyLessonId: "generate-first-plan",
   },
@@ -220,7 +220,7 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
     ],
     relatedPages: [
       { label: "AI Studio", href: "/studio" },
-      { label: "Content Library", href: "/content" },
+      { label: "Content Library", href: "/media?tab=CONTENT_DRAFTS" },
     ],
     academyLessonId: "generate-first-plan",
   },
@@ -718,7 +718,7 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
       { question: "Where do approved items go next?", answer: "That depends on the workflow, but common next stops are the calendar, publishing queue, or a related content record." },
     ],
     relatedPages: [
-      { label: "Content Library", href: "/content" },
+      { label: "Content Library", href: "/media?tab=CONTENT_DRAFTS" },
       { label: "Publishing Queue", href: "/publishing-queue" },
       { label: "Marketing Director Settings", href: "/settings/marketing-director" },
     ],
@@ -853,7 +853,7 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
     quickStartSteps: [
       { id: "studio-start-1", title: "Bring campaign context", description: "Use a campaign or dashboard recommendation as the source of truth for the request.", route: "/marketing/campaigns" },
       { id: "studio-start-2", title: "Create the first draft", description: "Generate content or video direction based on the goal and channel.", route: "/studio" },
-      { id: "studio-start-3", title: "Save to the library", description: "Move usable content into the Content Library for review.", route: "/content" },
+      { id: "studio-start-3", title: "Save to the library", description: "Move usable content into the Content Library for review.", route: "/media?tab=CONTENT_DRAFTS" },
     ],
     tips: [
       "Specific inputs usually produce safer and more reusable drafts.",
@@ -865,7 +865,7 @@ export const PAGE_HELP_REGISTRY: PageHelpEntry[] = [
       { question: "What helps the studio most?", answer: "A saved workspace profile, uploaded media, connected channels, and a clear campaign objective." },
     ],
     relatedPages: [
-      { label: "Content Library", href: "/content" },
+      { label: "Content Library", href: "/media?tab=CONTENT_DRAFTS" },
       { label: "Media Library", href: "/media" },
       { label: "Campaigns", href: "/marketing/campaigns" },
     ],
