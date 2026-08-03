@@ -26,6 +26,14 @@ import {
   saveAIStudioRecovery,
 } from "@/features/core/ai-studio-recovery";
 import { isShortFormVideoChannel } from "@/features/core/video-post";
+import {
+  CREATION_MODES,
+  type CreationMode,
+} from "@/features/core/creative-spec";
+import {
+  listTemplatesForMode,
+  resolveCreatorTemplate,
+} from "@/features/core/creator-template-catalog";
 
 const EMPTY_WORKSPACE: WorkspaceProfile = {
   businessName: "",
@@ -56,6 +64,16 @@ export default function AIStudio() {
   const [creationMode, setCreationMode] = useState<"CONTENT" | "VIDEO">(
     "VIDEO",
   );
+  const [creatorMode, setCreatorMode] = useState<CreationMode>("PRODUCT_DEMO");
+  const [creatorTemplateId, setCreatorTemplateId] = useState("template-pattern-interrupt");
+  const [creatorConcept, setCreatorConcept] = useState(
+    "Feature one flagship product in dynamic lifestyle moments.",
+  );
+
+  const creatorTemplates = listTemplatesForMode(creatorMode);
+  const visibleTemplates = creatorTemplates.length
+    ? creatorTemplates
+    : [resolveCreatorTemplate(null)];
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -293,6 +311,22 @@ export default function AIStudio() {
     }
   };
 
+  const applyCreatorMode = (mode: CreationMode) => {
+    setCreatorMode(mode);
+    const nextTemplate = listTemplatesForMode(mode)[0] || resolveCreatorTemplate(null);
+    setCreatorTemplateId(nextTemplate.id);
+    setCreatorConcept(nextTemplate.defaultConcept);
+  };
+
+  const applyTemplate = (templateId: string) => {
+    const template = resolveCreatorTemplate(templateId);
+    setCreatorTemplateId(template.id);
+    setCreatorMode(template.creationMode);
+    setCreatorConcept((current) =>
+      current.trim().length > 0 ? current : template.defaultConcept,
+    );
+  };
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap gap-3 rounded-2xl border border-slate-200/80 bg-white/80 p-2">
@@ -318,7 +352,61 @@ export default function AIStudio() {
         </button>
       </div>
       {creationMode === "VIDEO" ? (
-        <VideoStudio workspace={workspace} />
+        <div className="space-y-4">
+          <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4">
+            <h2 className="text-base font-bold text-slate-900">Creator foundation</h2>
+            <p className="mt-1 text-xs text-slate-600">
+              Choose a creation mode and starter template. This metadata is additive and does not change your existing video workflow safety controls.
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="block text-sm text-slate-700">
+                Creation mode
+                <select
+                  value={creatorMode}
+                  onChange={(event) => applyCreatorMode(event.target.value as CreationMode)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                >
+                  {CREATION_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode.replaceAll("_", " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm text-slate-700">
+                Starter template
+                <select
+                  value={creatorTemplateId}
+                  onChange={(event) => applyTemplate(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                >
+                  {visibleTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="mt-3 block text-sm text-slate-700">
+              Concept
+              <textarea
+                value={creatorConcept}
+                onChange={(event) => setCreatorConcept(event.target.value)}
+                className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                placeholder="Describe your creator concept."
+              />
+            </label>
+          </section>
+          <VideoStudio
+            workspace={workspace}
+            creatorFoundation={{
+              creationMode: creatorMode,
+              templateId: creatorTemplateId,
+              concept: creatorConcept,
+            }}
+          />
+        </div>
       ) : (
       <div className="grid gap-6 lg:grid-cols-2">
       <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 md:p-7">

@@ -4,10 +4,12 @@ import {
   buildVideoPlanningPrompt,
   parseVideoPlanInput,
   parseVideoPlanResponse,
+  validateStructuredVideoPlanText,
   VIDEO_PROMPT_VERSION,
 } from "@/features/core/video-project";
 import { createClient } from "@/lib/supabase/server";
 import { buildAgentPrompt } from "@/features/core/agent-prompts";
+import { buildTextlessFrameConstraint } from "@/features/core/creative-spec";
 
 type ProductAssetMetadata = {
   productId?: string;
@@ -105,6 +107,7 @@ export async function POST(request: Request) {
     };
   }
   const model = process.env.OPENAI_MODEL || "gpt-5.6-sol";
+  const textlessFrameConstraint = buildTextlessFrameConstraint();
   const upstream = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -140,13 +143,15 @@ export async function POST(request: Request) {
         ],
         constraints: [
           "Create original 9:16 vertical-video material.",
+          textlessFrameConstraint,
           "Do not use real-person likenesses, celebrities, copyrighted characters, copyrighted music, or third-party watermarks.",
           "Never invent prices, discounts, certifications, testimonials, legal approval, or product claims.",
           "Include readable on-screen captions and a safe human-review note.",
-            planInput.productAsset ? "Use the supplied product asset as the authoritative visual reference. Preserve packaging, logos, and copy exactly." : "",
+          planInput.productAsset ? "Use the supplied product asset as the authoritative visual reference. Preserve packaging, logos, and copy exactly." : "",
         ],
         requiredOutput: [
           "Return strict JSON only.",
+          "Do not output React, Remotion, JavaScript, TypeScript, or executable code.",
           "Include title, script, caption, renderPrompt, complianceNote, and scenes.",
           "Scene durations must total the requested duration.",
         ],
@@ -174,10 +179,28 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
-  return NextResponse.json({
-    ...plan,
-    hashtags: plan.hashtags,
+  const validated = validateStructuredVideoPlanText({
+    title: plan.title,
+    script: plan.script,
+    caption: plan.caption,
+    renderPrompt: plan.renderPrompt,
+    complianceNote: plan.complianceNote,
     callToAction: plan.callToAction,
+    hashtags: plan.hashtags,
+    scenes: plan.scenes,
+    immutableBrandName: planInput.workspace.businessName,
+    immutableProductName: planInput.productAsset?.productMetadata?.productName,
+  });
+  if (!validated.valid || !validated.plan) {
+    return NextResponse.json(
+      { error: "The structured text plan failed validation. Please retry." },
+      { status: 502 },
+    );
+  }
+  return NextResponse.json({
+    ...validated.plan,
+    hashtags: validated.plan.hashtags,
+    callToAction: validated.plan.callToAction,
     model,
     promptVersion: VIDEO_PROMPT_VERSION,
   });

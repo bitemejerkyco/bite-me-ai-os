@@ -43,7 +43,7 @@ function createBrief(overrides: Partial<DailyBrief> = {}): DailyBrief {
       source: "approvals",
       reason: "Backlog pressure",
       status: "open",
-      href: "/content-library?status=awaiting-approval",
+      href: "/media?tab=CONTENT_DRAFTS",
       createdAt: "2026-08-02T09:00:00.000Z",
       dueAt: null,
       workspaceId: "ws-1",

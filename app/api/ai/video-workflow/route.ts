@@ -9,12 +9,15 @@ import {
   buildVideoPlanningPrompt,
   parseVideoPlanResponseDetailed,
   parseVideoPlanResponse,
+  validateStructuredVideoPlanText,
   VIDEO_PROMPT_VERSION,
   type VideoCreditStatusState,
   type VideoPlanParseFailureCategory,
   type VideoProject,
   type VideoWorkflowStage,
 } from "@/features/core/video-project";
+import { normalizeRequestedVideoQualityTier } from "@/features/core/video-generation-quality";
+import { buildTextlessFrameConstraint } from "@/features/core/creative-spec";
 import {
   fetchVideoProviderJob,
   getVideoProviderUnavailableMessage,
@@ -39,6 +42,8 @@ type WorkflowBody = {
   productAsset?: unknown;
   exactProductMode?: unknown;
   allowAiProductMotion?: unknown;
+  qualityTier?: unknown;
+  model?: unknown;
 };
 
 type VideoProjectRow = {
@@ -699,6 +704,7 @@ async function generatePlan(input: {
   scenes: VideoProject["scenes"];
 }> {
   const env = getServerEnv();
+  const textlessFrameConstraint = buildTextlessFrameConstraint();
   if (!env.openAiApiKey) {
     return buildFallbackPlan(input);
   }
@@ -734,6 +740,8 @@ async function generatePlan(input: {
           ],
           constraints: [
             "Create original 9:16 vertical-video material.",
+            textlessFrameConstraint,
+            "Leave clean visual space for deterministic overlays.",
             "Do not use real-person likenesses, celebrities, copyrighted characters, copyrighted music, or third-party watermarks.",
             "Never invent prices, discounts, certifications, testimonials, legal approval, or product claims.",
             "Include readable on-screen captions and a safe human-review note.",
@@ -741,6 +749,7 @@ async function generatePlan(input: {
           ],
           requiredOutput: [
             "Return strict JSON only.",
+            "Do not output React, Remotion, JavaScript, TypeScript, or executable code.",
             "Include title, script, caption, hashtags, callToAction, renderPrompt, complianceNote, and scenes.",
             "Scene durations must total the requested duration.",
           ],
@@ -806,10 +815,34 @@ async function generatePlan(input: {
     return buildFallbackPlan(input);
   }
 
+  const validated = validateStructuredVideoPlanText({
+    title: plan.title,
+    script: plan.script,
+    caption: plan.caption,
+    renderPrompt: plan.renderPrompt,
+    complianceNote: plan.complianceNote,
+    callToAction: plan.callToAction,
+    hashtags: plan.hashtags,
+    scenes: plan.scenes,
+    immutableBrandName: text(input.workspace.businessName),
+    immutableProductName: input.productAsset?.productMetadata?.productName,
+  });
+  if (!validated.valid || !validated.plan) {
+    logVideoPlanFailure({
+      stage: "plan_parse_failed",
+      openAiStatus: response.status,
+      openAiRequestId: requestId,
+      extractedTextEmpty: extractedText.trim().length === 0,
+      parseFailureCategory: "text_validation_failed",
+      model: env.openAiModel,
+    });
+    return buildFallbackPlan(input);
+  }
+
   return {
-    ...plan,
-    hashtags: normalizeHashtags((plan as { hashtags?: unknown }).hashtags),
-    callToAction: plan.callToAction || input.callToAction,
+    ...validated.plan,
+    hashtags: normalizeHashtags((validated.plan as { hashtags?: unknown }).hashtags),
+    callToAction: validated.plan.callToAction || input.callToAction,
   };
 }
 
@@ -1023,6 +1056,7 @@ async function ensureGeneratedMediaAsset(input: {
       metadata: {
         videoProjectId: input.project.id,
         workflowKey: input.project.workflow_key,
+        textOverlaySource: "STRUCTURED_PLAN",
         compositionManifest: input.manifest,
       },
     } as never)
@@ -1191,6 +1225,7 @@ export async function POST(request: Request) {
     const musicMode = text(body?.musicMode) as VideoProject["musicMode"];
     const requestedWorkflowKey = sanitizeWorkflowKey(body?.workflowKey);
     const requestedProjectId = text(body?.projectId);
+    const requestedQualityTier = normalizeRequestedVideoQualityTier(body?.qualityTier);
     const requestedProductAsset = body?.productAsset && typeof body.productAsset === "object"
       ? (body.productAsset as {
           id?: unknown;
@@ -1200,6 +1235,10 @@ export async function POST(request: Request) {
         })
       : null;
 
+    if (body?.model !== undefined) {
+      return NextResponse.json({ error: "Client-specified model overrides are not allowed." }, { status: 400 });
+    }
+
     if (
       !durationSeconds
       || !["TikTok", "Instagram Reels", "Facebook Reels", "YouTube Shorts"].includes(channel)
@@ -1208,6 +1247,9 @@ export async function POST(request: Request) {
       || !callToAction
     ) {
       return NextResponse.json({ error: "Complete the short-video brief first." }, { status: 400 });
+    }
+    if (body?.qualityTier !== undefined && !requestedQualityTier) {
+      return NextResponse.json({ error: "Select Economy, Standard, or Premium quality." }, { status: 400 });
     }
 
     const { data: workspaceId, error: workspaceError } = await supabase.rpc("my_primary_workspace_id");
@@ -1348,6 +1390,7 @@ export async function POST(request: Request) {
         projectId: existing.id,
         draftId: existing.content_draft_id,
         workflowKey: existing.workflow_key || workflowKey,
+        tier: existing.routing_tier || requestedQualityTier || "ECONOMY",
         progress: existing.workflow_percentage ?? existing.provider_progress ?? 0,
         stage: existing.workflow_stage || "GENERATING_SCENES",
       });
@@ -1394,7 +1437,7 @@ export async function POST(request: Request) {
           music_mode: musicMode,
           licensed_music_asset_id: null,
           provider: "REPLICATE",
-          routing_tier: null,
+          routing_tier: requestedQualityTier || "ECONOMY",
           provider_model: null,
           provider_job_id: null,
           provider_progress: 0,
@@ -1502,7 +1545,7 @@ export async function POST(request: Request) {
 
     const routerSettings = await loadVideoRouterSettings();
     const profile = resolveVideoRouterProfile({
-      requestedTier: "ECONOMY",
+      requestedTier: requestedQualityTier || undefined,
       mode: routerSettings.mode,
       seconds: durationSeconds,
       settings: routerSettings,

@@ -28,6 +28,7 @@ import {
   type CreativeVersion,
   type VideoMusicMode,
   type VideoProject,
+  type VideoRenderTier,
   type VideoWorkflowStage,
   type VideoVoice,
 } from "@/features/core/video-project";
@@ -36,6 +37,16 @@ import {
   quoteVideoCredits,
   type VideoCreditStatus,
 } from "@/features/core/video-credits";
+import type { CreationMode } from "@/features/core/creative-spec";
+import {
+  createEmptyTimeline,
+  createMemeStarterTimeline,
+  type CreatorTimeline,
+} from "@/features/core/creator-timeline";
+import { resolveCreatorTemplate } from "@/features/core/creator-template-catalog";
+import { buildCreativeSpecFromVideoProject } from "@/features/core/creative-spec-builder";
+import { validateCreativeSpec } from "@/features/core/creative-spec";
+import CreativeSpecPreviewPlayer from "@/components/core/remotion/CreativeSpecPreviewPlayer";
 
 type VideoPlanPayload = {
   title?: string;
@@ -88,6 +99,19 @@ type WorkflowStatusPayload = {
   failureReferenceId?: string;
   mediaAssetId?: string;
   draftId?: string;
+  error?: string;
+};
+
+type VideoQualityEstimatePayload = {
+  ok?: boolean;
+  tier?: VideoRenderTier;
+  tierLabel?: string;
+  description?: string;
+  estimatedCredits?: number;
+  estimatedProviderCostUsd?: number;
+  expectedGenerationTime?: { label?: string };
+  providerDisplayName?: string;
+  estimateDisclaimer?: string;
   error?: string;
 };
 
@@ -163,6 +187,7 @@ export function createPendingVideoProject(input: {
   duration: VideoProject["durationSeconds"];
   voice: VideoVoice;
   musicMode: VideoMusicMode;
+  qualityTier: VideoRenderTier;
   workflowKey: string;
 }): VideoProject {
   const now = new Date().toISOString();
@@ -182,6 +207,7 @@ export function createPendingVideoProject(input: {
     voice: input.voice,
     voiceDisclosure: true,
     musicMode: input.musicMode,
+    routingTier: input.qualityTier,
     provider: "OPENAI_SORA_TEMPORARY",
     providerJobStatus: "queued",
     providerProgress: 5,
@@ -242,8 +268,14 @@ function formatWorkflowElapsed(startedAt?: string): string {
 
 export default function VideoStudio({
   workspace,
+  creatorFoundation,
 }: {
   workspace: WorkspaceProfile;
+  creatorFoundation?: {
+    creationMode: CreationMode;
+    templateId: string;
+    concept: string;
+  };
 }) {
   const [projects, setProjects] = useState<VideoProject[]>([]);
   const [versions, setVersions] = useState<CreativeVersion[]>([]);
@@ -257,6 +289,8 @@ export default function VideoStudio({
   const [voice, setVoice] = useState<VideoVoice>("marin");
   const [musicMode, setMusicMode] =
     useState<VideoMusicMode>("GENERATED_AMBIENT");
+  const [qualityTier, setQualityTier] = useState<VideoRenderTier>("ECONOMY");
+  const [qualityEstimate, setQualityEstimate] = useState<VideoQualityEstimatePayload | null>(null);
   const [project, setProject] = useState<VideoProject | null>(null);
   const [complianceNote, setComplianceNote] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
@@ -293,14 +327,25 @@ export default function VideoStudio({
       void loadCloudVideoProjects()
         .then((items) => {
           setProjects(items);
+          const params = new URLSearchParams(window.location.search);
+          const requestedProjectId = params.get("projectId") || "";
           const active = items.find((item) => item.status === "GENERATING");
           const newest = items[0] || null;
+          const completedNewest = items.find((item) => item.status === "READY" || item.status === "APPROVED") || null;
+          const savedSelectedId = window.localStorage.getItem("postmotive:last-video-project-id") || "";
+          const savedSelected = savedSelectedId
+            ? items.find((item) => item.id === savedSelectedId) || null
+            : null;
+          const requested = requestedProjectId
+            ? items.find((item) => item.id === requestedProjectId) || null
+            : null;
           const resumed =
-            active || (newest?.status === "FAILED" ? newest : null);
+            requested || active || savedSelected || completedNewest || (newest?.status === "FAILED" ? newest : null);
           if (resumed) {
             setProject(resumed);
             setWorkflowKey(resumed.workflowKey || "");
             setVoice(resumed.voice);
+            setQualityTier(resumed.routingTier || "ECONOMY");
             if (resumed.status === "GENERATING") {
               setNotice(
                 "You may safely leave this page. Generation will continue.",
@@ -391,6 +436,30 @@ export default function VideoStudio({
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const frame = requestAnimationFrame(() => {
+      void fetch(`/api/ai/video-generation-estimate?durationSeconds=${duration}&tier=${qualityTier}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const payload = (await response.json()) as VideoQualityEstimatePayload;
+          if (!response.ok || !payload?.ok) {
+            throw new Error(payload?.error || "Unable to load generation estimate.");
+          }
+          setQualityEstimate(payload);
+        })
+        .catch(() => {
+          setQualityEstimate(null);
+        });
+    });
+    return () => {
+      controller.abort();
+      cancelAnimationFrame(frame);
+    };
+  }, [duration, qualityTier]);
+
+  useEffect(() => {
     if (!project?.videoStoragePath) return;
     void resolveCloudMediaUrl(project.videoStoragePath)
       .then(setPreviewUrl)
@@ -428,6 +497,41 @@ export default function VideoStudio({
       project?.scenes.reduce((sum, scene) => sum + scene.seconds, 0) || 0,
     [project?.scenes],
   );
+  const timelineFoundation = useMemo<CreatorTimeline>(() => {
+    if (creatorFoundation?.creationMode === "MEME") {
+      return createMemeStarterTimeline(project?.durationSeconds || duration);
+    }
+
+    const timeline = createEmptyTimeline(project?.durationSeconds || duration);
+    if (!project?.scenes.length) return timeline;
+
+    const videoTrack = timeline.tracks.find((track) => track.type === "VIDEO");
+    const captionTrack = timeline.tracks.find((track) => track.type === "CAPTION");
+    if (!videoTrack || !captionTrack) return timeline;
+
+    let cursor = 0;
+    for (const scene of project.scenes) {
+      videoTrack.clips.push({
+        id: `scene-${scene.order}`,
+        trackType: "VIDEO",
+        startSeconds: cursor,
+        durationSeconds: scene.seconds,
+        label: `Scene ${scene.order}`,
+        content: scene.visual,
+      });
+      captionTrack.clips.push({
+        id: `caption-${scene.order}`,
+        trackType: "CAPTION",
+        startSeconds: cursor,
+        durationSeconds: scene.seconds,
+        label: `Overlay ${scene.order}`,
+        content: scene.onScreenText,
+      });
+      cursor += scene.seconds;
+    }
+
+    return timeline;
+  }, [creatorFoundation, duration, project]);
   const renderSeconds = project?.durationSeconds || duration;
   const renderQuote = useMemo(
     () => quoteVideoCredits(renderSeconds),
@@ -463,6 +567,9 @@ export default function VideoStudio({
   };
 
   const updateProject = async (next: VideoProject) => {
+    if (isDatabaseUuid(next.id)) {
+      window.localStorage.setItem("postmotive:last-video-project-id", next.id);
+    }
     setProject(next);
     setProjects((current) => {
       const exists = current.some((item) => item.id === next.id);
@@ -608,6 +715,7 @@ export default function VideoStudio({
         duration,
         voice,
         musicMode,
+        qualityTier,
         workflowKey: activeWorkflowKey,
       });
       setProject(optimisticProject);
@@ -635,6 +743,10 @@ export default function VideoStudio({
           productAsset: selectedProductAssetPayload,
           exactProductMode,
           allowAiProductMotion,
+          qualityTier,
+          creationMode: creatorFoundation?.creationMode,
+          templateId: creatorFoundation?.templateId,
+          concept: creatorFoundation?.concept,
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -699,6 +811,9 @@ export default function VideoStudio({
           productAsset: selectedProductAssetPayload,
           exactProductMode,
           allowAiProductMotion,
+          creationMode: creatorFoundation?.creationMode,
+          templateId: creatorFoundation?.templateId,
+          concept: creatorFoundation?.concept,
         }),
       });
       const payload = (await response.json()) as VideoPlanPayload;
@@ -730,6 +845,7 @@ export default function VideoStudio({
         voice,
         voiceDisclosure: true,
         musicMode,
+        routingTier: qualityTier,
         provider: "OPENAI_SORA_TEMPORARY",
         status: "DRAFT",
         createdAt: now,
@@ -1295,6 +1411,114 @@ export default function VideoStudio({
     }
   };
 
+  const postNow = async () => {
+    if (!project || !project.videoStoragePath) {
+      setError("Finish the video before posting now.");
+      return;
+    }
+    if (project.status !== "APPROVED") {
+      setError("Approve the video before posting now.");
+      return;
+    }
+    if (!window.confirm("Post this approved video now?")) return;
+
+    setWorking("post-now");
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/publishing/post-now/execute", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          videoProjectId: project.id,
+          channel: project.channel,
+          idempotencyKey: `${project.id}:${new Date().toISOString().slice(0, 16)}`,
+        }),
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        duplicate?: boolean;
+        setupRedirect?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.ok) {
+        if (payload.setupRedirect) {
+          window.location.assign(payload.setupRedirect);
+          return;
+        }
+        throw new Error(payload.error || "Unable to post now.");
+      }
+      setNotice(
+        payload.duplicate
+          ? "This video was already queued or published. Duplicate posting was prevented."
+          : "Video queued for immediate publishing.",
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to post now.");
+    } finally {
+      setWorking("");
+    }
+  };
+
+  const createRevisionVersion = async () => {
+    if (!project?.videoStoragePath) {
+      setError("Generate a completed video first.");
+      return;
+    }
+    setWorking("revision");
+    setError("");
+    try {
+      const version: CreativeVersion = {
+        id: crypto.randomUUID(),
+        videoProjectId: project.id,
+        assetKind: "VIDEO",
+        versionNumber: nextVersionNumber("VIDEO"),
+        providerJobId: project.providerJobId,
+        storagePath: project.videoStoragePath,
+        prompt: composeRenderPrompt(project),
+        createdAt: new Date().toISOString(),
+      };
+      await addVersion(version);
+      setNotice(`Revision version v${version.versionNumber} created.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to create revision.");
+    } finally {
+      setWorking("");
+    }
+  };
+
+  const duplicateProject = async () => {
+    if (!project) return;
+    setWorking("duplicate");
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      const duplicated: VideoProject = {
+        ...project,
+        id: crypto.randomUUID(),
+        title: `${project.title} (copy)`,
+        status: "DRAFT",
+        providerJobId: undefined,
+        providerJobStatus: undefined,
+        providerProgress: undefined,
+        workflowStage: undefined,
+        workflowProgress: undefined,
+        workflowKey: undefined,
+        contentDraftId: undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveCloudVideoProject(duplicated);
+      setProject(duplicated);
+      setProjects((current) => [duplicated, ...current]);
+      setNotice("Project duplicated. You can edit and render this revision independently.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to duplicate project.");
+    } finally {
+      setWorking("");
+    }
+  };
+
   const openEditor = () => {
     sceneEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -1356,6 +1580,28 @@ export default function VideoStudio({
     : project?.status === "READY" || project?.status === "APPROVED"
       ? "Generation complete. Your video is saved and ready for editing."
       : "You may safely leave this page. Generation will continue.";
+  const currentVideoVersion = useMemo(
+    () => Math.max(1, ...versions.filter((item) => item.assetKind === "VIDEO").map((item) => item.versionNumber)),
+    [versions],
+  );
+
+  const creativePreviewSpec = useMemo(() => {
+    if (!project) return null;
+    try {
+      const template = resolveCreatorTemplate(creatorFoundation?.templateId);
+      const spec = buildCreativeSpecFromVideoProject({
+        workspaceId: workspace.id || "workspace-local",
+        project,
+        creationMode: creatorFoundation?.creationMode || "PRODUCT_DEMO",
+        template,
+        concept: creatorFoundation?.concept || project.objective,
+      });
+      const validation = validateCreativeSpec(spec);
+      return validation.valid ? validation.spec : null;
+    } catch {
+      return null;
+    }
+  }, [creatorFoundation, project, workspace.id]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -1367,6 +1613,11 @@ export default function VideoStudio({
               TikTok first. The same 9:16 project will later work for Reels and
               Shorts.
             </p>
+            {creatorFoundation ? (
+              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Mode: {creatorFoundation.creationMode.replaceAll("_", " ")} · Template: {creatorFoundation.templateId}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
@@ -1457,6 +1708,37 @@ export default function VideoStudio({
                 ))}
               </select>
             </label>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-900">Generation quality</p>
+              <p className="mt-1 text-xs text-slate-500">Estimates only. Final usage and provider cost can vary.</p>
+              <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-slate-100 p-1">
+                {([
+                  { tier: "ECONOMY", label: "Economy" },
+                  { tier: "BALANCED", label: "Standard" },
+                  { tier: "PREMIUM", label: "Premium" },
+                ] as const).map((item) => (
+                  <button
+                    key={item.tier}
+                    type="button"
+                    onClick={() => setQualityTier(item.tier)}
+                    className={`rounded-md px-2 py-1.5 text-xs font-semibold ${qualityTier === item.tier ? "bg-white text-violet-700 shadow" : "text-slate-600"}`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {qualityEstimate ? (
+                <div className="mt-3 space-y-1 text-xs text-slate-600">
+                  <p>{qualityEstimate.description}</p>
+                  <p>Estimated credits: <strong>{qualityEstimate.estimatedCredits ?? "-"}</strong></p>
+                  <p>Estimated provider cost: <strong>{typeof qualityEstimate.estimatedProviderCostUsd === "number" ? `$${qualityEstimate.estimatedProviderCostUsd.toFixed(2)}` : "-"}</strong></p>
+                  <p>Expected generation time: <strong>{qualityEstimate.expectedGenerationTime?.label || "-"}</strong></p>
+                  <p>Provider/model: <strong>{qualityEstimate.providerDisplayName || "-"}</strong></p>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-slate-500">Loading quality estimate…</p>
+              )}
+            </div>
           </div>
           <label className="block text-sm text-slate-700">
             Music
@@ -1710,6 +1992,30 @@ export default function VideoStudio({
             </p>
           ) : null}
         </div>
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-900">Timeline foundation</h3>
+            <span className="text-xs text-slate-500">{timelineFoundation.durationSeconds}s</span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Baseline track model for deterministic editing. Captions are rendered through overlay tracks instead of generated frames.
+          </p>
+          <div className="mt-3 space-y-2">
+            {timelineFoundation.tracks.map((track) => (
+              <div key={track.type} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-slate-700">{track.type}</p>
+                  <p className="text-xs text-slate-500">{track.clips.length} clip{track.clips.length === 1 ? "" : "s"}</p>
+                </div>
+                {track.clips.length ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {track.clips.map((clip) => `${clip.startSeconds}s-${clip.startSeconds + clip.durationSeconds}s ${clip.label}`).join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
         {!project ? (
           <div className="mt-6">
             <p className="text-slate-500">
@@ -1756,6 +2062,19 @@ export default function VideoStudio({
                     : ` · Processing ${project.providerProgress || 0}%`
                   : ""}
               </p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-700">
+                  Quality {project.routingTier || qualityTier}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-700">
+                  Version v{currentVideoVersion}
+                </span>
+                {project.scenes.some((scene) => scene.productMode === "EXACT_PRODUCT") ? (
+                  <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                    Exact Product Mode
+                  </span>
+                ) : null}
+              </div>
               {project.status === "FAILED" ? (
                 <div className="mt-4 rounded-2xl border border-rose-300/40 bg-rose-50 p-4">
                   <p className="text-sm font-semibold text-rose-800">
@@ -1794,6 +2113,19 @@ export default function VideoStudio({
                 playsInline
                 className="mx-auto max-h-[520px] rounded-2xl bg-black"
               />
+            ) : null}
+            {creativePreviewSpec ? (
+              <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Deterministic composition preview
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Final readable text, captions, CTA, and overlays are rendered by composition tracks.
+                </p>
+                <div className="mt-3">
+                  <CreativeSpecPreviewPlayer spec={creativePreviewSpec} />
+                </div>
+              </div>
             ) : null}
             <div ref={sceneEditorRef} className="rounded-2xl border border-slate-200/80 bg-white/70 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2272,6 +2604,29 @@ export default function VideoStudio({
                       {working === "approve" ? "Approving…" : "Approve"}
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    disabled={Boolean(working)}
+                    onClick={() => void createRevisionVersion()}
+                    className="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 disabled:opacity-60"
+                  >
+                    {working === "revision" ? "Creating revision…" : "Create revision"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(working)}
+                    onClick={() => void duplicateProject()}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+                  >
+                    {working === "duplicate" ? "Duplicating…" : "Duplicate"}
+                  </button>
+                  <button
+                    disabled={Boolean(working) || project.status !== "APPROVED"}
+                    onClick={() => void postNow()}
+                    className="rounded-xl border border-emerald-300 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {working === "post-now" ? "Posting now…" : "Post now"}
+                  </button>
                   <button
                     disabled={Boolean(working)}
                     onClick={() => void schedule()}

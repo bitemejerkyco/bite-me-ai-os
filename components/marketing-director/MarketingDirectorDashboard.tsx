@@ -12,6 +12,7 @@ import MarketingScoreCard from "@/components/marketing-director/MarketingScoreCa
 import MetricCard from "@/components/marketing-director/MetricCard";
 import PriorityActions from "@/components/marketing-director/PriorityActions";
 import RecommendationCard from "@/components/marketing-director/RecommendationCard";
+import HomePostNowDrawer from "@/components/marketing-director/HomePostNowDrawer";
 import { useHelp } from "@/components/help/HelpContext";
 import type { MarketingDirectorDashboard } from "@/features/marketing-director/dashboard";
 
@@ -72,6 +73,7 @@ export default function MarketingDirectorDashboardView({
       return { collapsed: false, dismissed: false };
     }
   });
+  const [postNowOpen, setPostNowOpen] = useState(false);
 
   const welcomeCollapsed = welcomeStateStorage.collapsed;
   const welcomeDismissed = welcomeStateStorage.dismissed;
@@ -127,9 +129,18 @@ export default function MarketingDirectorDashboardView({
             </article>
           </div>
           <div className="mt-4">
-            <Link href="#command-center" className="pm-primary-button inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-white">
-              Review Strategy
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPostNowOpen(true)}
+                className="inline-flex rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+              >
+                Post Now
+              </button>
+              <Link href="#command-center" className="pm-primary-button inline-flex rounded-xl px-4 py-2 text-sm font-semibold text-white">
+                Review Strategy
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -378,6 +389,7 @@ export default function MarketingDirectorDashboardView({
           )}
         </div>
       </section>
+      <HomePostNowDrawer open={postNowOpen} onClose={() => setPostNowOpen(false)} />
     </div>
   );
 }

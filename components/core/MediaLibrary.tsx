@@ -7,12 +7,16 @@ import { SUCCESS_MESSAGES } from "@/features/help/success-messages";
 import {
   saveLocal,
   STORAGE_KEYS,
+  type ContentDraft,
   type LibraryFolder,
   type MediaAsset,
+  type ScheduledPost,
 } from "@/features/core/local-os";
 import type { TikTokConnectionView } from "@/features/integrations/tiktok/types";
 import {
   createCloudFolder,
+  loadCloudDrafts,
+  loadCloudSchedule,
   moveCloudMediaToFolder,
   removeCloudMedia,
   renameCloudFolder,
@@ -83,10 +87,20 @@ type ResolvePayload = {
 };
 
 type SortFilter = "NEWEST" | "OLDEST" | "NAME" | "SIZE";
+type MediaLibraryTab = "ALL_MEDIA" | "VIDEOS" | "IMAGES" | "CONTENT_DRAFTS" | "APPROVED" | "PUBLISHED";
 const VIEW_MODE_KEY = "postmotive:media:view-mode";
 const MEDIA_UI_STATE_KEY = "postmotive:media:ui-state";
 const PAGE_SIZE = 24;
 let tiktokStatusRequest: Promise<TikTokConnectionView | null> | null = null;
+
+function normalizeMediaTab(value: unknown): MediaLibraryTab {
+  if (value === "VIDEOS") return "VIDEOS";
+  if (value === "IMAGES") return "IMAGES";
+  if (value === "CONTENT_DRAFTS") return "CONTENT_DRAFTS";
+  if (value === "APPROVED") return "APPROVED";
+  if (value === "PUBLISHED") return "PUBLISHED";
+  return "ALL_MEDIA";
+}
 
 function getTiktokStatusOnce(): Promise<TikTokConnectionView | null> {
   if (!tiktokStatusRequest) {
@@ -205,6 +219,7 @@ type MediaLibraryProps = {
   initialFolders?: LibraryFolder[];
   initialRoleLabel?: string;
   initialCapabilities?: MediaCapabilities;
+  initialTab?: string;
 };
 
 export default function MediaLibrary({
@@ -212,6 +227,7 @@ export default function MediaLibrary({
   initialFolders = [],
   initialRoleLabel = "GUEST",
   initialCapabilities = DEFAULT_MEDIA_CAPABILITIES,
+  initialTab,
 }: MediaLibraryProps) {
   const persistedUiState = useMemo(() => readMediaUiState(), []);
 
@@ -237,6 +253,9 @@ export default function MediaLibrary({
   const [sortBy, setSortBy] = useState<SortFilter>(persistedUiState.sortBy);
   const [favoriteOnly, setFavoriteOnly] = useState(persistedUiState.favoriteOnly);
   const [showArchived, setShowArchived] = useState(persistedUiState.showArchived);
+  const [activeTab, setActiveTab] = useState<MediaLibraryTab>(normalizeMediaTab(initialTab));
+  const [contentDrafts, setContentDrafts] = useState<ContentDraft[]>([]);
+  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const roleLabel = initialRoleLabel;
   const capabilities: MediaCapabilities = initialCapabilities;
   const [resolveRefreshRevision, setResolveRefreshRevision] = useState(0);
@@ -251,6 +270,13 @@ export default function MediaLibrary({
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 200);
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", activeTab);
+    const next = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, "", next);
+  }, [activeTab]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -285,6 +311,51 @@ export default function MediaLibrary({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([loadCloudDrafts(), loadCloudSchedule()])
+      .then(([drafts, posts]) => {
+        if (cancelled) return;
+        setContentDrafts(drafts);
+        setScheduledPosts(posts);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setContentDrafts([]);
+        setScheduledPosts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setTab = (tab: MediaLibraryTab) => {
+    setActiveTab(tab);
+    if (tab === "VIDEOS") {
+      setTypeFilter("VIDEO");
+      setSourceFilter("ALL");
+      setFolderFilter("ALL");
+      setShowArchived(false);
+      setFavoriteOnly(false);
+      return;
+    }
+    if (tab === "IMAGES") {
+      setTypeFilter("IMAGE");
+      setSourceFilter("ALL");
+      setFolderFilter("ALL");
+      setShowArchived(false);
+      setFavoriteOnly(false);
+      return;
+    }
+    if (tab === "ALL_MEDIA") {
+      setTypeFilter("ALL");
+      setSourceFilter("ALL");
+      setFolderFilter("ALL");
+      setShowArchived(false);
+      setFavoriteOnly(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const base = assets.filter((asset) => {
@@ -329,6 +400,18 @@ export default function MediaLibrary({
     sourceFilter,
     typeFilter,
   ]);
+
+  const filteredContentDrafts = useMemo(() => {
+    if (activeTab === "APPROVED") {
+      return contentDrafts.filter((draft) => draft.status === "APPROVED");
+    }
+    return contentDrafts.filter((draft) => draft.status === "DRAFT");
+  }, [activeTab, contentDrafts]);
+
+  const publishedPosts = useMemo(
+    () => scheduledPosts.filter((post) => post.status === "PUBLISHED"),
+    [scheduledPosts],
+  );
 
   const visibleAssets = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const visibleAssetIdKey = useMemo(
@@ -644,6 +727,7 @@ export default function MediaLibrary({
   }, []);
 
   const selectedCount = selectedIds.size;
+  const isContentTab = activeTab === "CONTENT_DRAFTS" || activeTab === "APPROVED" || activeTab === "PUBLISHED";
 
   const toggleSelection = (assetId: string) => {
     setSelectedIds((current) => {
@@ -959,6 +1043,29 @@ export default function MediaLibrary({
           </div>
         </div>
 
+        <div className="mt-3 flex flex-wrap gap-2">
+          {([
+            { key: "ALL_MEDIA", label: "All media" },
+            { key: "VIDEOS", label: "Videos" },
+            { key: "IMAGES", label: "Images" },
+            { key: "CONTENT_DRAFTS", label: "Content drafts" },
+            { key: "APPROVED", label: "Approved" },
+            { key: "PUBLISHED", label: "Published" },
+          ] as const).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setTab(tab.key)}
+              className={`rounded-xl border px-3 py-2 text-sm ${activeTab === tab.key
+                ? "border-violet-300 bg-violet-100 font-semibold text-violet-700"
+                : "border-slate-200 bg-white text-slate-700"}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {!isContentTab ? (
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
           <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as AssetTypeFilter)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
             <option value="ALL">All types</option>
@@ -999,8 +1106,9 @@ export default function MediaLibrary({
             Reset filters
           </button>
         </div>
+        ) : null}
 
-        {selectedCount > 0 ? (
+        {!isContentTab && selectedCount > 0 ? (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
             <span className="font-semibold">{selectedCount} selected</span>
             <button type="button" onClick={selectAllVisible} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5">Select visible</button>
@@ -1022,7 +1130,49 @@ export default function MediaLibrary({
           </div>
         ) : null}
 
-        {filtered.length === 0 ? (
+        {isContentTab ? (
+          activeTab === "PUBLISHED" ? (
+            publishedPosts.length === 0 ? (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                No published posts yet.
+              </div>
+            ) : (
+              <div className="mt-5 space-y-2">
+                {publishedPosts.map((post) => (
+                  <article key={post.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{post.title}</p>
+                        <p className="mt-1 text-xs text-slate-500">{post.channel} · Published {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : "recently"}</p>
+                      </div>
+                      <Link href="/calendar" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50">Open calendar</Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )
+          ) : filteredContentDrafts.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              {activeTab === "APPROVED" ? "No approved drafts yet." : "No content drafts yet."}
+            </div>
+          ) : (
+            <div className="mt-5 space-y-2">
+              {filteredContentDrafts.map((draft) => (
+                <article key={draft.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{draft.title}</p>
+                      <p className="mt-1 text-xs text-slate-500">{draft.channel} · {draft.status} · {new Date(draft.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link href={`/calendar?draft=${encodeURIComponent(draft.id)}`} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50">Open</Link>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )
+        ) : filtered.length === 0 ? (
           <div className="mt-6"><GuidedEmptyState title="Your Media Library is empty" description="Upload your logo, product photos, videos, and brand assets so PostMotive can create more accurate branded content." estimatedTime="2-4 minutes" primaryAction={{ label: "Upload Media", href: "/media" }} secondaryAction={{ label: "Create Folder", href: "/media" }} /></div>
         ) : viewMode === "grid" ? (
           <div data-help="media-asset-grid" className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
