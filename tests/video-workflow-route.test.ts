@@ -704,7 +704,7 @@ describe("video workflow route", () => {
     expect((payload.progress || 0) < 100).toBe(true);
     expect(harness.reserveCalls).toHaveLength(1);
     expect(resolveVideoRouterProfileMock).toHaveBeenCalledWith(
-      expect.objectContaining({ requestedTier: "ECONOMY" }),
+      expect.objectContaining({ requestedTier: undefined }),
     );
     expect(startVideoProviderJobMock).toHaveBeenCalledWith(
       expect.objectContaining({ model: "wan-video/wan-2.2-t2v-fast" }),
@@ -773,6 +773,64 @@ describe("video workflow route", () => {
     const payload = (await response.json()) as { error?: string };
     expect(response.status).toBe(400);
     expect(payload.error).toContain("approved product image");
+  });
+
+  it("rejects invalid quality tier values before provider routing", async () => {
+    const harness = createHarness();
+    createClientMock.mockResolvedValue(harness.supabase);
+
+    const { POST } = await import("@/app/api/ai/video-workflow/route");
+
+    const response = await POST(
+      new Request("https://postmotive.example/api/ai/video-workflow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          channel: "TikTok",
+          objective: "Engagement",
+          message: "Feature the product",
+          callToAction: "Shop now",
+          durationSeconds: 12,
+          voice: "marin",
+          musicMode: "NONE",
+          qualityTier: "ULTRA",
+        }),
+      }),
+    );
+
+    const payload = (await response.json()) as { error?: string };
+    expect(response.status).toBe(400);
+    expect(payload.error).toContain("Select Economy, Standard, or Premium quality");
+    expect(resolveVideoRouterProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects client model overrides to preserve server-owned routing", async () => {
+    const harness = createHarness();
+    createClientMock.mockResolvedValue(harness.supabase);
+
+    const { POST } = await import("@/app/api/ai/video-workflow/route");
+
+    const response = await POST(
+      new Request("https://postmotive.example/api/ai/video-workflow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          channel: "TikTok",
+          objective: "Engagement",
+          message: "Feature the product",
+          callToAction: "Shop now",
+          durationSeconds: 12,
+          voice: "marin",
+          musicMode: "NONE",
+          model: "custom-client-model",
+        }),
+      }),
+    );
+
+    const payload = (await response.json()) as { error?: string };
+    expect(response.status).toBe(400);
+    expect(payload.error).toContain("Client-specified model overrides are not allowed");
+    expect(resolveVideoRouterProfileMock).not.toHaveBeenCalled();
   });
 
   it("propagates selected product asset into scenes and keeps the same asset on retry", async () => {

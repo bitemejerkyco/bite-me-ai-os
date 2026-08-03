@@ -60,7 +60,7 @@ function priorityCta(brief: DailyBrief): { label: string; href: string; detail: 
   if (brief.recommendedNextAction) {
     return {
       label: brief.recommendedNextAction.ctaLabel || "Review Priority",
-      href: brief.recommendedNextAction.href || "/content-library",
+      href: brief.recommendedNextAction.href || "/media?tab=CONTENT_DRAFTS",
       detail: brief.recommendedNextAction.title,
       badge: brief.urgency.hasUrgentWork ? brief.urgency.label : undefined,
     };
@@ -87,7 +87,7 @@ function attentionCta(brief: DailyBrief): { label: string; href: string; detail:
   if (brief.needsAttention.length > 0) {
     return {
       label: "Review Queue",
-      href: "/content-library?status=awaiting-approval",
+      href: "/media?tab=CONTENT_DRAFTS",
       detail: brief.needsAttention[0],
       badge: brief.urgency.hasUrgentWork ? "High" : "Review",
     };
@@ -132,6 +132,7 @@ export default function DailyBriefPanel({
   const [currentBrief, setCurrentBrief] = useState(brief);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [collapsedMobile, setCollapsedMobile] = useState(false);
 
   async function refreshBrief() {
     setLoading(true);
@@ -206,12 +207,19 @@ export default function DailyBriefPanel({
       aria-label="Executive Brief"
       className="pm-glass-premium rounded-[1.5rem] border border-white/90 bg-white/85 p-5 sm:p-6"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="sticky top-0 z-10 -mx-2 -mt-2 flex flex-wrap items-start justify-between gap-3 bg-white/90 px-2 pt-2 pb-3 backdrop-blur">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Executive Brief</p>
           <p className="mt-1 text-sm text-slate-600">A concise summary of what matters most right now.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCollapsedMobile((value) => !value)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:hidden"
+          >
+            {collapsedMobile ? "Expand" : "Collapse"}
+          </button>
           <button
             type="button"
             onClick={() => void refreshBrief()}
@@ -231,6 +239,9 @@ export default function DailyBriefPanel({
         </div>
       </div>
 
+      <div className={`${collapsedMobile ? "hidden sm:block" : "block"}`}>
+      <div className="relative mt-1">
+      <div className="max-h-[36rem] overflow-y-auto pr-1">
       <AIThinkingProgress active={loading} title="Preparing your executive brief" />
 
       {error ? <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
@@ -337,6 +348,10 @@ export default function DailyBriefPanel({
           </section>
         </div>
       )}
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-white/90 to-transparent" />
+      </div>
+      </div>
     </section>
   );
 }
