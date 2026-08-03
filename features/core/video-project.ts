@@ -52,6 +52,7 @@ export type VideoScene = {
   mediaAssetId?: string;
   productAssetId?: string;
   productAssetName?: string;
+  productAssetStoragePath?: string;
   productMode?: "EXACT_PRODUCT" | "AI_PRODUCT_MOTION";
   productPlacement?: string;
   productScale?: string;
@@ -462,6 +463,7 @@ export function parseVideoPlanResponseDetailed(value: string): {
         mediaAssetId: typeof item.mediaAssetId === "string" ? item.mediaAssetId : undefined,
         productAssetId: typeof item.productAssetId === "string" ? item.productAssetId : undefined,
         productAssetName: typeof item.productAssetName === "string" ? item.productAssetName : undefined,
+        productAssetStoragePath: typeof item.productAssetStoragePath === "string" ? item.productAssetStoragePath : undefined,
         productMode,
         productPlacement: typeof item.productPlacement === "string" ? item.productPlacement : undefined,
         productScale: typeof item.productScale === "string" ? item.productScale : undefined,
