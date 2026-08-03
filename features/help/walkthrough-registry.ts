@@ -19,7 +19,7 @@ export const WALKTHROUGH_REGISTRY: WalkthroughDefinition[] = [
   },
   {
     id: "content-library-overview",
-    route: "/content",
+    route: "/media?tab=CONTENT_DRAFTS",
     version: "1",
     title: "Content Library walkthrough",
     steps: [

@@ -7,8 +7,8 @@ import {
 describe("marketing director score category routes", () => {
   it("maps category keys to expected operational routes", () => {
     expect(SCORE_CATEGORY_DESTINATIONS.brandFoundation).toBe("/onboarding");
-    expect(SCORE_CATEGORY_DESTINATIONS.contentConsistency).toBe("/content-library");
-    expect(SCORE_CATEGORY_DESTINATIONS.contentReadiness).toBe("/content-library?status=awaiting-approval");
+    expect(SCORE_CATEGORY_DESTINATIONS.contentConsistency).toBe("/media?tab=CONTENT_DRAFTS");
+    expect(SCORE_CATEGORY_DESTINATIONS.contentReadiness).toBe("/media?tab=CONTENT_DRAFTS");
     expect(SCORE_CATEGORY_DESTINATIONS.channelConnections).toBe("/integrations");
     expect(SCORE_CATEGORY_DESTINATIONS.campaignActivity).toBe("/marketing/campaigns");
     expect(SCORE_CATEGORY_DESTINATIONS.analyticsCoverage).toBe("/analytics");
@@ -25,7 +25,7 @@ describe("marketing director score category routes", () => {
     });
     expect(recommendationActionForCategory("contentReadiness")).toEqual({
       label: "Review drafts",
-      href: "/content-library?status=awaiting-approval",
+      href: "/media?tab=CONTENT_DRAFTS",
     });
     expect(recommendationActionForCategory("paidMediaHealth")).toEqual({
       label: "Open integrations",

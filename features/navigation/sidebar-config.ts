@@ -26,7 +26,6 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { href: "/onboarding", label: "Business Setup", icon: "✓" },
       { href: "/marketing", label: "Marketing", icon: "◆" },
       { href: "/studio", label: "AI Studio", icon: "✦" },
-      { href: "/content", label: "Content Library", icon: "▤" },
       { href: "/calendar", label: "Calendar", icon: "◫" },
     ],
   },

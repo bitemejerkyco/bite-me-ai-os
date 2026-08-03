@@ -22,7 +22,7 @@ describe("marketing director dashboard component polish", () => {
       source: "",
       reason: "",
       status: "open",
-      href: "/content-library?status=awaiting-approval",
+      href: "/media?tab=CONTENT_DRAFTS",
       createdAt: "2026-08-01T10:00:00.000Z",
       dueAt: null,
       workspaceId: "ws-1",

@@ -181,7 +181,7 @@ export function buildMetricDrilldown(
       missingSources: missingFrom(contributingSources),
       nextAction: {
         label: "Open approval queue",
-        href: "/content-library?status=awaiting-approval",
+        href: "/media?tab=CONTENT_DRAFTS",
       },
     };
   }

@@ -97,9 +97,9 @@ export const ACADEMY_LESSONS: AcademyLesson[] = [
     steps: [
       { id: "content-1", title: "Open AI Studio", description: "Use the Create content actions from campaigns or the dashboard.", route: "/studio" },
       { id: "content-2", title: "Generate a draft", description: "Describe your angle, channel, and objective clearly.", route: "/studio" },
-      { id: "content-3", title: "Save to Content Library", description: "Keep the draft so it can move into review and scheduling.", route: "/content" },
+      { id: "content-3", title: "Save to Content Library", description: "Keep the draft so it can move into review and scheduling.", route: "/media?tab=CONTENT_DRAFTS" },
     ],
-    relatedRoutes: ["/studio", "/content"],
+    relatedRoutes: ["/studio", "/media?tab=CONTENT_DRAFTS"],
   },
   {
     lessonId: "review-and-approve-content",
@@ -111,11 +111,11 @@ export const ACADEMY_LESSONS: AcademyLesson[] = [
     prerequisites: ["generate-content-from-plan"],
     learningObjectives: ["Review drafts", "Understand approval states", "Move work forward safely"],
     steps: [
-      { id: "approve-1", title: "Open Content Library", description: "Choose the draft you want to review.", route: "/content" },
+      { id: "approve-1", title: "Open Content Library", description: "Choose the draft you want to review.", route: "/media?tab=CONTENT_DRAFTS" },
       { id: "approve-2", title: "Use the approval queue", description: "Open the approval center if the draft requires team review.", route: "/approvals" },
       { id: "approve-3", title: "Prepare for scheduling", description: "Once approved, move the draft into the calendar or publishing queue.", route: "/calendar" },
     ],
-    relatedRoutes: ["/content", "/approvals", "/calendar"],
+    relatedRoutes: ["/media?tab=CONTENT_DRAFTS", "/approvals", "/calendar"],
   },
   {
     lessonId: "schedule-first-post",

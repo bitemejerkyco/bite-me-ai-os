@@ -16,6 +16,6 @@ export function inferHelpRouteFromQuestion(question: string) {
   if (text.includes("logo") || text.includes("brand")) return "/settings/branding";
   if (text.includes("product")) return "/products";
   if (text.includes("schedule")) return "/calendar";
-  if (text.includes("content")) return "/content";
+  if (text.includes("content")) return "/media?tab=CONTENT_DRAFTS";
   return null;
 }

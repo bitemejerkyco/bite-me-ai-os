@@ -32,7 +32,7 @@ export const EXECUTIVE_CARD_DESTINATIONS: Record<ExecutiveMetricCardId, string> 
   biggest_opportunity: "/analytics/executive-brief",
   biggest_risk: "/analytics/executive-brief",
   active_campaigns: "/marketing/campaigns",
-  content_awaiting_approval: "/content-library?status=awaiting-approval",
+  content_awaiting_approval: "/media?tab=CONTENT_DRAFTS",
   scheduled_posts: "/calendar?view=scheduled",
   connected_channels: "/integrations",
 };
