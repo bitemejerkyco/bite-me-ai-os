@@ -254,7 +254,6 @@ describe("media product assets route", () => {
     const payload = (await response.json()) as { error?: string };
     expect(payload.error).toContain("Unsupported product image type");
   });
-
   it("rejects oversized product images during approval", async () => {
     makeContext([
       {

@@ -906,6 +906,7 @@ export default function VideoStudio({
 
       await approveProductAssetForUse(uploadedChoice);
       await refreshProductAssets(pickerShowAllImages);
+      await refreshProductAssets(pickerShowAllImages);
     } catch (caught) {
       setPickerActionError(
         caught instanceof Error

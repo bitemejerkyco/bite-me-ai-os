@@ -203,7 +203,6 @@ describe("product asset selector helpers", () => {
       }),
     ).toBe(false);
   });
-
   it("rejects unsupported upload types and oversized uploads", () => {
     expect(
       validateProductImageUpload({
