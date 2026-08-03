@@ -799,7 +799,6 @@ describe("video workflow route", () => {
         },
       },
     });
-
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
