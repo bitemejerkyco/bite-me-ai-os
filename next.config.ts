@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
   },
+  outputFileTracingIncludes: {
+    "/api/ai/video-workflow": ["./node_modules/ffmpeg-static/**/*"],
+  },
 };
 
 export default nextConfig;

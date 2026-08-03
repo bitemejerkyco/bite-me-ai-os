@@ -6,6 +6,7 @@ const loadVideoRouterSettingsMock = vi.fn();
 const resolveVideoRouterProfileMock = vi.fn();
 const startVideoProviderJobMock = vi.fn();
 const fetchVideoProviderJobMock = vi.fn();
+const composeVideoWithExactProductMock = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: createClientMock,
@@ -42,6 +43,10 @@ vi.mock("@/features/core/video-provider", () => ({
     };
     return messages[code] || messages.VIDEO_PROVIDER_UNAVAILABLE;
   },
+}));
+
+vi.mock("@/features/core/video-compositor", () => ({
+  composeVideoWithExactProduct: composeVideoWithExactProductMock,
 }));
 
 type ProjectRow = {
@@ -93,6 +98,10 @@ type MediaRow = {
   workspace_id: string;
   generation_job_id: string | null;
   storage_path: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  metadata: Record<string, unknown> | null;
 };
 
 function createHarness() {
@@ -133,6 +142,10 @@ function createHarness() {
           uploadCount += 1;
           return { error: null };
         }),
+        createSignedUrl: vi.fn(async (path: string) => ({
+          data: { signedUrl: `https://signed.example/${encodeURIComponent(path)}` },
+          error: null,
+        })),
       })),
     },
     from: vi.fn((table: string) => {
@@ -434,12 +447,44 @@ function createHarness() {
                     filters[fieldB] = valueB;
                     return {
                       maybeSingle: vi.fn(async () => {
+                        if (filters.workspace_id && filters.id) {
+                          const byId = [...media.values()].find(
+                            (item) =>
+                              item.workspace_id === filters.workspace_id
+                              && item.id === filters.id,
+                          ) || null;
+                          return {
+                            data: byId
+                              ? {
+                                  id: byId.id,
+                                  storage_path: byId.storage_path,
+                                  metadata: byId.metadata,
+                                  file_name: byId.file_name,
+                                  mime_type: byId.mime_type,
+                                  size_bytes: byId.size_bytes,
+                                }
+                              : null,
+                            error: null,
+                          };
+                        }
                         const row = [...media.values()].find(
                           (item) =>
                             item.workspace_id === filters.workspace_id
                             && item.generation_job_id === filters.generation_job_id,
                         ) || null;
-                        return { data: row ? { id: row.id, storage_path: row.storage_path } : null, error: null };
+                        return {
+                          data: row
+                            ? {
+                                id: row.id,
+                                storage_path: row.storage_path,
+                                metadata: row.metadata,
+                                file_name: row.file_name,
+                                mime_type: row.mime_type,
+                                size_bytes: row.size_bytes,
+                              }
+                            : null,
+                          error: null,
+                        };
                       }),
                     };
                   }),
@@ -466,6 +511,13 @@ function createHarness() {
                   workspace_id: String(payload.workspace_id),
                   generation_job_id: payload.generation_job_id ? String(payload.generation_job_id) : null,
                   storage_path: String(payload.storage_path),
+                  file_name: String(payload.file_name || "video.mp4"),
+                  mime_type: payload.mime_type ? String(payload.mime_type) : null,
+                  size_bytes: payload.size_bytes ? Number(payload.size_bytes) : null,
+                  metadata:
+                    payload.metadata && typeof payload.metadata === "object"
+                      ? (payload.metadata as Record<string, unknown>)
+                      : null,
                 };
                 media.set(id, row);
                 return { data: { id: row.id, storage_path: row.storage_path }, error: null };
@@ -546,6 +598,17 @@ describe("video workflow route", () => {
       outputUrl: null,
       failureReason: null,
     });
+
+    composeVideoWithExactProductMock.mockImplementation(async ({ providerOutputUrl }: { providerOutputUrl: string }) => ({
+      videoBytes: new TextEncoder().encode("composited-video-bytes"),
+      manifest: {
+        mode: "NONE",
+        providerOutputUrl,
+        compositor: "passthrough",
+        composed: false,
+        layers: [],
+      },
+    }));
   });
 
   it("falls back to deterministic plan when OpenAI plan response cannot be parsed", async () => {
@@ -607,45 +670,10 @@ describe("video workflow route", () => {
       emergencyDisabled: false,
     });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        headers: new Headers(),
-        json: async () => ({
-          output: [
-            {
-              content: [
-                {
-                  type: "text",
-                  text: {
-                    value: JSON.stringify({
-                      title: "Trail snack",
-                      script: "Script",
-                      caption: "Caption",
-                      renderPrompt: "Prompt",
-                      complianceNote: "Review",
-                      hashtags: ["#trail"],
-                      callToAction: "Shop now",
-                      scenes: [
-                        {
-                          order: 1,
-                          seconds: 12,
-                          visual: "Visual",
-                          narration: "Narration",
-                          onScreenText: "Text",
-                        },
-                      ],
-                    }),
-                  },
-                },
-              ],
-            },
-          ],
-        }),
-      })) as unknown as typeof fetch,
-    );
+    getServerEnvMock.mockReturnValueOnce({
+      openAiApiKey: "",
+      openAiModel: "gpt-5.6-sol",
+    });
 
     const { POST } = await import("@/app/api/ai/video-workflow/route");
 
@@ -693,6 +721,170 @@ describe("video workflow route", () => {
     expect(second.status).toBe(200);
     expect(harness.reserveCalls).toHaveLength(1);
     expect(startVideoProviderJobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks product-focused generation when selected product image is not approved", async () => {
+    const harness = createHarness();
+    createClientMock.mockResolvedValue(harness.supabase);
+
+    harness.media.set("product-1", {
+      id: "product-1",
+      workspace_id: "workspace-1",
+      generation_job_id: null,
+      storage_path: "workspace-1/user-1/product.png",
+      file_name: "product.png",
+      mime_type: "image/png",
+      size_bytes: 1024,
+      metadata: {
+        productAsset: {
+          productId: "sku-1",
+          approvedForGeneration: false,
+          locked: true,
+        },
+      },
+    });
+
+    const { POST } = await import("@/app/api/ai/video-workflow/route");
+
+    const response = await POST(
+      new Request("https://postmotive.example/api/ai/video-workflow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          channel: "TikTok",
+          objective: "Engagement",
+          message: "Feature the product",
+          callToAction: "Shop now",
+          durationSeconds: 12,
+          voice: "marin",
+          musicMode: "NONE",
+          workflowKey: "wf-product-gate",
+          productAsset: {
+            id: "product-1",
+            name: "product.png",
+            storagePath: "workspace-1/user-1/product.png",
+            productMetadata: { approvedForGeneration: false },
+          },
+          exactProductMode: true,
+        }),
+      }),
+    );
+
+    const payload = (await response.json()) as { error?: string };
+    expect(response.status).toBe(400);
+    expect(payload.error).toContain("approved product image");
+  });
+
+  it("propagates selected product asset into scenes and keeps the same asset on retry", async () => {
+    const harness = createHarness();
+    createClientMock.mockResolvedValue(harness.supabase);
+
+    harness.media.set("product-2", {
+      id: "product-2",
+      workspace_id: "workspace-1",
+      generation_job_id: null,
+      storage_path: "workspace-1/user-1/product-2.png",
+      file_name: "product-2.png",
+      mime_type: "image/png",
+      size_bytes: 2048,
+      metadata: {
+        productAsset: {
+          productId: "sku-2",
+          approvedForGeneration: true,
+          locked: true,
+          assetRole: "PRIMARY",
+          isPrimaryProductImage: true,
+          transparentBackground: true,
+          originalAssetId: "product-2",
+        },
+      },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          output: [
+            {
+              content: [
+                {
+                  type: "text",
+                  text: {
+                    value: JSON.stringify({
+                      title: "Trail snack",
+                      script: "Script",
+                      caption: "Caption",
+                      renderPrompt: "Prompt",
+                      complianceNote: "Review",
+                      hashtags: ["#trail"],
+                      callToAction: "Shop now",
+                      scenes: [
+                        {
+                          order: 1,
+                          seconds: 12,
+                          visual: "Visual",
+                          narration: "Narration",
+                          onScreenText: "Text",
+                        },
+                      ],
+                    }),
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      })) as unknown as typeof fetch,
+    );
+
+    const { POST } = await import("@/app/api/ai/video-workflow/route");
+    const requestBody = {
+      channel: "TikTok",
+      objective: "Engagement",
+      message: "Feature the product",
+      callToAction: "Shop now",
+      durationSeconds: 12,
+      voice: "marin",
+      musicMode: "NONE",
+      workflowKey: "wf-product-scenes",
+      productAsset: {
+        id: "product-2",
+        name: "product-2.png",
+        storagePath: "workspace-1/user-1/product-2.png",
+      },
+      exactProductMode: true,
+    };
+
+    const first = await POST(
+      new Request("https://postmotive.example/api/ai/video-workflow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(requestBody),
+      }),
+    );
+    expect(first.status).toBe(200);
+    const project = [...harness.projects.values()].find((item) => item.workflow_key === "wf-product-scenes");
+    expect(project).toBeTruthy();
+    const scenes = Array.isArray(project?.scenes) ? project?.scenes as Array<Record<string, unknown>> : [];
+    expect(scenes.length).toBeGreaterThan(0);
+    expect(scenes.every((scene) => scene.productAssetId === "product-2")).toBe(true);
+
+    const second = await POST(
+      new Request("https://postmotive.example/api/ai/video-workflow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...requestBody, retry: true }),
+      }),
+    );
+    expect(second.status).toBe(200);
+    const projectAfterRetry = [...harness.projects.values()].find((item) => item.workflow_key === "wf-product-scenes");
+    const retryScenes = Array.isArray(projectAfterRetry?.scenes)
+      ? projectAfterRetry?.scenes as Array<Record<string, unknown>>
+      : [];
+    expect(retryScenes.every((scene) => scene.productAssetId === "product-2")).toBe(true);
   });
 
   it("refunds and persists a failed state when provider startup fails", async () => {
@@ -801,7 +993,24 @@ describe("video workflow route", () => {
       caption: "Caption",
       hashtags: ["#trail"],
       call_to_action: "Shop now",
-      scenes: [],
+      scenes: [
+        {
+          order: 1,
+          seconds: 12,
+          visual: "Keep product centered",
+          narration: "Narration",
+          onScreenText: "Text",
+          productAssetId: "product-3",
+          productMode: "EXACT_PRODUCT",
+          productPlacement: "center frame",
+          productScale: "0.35",
+          productOpacity: 1,
+          productShadow: true,
+          productEntrance: "FADE_IN",
+          productExit: "FADE_OUT",
+          productZoom: "NONE",
+        },
+      ],
       duration_seconds: 12,
       voice: "marin",
       music_mode: "NONE",
@@ -825,19 +1034,67 @@ describe("video workflow route", () => {
       updated_at: new Date().toISOString(),
     });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (url === "https://provider-output.example/video.mp4") {
-          return {
-            ok: true,
-            status: 200,
-            arrayBuffer: async () => new TextEncoder().encode("video-bytes").buffer,
-          } as unknown as Response;
-        }
-        throw new Error("Unexpected URL");
-      }) as unknown as typeof fetch,
-    );
+    harness.media.set("product-3", {
+      id: "product-3",
+      workspace_id: "workspace-1",
+      generation_job_id: null,
+      storage_path: "workspace-1/user-1/product-3.png",
+      file_name: "product-3.png",
+      mime_type: "image/png",
+      size_bytes: 3072,
+      metadata: {
+        productAsset: {
+          productId: "sku-3",
+          assetRole: "PRIMARY",
+          isPrimaryProductImage: true,
+          approvedForGeneration: true,
+          locked: true,
+          transparentBackground: true,
+          originalAssetId: "product-3",
+        },
+      },
+    });
+
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new TextEncoder().encode("video-bytes").buffer,
+    })) as unknown as typeof fetch);
+
+    composeVideoWithExactProductMock.mockResolvedValueOnce({
+      videoBytes: new TextEncoder().encode("final-video"),
+      manifest: {
+        mode: "EXACT_PRODUCT",
+        providerOutputUrl: "https://provider-output.example/video.mp4",
+        compositor: "ffmpeg",
+        composed: true,
+        layers: [
+          {
+            type: "product",
+            assetId: "product-3",
+            assetUrl: "https://signed.example/workspace-1%2Fuser-1%2Fproduct-3.png",
+            originalAssetId: "product-3",
+            locked: true,
+            approvedForGeneration: true,
+            transparentBackground: true,
+            scenes: [
+              {
+                order: 1,
+                startSeconds: 0,
+                endSeconds: 12,
+                position: "center frame",
+                scale: "0.35",
+                opacity: 1,
+                shadow: true,
+                entrance: "FADE_IN",
+                exit: "FADE_OUT",
+                zoom: "NONE",
+              },
+            ],
+          },
+        ],
+      },
+    });
 
     const { GET } = await import("@/app/api/ai/video-workflow/route");
 
@@ -872,14 +1129,36 @@ describe("video workflow route", () => {
     const done = await GET(
       new Request("https://postmotive.example/api/ai/video-workflow?projectId=project-1"),
     );
-    const donePayload = (await done.json()) as { status: string; progress: number; draftId?: string; mediaAssetId?: string };
+    const donePayload = (await done.json()) as { status: string; progress: number; draftId?: string; mediaAssetId?: string; videoStoragePath?: string };
     expect(done.status).toBe(200);
     expect(donePayload.status).toBe("completed");
     expect(donePayload.progress).toBe(100);
     expect(donePayload.mediaAssetId).toBeTruthy();
     expect(donePayload.draftId).toBeTruthy();
+    expect(donePayload.videoStoragePath).toContain("workspace-1/");
+    expect(donePayload.videoStoragePath?.endsWith(".mp4")).toBe(true);
     expect(harness.mediaInsertCount).toBe(1);
     expect(harness.draftInsertCount).toBe(1);
+    expect(harness.uploadCount).toBe(1);
+    expect(composeVideoWithExactProductMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOutputUrl: "https://provider-output.example/video.mp4",
+        productLayer: expect.objectContaining({
+          assetId: "product-3",
+          assetUrl: "https://signed.example/workspace-1%2Fuser-1%2Fproduct-3.png",
+        }),
+      }),
+    );
+
+    const createdMedia = [...harness.media.values()].find((item) => item.generation_job_id === "prediction-1");
+    expect(createdMedia?.metadata).toBeTruthy();
+    expect(createdMedia?.storage_path).toBe(donePayload.videoStoragePath);
+    expect((createdMedia?.metadata as { compositionManifest?: { mode?: string; layers?: Array<{ assetId?: string }> } }).compositionManifest?.mode).toBe("EXACT_PRODUCT");
+    expect((createdMedia?.metadata as { compositionManifest?: { layers?: Array<{ assetId?: string }> } }).compositionManifest?.layers?.[0]?.assetId).toBe("product-3");
+    expect(harness.media.get("product-3")?.storage_path).toBe("workspace-1/user-1/product-3.png");
+
+    const storedProject = harness.projects.get(projectId);
+    expect(storedProject?.video_storage_path).toBe(createdMedia?.storage_path || null);
 
     const doneAgain = await GET(
       new Request("https://postmotive.example/api/ai/video-workflow?projectId=project-1"),
@@ -888,6 +1167,7 @@ describe("video workflow route", () => {
     expect(doneAgainPayload.status).toBe("completed");
     expect(harness.mediaInsertCount).toBe(1);
     expect(harness.draftInsertCount).toBe(1);
+    expect(harness.uploadCount).toBe(1);
   });
 
   it("returns sanitized failure and refunds once", async () => {
@@ -960,5 +1240,118 @@ describe("video workflow route", () => {
     expect(firstPayload.failureReferenceId).toBeTruthy();
     expect(secondPayload.error).toBe("Video generation didn't complete.");
     expect(harness.refundCalls).toEqual(["credit-fail"]);
+  });
+
+  it("marks exact product mode blocked when runtime compositor is unavailable and refunds credits", async () => {
+    const harness = createHarness();
+    createClientMock.mockResolvedValue(harness.supabase);
+
+    harness.projects.set("project-exact-blocked", {
+      id: "project-exact-blocked",
+      workspace_id: "workspace-1",
+      content_draft_id: null,
+      workflow_key: "wf-exact-blocked",
+      credit_request_id: "credit-exact-blocked",
+      title: "Project",
+      channel: "TikTok",
+      objective: "Engagement",
+      prompt: "Prompt",
+      script: "Script",
+      caption: "Caption",
+      hashtags: [],
+      call_to_action: "Shop now",
+      scenes: [
+        {
+          order: 1,
+          seconds: 12,
+          visual: "Product only",
+          narration: "Narration",
+          onScreenText: "Text",
+          productAssetId: "product-4",
+          productMode: "EXACT_PRODUCT",
+          productPlacement: "center frame",
+          productScale: "0.35",
+          productOpacity: 1,
+          productShadow: true,
+          productEntrance: "FADE_IN",
+          productExit: "FADE_OUT",
+          productZoom: "NONE",
+        },
+      ],
+      duration_seconds: 12,
+      voice: "marin",
+      music_mode: "NONE",
+      provider: "REPLICATE",
+      routing_tier: "ECONOMY",
+      provider_model: "wan-video/wan-2.2-t2v-fast",
+      provider_job_id: "prediction-exact-blocked",
+      provider_job_status: "in_progress",
+      provider_progress: 66,
+      status: "GENERATING",
+      failure_reason: null,
+      failure_reference_id: null,
+      workflow_stage: "RENDERING_FINAL_VIDEO",
+      workflow_percentage: 82,
+      credit_status: "RESERVED",
+      credit_refunded_at: null,
+      media_asset_id: null,
+      video_storage_path: null,
+      workflow_started_at: new Date().toISOString(),
+      workflow_completed_at: null,
+      updated_at: new Date().toISOString(),
+    });
+
+    harness.media.set("product-4", {
+      id: "product-4",
+      workspace_id: "workspace-1",
+      generation_job_id: null,
+      storage_path: "workspace-1/user-1/product-4.png",
+      file_name: "product-4.png",
+      mime_type: "image/png",
+      size_bytes: 4096,
+      metadata: {
+        productAsset: {
+          productId: "sku-4",
+          approvedForGeneration: true,
+          locked: true,
+        },
+      },
+    });
+
+    fetchVideoProviderJobMock.mockResolvedValueOnce({
+      providerJobId: "prediction-exact-blocked",
+      status: "completed",
+      progress: 100,
+      providerKey: "REPLICATE",
+      model: "wan-video/wan-2.2-t2v-fast",
+      outputUrl: "https://provider-output.example/video.mp4",
+      failureReason: null,
+    });
+
+    composeVideoWithExactProductMock.mockRejectedValueOnce(new Error("FFMPEG_RUNTIME_UNAVAILABLE"));
+
+    const { GET } = await import("@/app/api/ai/video-workflow/route");
+
+    const response = await GET(
+      new Request("https://postmotive.example/api/ai/video-workflow?projectId=project-exact-blocked"),
+    );
+    const payload = (await response.json()) as {
+      status?: string;
+      stage?: string;
+      blockedExactProduct?: boolean;
+      refunded?: boolean;
+      error?: string;
+      failureReferenceId?: string;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.status).toBe("failed");
+    expect(payload.stage).toBe("FAILED");
+    expect(payload.blockedExactProduct).toBe(true);
+    expect(payload.refunded).toBe(true);
+    expect(payload.error).toBe("Exact Product Mode is temporarily unavailable in this runtime. Product image compositing could not run.");
+    expect(payload.failureReferenceId).toBeTruthy();
+    expect(harness.refundCalls).toEqual(["credit-exact-blocked"]);
+    expect(harness.mediaInsertCount).toBe(0);
   });
 });

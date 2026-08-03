@@ -110,6 +110,27 @@ export type MediaAsset = {
   height?: number;
   durationSeconds?: number;
   archivedAt?: string;
+  productMetadata?: {
+    productId?: string;
+    productName?: string;
+    assetRole?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+    isPrimaryProductImage?: boolean;
+    role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+    angle?: string;
+    locked?: boolean;
+    approvedForGeneration?: boolean;
+    transparentBackground?: boolean;
+    originalAssetId?: string;
+    exactProductMode?: boolean;
+    allowAiMotion?: boolean;
+    preserveOriginalAsset?: boolean;
+    originalStoragePath?: string;
+    background?: string;
+    position?: string;
+    scale?: string;
+    safeArea?: string;
+    notes?: string;
+  };
 };
 
 export type LibraryFolder = {

@@ -43,6 +43,21 @@ export type VideoScene = {
   onScreenText: string;
   mediaStoragePath?: string;
   mediaAssetId?: string;
+  productAssetId?: string;
+  productAssetName?: string;
+  productMode?: "EXACT_PRODUCT" | "AI_PRODUCT_MOTION";
+  productPlacement?: string;
+  productScale?: string;
+  productOpacity?: number;
+  productShadow?: boolean;
+  productRotation?: number;
+  productEntrance?: "NONE" | "FADE_IN" | "SLIDE_UP";
+  productExit?: "NONE" | "FADE_OUT";
+  productZoom?: "NONE" | "ZOOM_IN" | "ZOOM_OUT";
+  productBackground?: string;
+  productSafeArea?: string;
+  productLocked?: boolean;
+  preserveOriginalAsset?: boolean;
 };
 
 export type VideoProject = {
@@ -110,6 +125,34 @@ export type VideoPlanInput = {
   durationSeconds: VideoProject["durationSeconds"];
   voice: VideoVoice;
   musicMode: VideoMusicMode;
+  productAsset?: {
+    id: string;
+    name: string;
+    storagePath: string;
+    productMetadata?: {
+      productId?: string;
+      productName?: string;
+      assetRole?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+      isPrimaryProductImage?: boolean;
+      role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+      angle?: string;
+      locked?: boolean;
+      approvedForGeneration?: boolean;
+      transparentBackground?: boolean;
+      originalAssetId?: string;
+      exactProductMode?: boolean;
+      allowAiMotion?: boolean;
+      preserveOriginalAsset?: boolean;
+      originalStoragePath?: string;
+      background?: string;
+      position?: string;
+      scale?: string;
+      safeArea?: string;
+      notes?: string;
+    };
+  };
+  exactProductMode?: boolean;
+  allowAiProductMotion?: boolean;
 };
 
 export function isVideoVoice(value: unknown): value is VideoVoice {
@@ -148,6 +191,8 @@ export function parseVideoPlanInput(value: unknown): VideoPlanInput | null {
 }
 
 export function buildVideoPlanningPrompt(input: VideoPlanInput): string {
+  const product = input.productAsset;
+  const productMetadata = product?.productMetadata;
   return [
     "Create a complete vertical social-video plan as strict JSON.",
     `Brand: ${input.workspace.businessName}`,
@@ -161,12 +206,28 @@ export function buildVideoPlanningPrompt(input: VideoPlanInput): string {
     `Call to action: ${input.callToAction}`,
     `Total duration: ${input.durationSeconds} seconds`,
     `Music mode: ${input.musicMode}`,
+    product ? `Product asset: ${product.name} (${product.id})` : "Product asset: none supplied",
+    productMetadata?.productName ? `Product name: ${productMetadata.productName}` : "Product name: not supplied",
+    productMetadata?.assetRole ? `Product asset role: ${productMetadata.assetRole}` : "Product asset role: not supplied",
+    typeof productMetadata?.isPrimaryProductImage === "boolean" ? `Primary product image: ${productMetadata.isPrimaryProductImage ? "yes" : "no"}` : "Primary product image: not supplied",
+    productMetadata?.role ? `Product role: ${productMetadata.role}` : "Product role: not supplied",
+    productMetadata?.angle ? `Product angle: ${productMetadata.angle}` : "Product angle: not supplied",
+    typeof productMetadata?.transparentBackground === "boolean" ? `Transparent background: ${productMetadata.transparentBackground ? "yes" : "no"}` : "Transparent background: not supplied",
+    productMetadata?.originalAssetId ? `Original asset ID: ${productMetadata.originalAssetId}` : "Original asset ID: not supplied",
+    productMetadata?.background ? `Product background: ${productMetadata.background}` : "Product background: keep brand-safe and neutral",
+    productMetadata?.position ? `Product position: ${productMetadata.position}` : "Product position: center it clearly in frame",
+    productMetadata?.scale ? `Product scale: ${productMetadata.scale}` : "Product scale: keep the product large enough to read packaging details",
+    productMetadata?.safeArea ? `Safe area: ${productMetadata.safeArea}` : "Safe area: leave room for captions and UI overlays",
+    input.exactProductMode || productMetadata?.exactProductMode ? "Exact product mode is required: preserve the real product asset exactly and do not redraw packaging or logos." : "Exact product mode is optional.",
+    input.allowAiProductMotion || productMetadata?.allowAiMotion ? "AI product motion is allowed only with explicit confirmation and must preserve the original product identity." : "AI product motion is not approved.",
     "Return only JSON with: title, script, caption, renderPrompt, complianceNote, hashtags, callToAction, and scenes.",
     "scenes must be an array of 2-5 objects with order, seconds, visual, narration, and onScreenText.",
     "Scene seconds must total the requested duration.",
     "Keep on-screen text brief and readable. Include burned-in caption wording in the scene plan.",
     "Never invent prices, discounts, certifications, testimonials, legal approval, or product claims.",
     "Do not request real people, celebrities, copyrighted characters, copyrighted music, or third-party watermarks.",
+    "If a product asset is supplied, each scene must reference the real product asset, preserve packaging copy exactly, and describe position, scale, opacity, shadow, entrance, exit, zoom, background, and safe area.",
+    "Never ask the model to invent or redraw the product. Use the provided product asset as the authoritative visual reference.",
     "The renderPrompt must describe a 9:16 commercial-quality video with original imagery and generated ambient audio only when requested.",
   ].join("\n");
 }
@@ -266,6 +327,10 @@ export function parseVideoPlanResponseDetailed(value: string): {
     }
     const scenes = parsed.scenes.map((scene, index) => {
       const item = scene as Record<string, unknown>;
+      const productMode: VideoScene["productMode"] =
+        item.productMode === "EXACT_PRODUCT" || item.productMode === "AI_PRODUCT_MOTION"
+          ? item.productMode
+          : undefined;
       return {
         order: Number(item.order) || index + 1,
         seconds: Number(item.seconds) || 1,
@@ -274,6 +339,30 @@ export function parseVideoPlanResponseDetailed(value: string): {
         onScreenText: String(item.onScreenText || ""),
         mediaStoragePath: typeof item.mediaStoragePath === "string" ? item.mediaStoragePath : undefined,
         mediaAssetId: typeof item.mediaAssetId === "string" ? item.mediaAssetId : undefined,
+        productAssetId: typeof item.productAssetId === "string" ? item.productAssetId : undefined,
+        productAssetName: typeof item.productAssetName === "string" ? item.productAssetName : undefined,
+        productMode,
+        productPlacement: typeof item.productPlacement === "string" ? item.productPlacement : undefined,
+        productScale: typeof item.productScale === "string" ? item.productScale : undefined,
+        productOpacity: Number.isFinite(Number(item.productOpacity)) ? Number(item.productOpacity) : undefined,
+        productShadow: typeof item.productShadow === "boolean" ? item.productShadow : undefined,
+        productRotation: Number.isFinite(Number(item.productRotation)) ? Number(item.productRotation) : undefined,
+        productEntrance:
+          item.productEntrance === "NONE" || item.productEntrance === "FADE_IN" || item.productEntrance === "SLIDE_UP"
+            ? (item.productEntrance as VideoScene["productEntrance"])
+            : undefined,
+        productExit:
+          item.productExit === "NONE" || item.productExit === "FADE_OUT"
+            ? (item.productExit as VideoScene["productExit"])
+            : undefined,
+        productZoom:
+          item.productZoom === "NONE" || item.productZoom === "ZOOM_IN" || item.productZoom === "ZOOM_OUT"
+            ? (item.productZoom as VideoScene["productZoom"])
+            : undefined,
+        productBackground: typeof item.productBackground === "string" ? item.productBackground : undefined,
+        productSafeArea: typeof item.productSafeArea === "string" ? item.productSafeArea : undefined,
+        productLocked: typeof item.productLocked === "boolean" ? item.productLocked : undefined,
+        preserveOriginalAsset: typeof item.preserveOriginalAsset === "boolean" ? item.preserveOriginalAsset : undefined,
       };
     });
     if (!scenes.length || scenes.some((scene) => !scene.visual)) {

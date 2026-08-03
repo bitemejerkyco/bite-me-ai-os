@@ -25,6 +25,7 @@ type MediaAssetRow = {
   duration_seconds: number | null;
   archived_at: string | null;
   is_favorite: boolean | null;
+  metadata: Record<string, unknown> | null;
 };
 
 type LibraryFolderRow = {
@@ -43,7 +44,7 @@ export default async function MediaPage() {
     getWorkspaceRole({ workspaceId: context.workspaceId, userId: context.userId }),
     supabase
       .from("media_assets")
-      .select("id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at,is_favorite")
+      .select("id,storage_path,file_name,asset_type,mime_type,size_bytes,tags,created_at,folder_id,source,generation_status,generation_job_id,thumbnail_path,poster_path,width,height,duration_seconds,archived_at,is_favorite,metadata")
       .eq("workspace_id", context.workspaceId)
       .order("created_at", { ascending: false }),
     supabase
@@ -76,6 +77,31 @@ export default async function MediaPage() {
     durationSeconds: Number.isFinite(row.duration_seconds) ? Number(row.duration_seconds) : undefined,
     archivedAt: row.archived_at || undefined,
     isFavorite: row.is_favorite ?? false,
+    productMetadata: row.metadata && typeof row.metadata === "object"
+      ? ((row.metadata.productAsset && typeof row.metadata.productAsset === "object"
+        ? row.metadata.productAsset
+        : row.metadata) as {
+          productId?: string;
+          productName?: string;
+          assetRole?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+          isPrimaryProductImage?: boolean;
+          role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
+          angle?: string;
+          locked?: boolean;
+          approvedForGeneration?: boolean;
+          transparentBackground?: boolean;
+          originalAssetId?: string;
+          exactProductMode?: boolean;
+          allowAiMotion?: boolean;
+          preserveOriginalAsset?: boolean;
+          originalStoragePath?: string;
+          background?: string;
+          position?: string;
+          scale?: string;
+          safeArea?: string;
+          notes?: string;
+        })
+      : undefined,
   }));
 
   const initialFolders = ((foldersData || []) as LibraryFolderRow[]).map((row) => ({
