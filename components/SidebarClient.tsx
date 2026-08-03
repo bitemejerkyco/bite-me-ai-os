@@ -64,7 +64,7 @@ export function SidebarClientView({
   const visibleGroups = SIDEBAR_GROUPS.filter((group) => !group.adminOnly || showAdminSection);
 
   const asideContent = (
-    <div className={`flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden border-r border-white/80 bg-white/70 text-slate-800 shadow-[16px_0_50px_rgba(76,61,139,0.07)] backdrop-blur-2xl transition-all duration-200 ${compactMode ? "w-24" : "w-72"}`}>
+    <div className={`flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-y-auto border-r border-white/80 bg-white/70 text-slate-800 shadow-[16px_0_50px_rgba(76,61,139,0.07)] backdrop-blur-2xl transition-all duration-200 ${compactMode ? "w-24" : "w-72"}`}>
       <div data-sidebar-header className="shrink-0 border-b border-white/80 px-4 pb-4 pt-5">
         <div className="flex items-start justify-between gap-3">
           <Link href="/" onClick={onCloseMobile} className="flex min-w-0 items-center gap-3">
@@ -98,97 +98,105 @@ export function SidebarClientView({
         </div>
       </div>
 
-      <div data-sidebar-scroll className="pm-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
-        <nav aria-label="Sidebar navigation" className="space-y-4">
-          {visibleGroups.map((group) => {
-            const expanded = expandedGroups[group.id];
-            return (
-              <section key={group.id} aria-label={group.label} className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => onToggleGroup?.(group.id)}
-                  aria-expanded={expanded}
-                  className={`flex w-full items-center justify-between rounded-2xl px-2 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 hover:bg-white/70 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${compactMode ? "justify-center" : ""}`}
-                >
-                  {compactMode ? <span className="sr-only">{group.label}</span> : <span>{group.label}</span>}
-                  <Chevron expanded={expanded} />
-                </button>
-                {expanded ? (
-                  <div className={`space-y-1 ${compactMode ? "flex flex-col items-center" : ""}`}>
-                    {group.links.map((link) => {
-                      const active = isActiveRoute(pathname, link.href);
-                      return (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          onClick={onCloseMobile}
-                          aria-current={active ? "page" : undefined}
-                          aria-label={link.label}
-                          title={link.label}
-                          className={`group flex min-h-10 items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${compactMode ? "justify-center px-2" : ""} ${
-                            active
-                              ? "bg-gradient-to-r from-violet-100 to-fuchsia-50 text-violet-800 shadow-sm"
-                              : "text-slate-600 hover:bg-white/80 hover:text-violet-700"
-                          }`}
-                        >
-                          <span
-                            className={`grid h-8 w-8 shrink-0 place-items-center rounded-2xl text-xs ${
+      <div data-sidebar-scroll className="pm-scrollbar min-h-0 flex-1 overscroll-contain">
+        <div className="flex min-h-full flex-col px-3 py-4">
+          <nav aria-label="Sidebar navigation" className="space-y-4">
+            {visibleGroups.map((group) => {
+              const expanded = expandedGroups[group.id];
+              return (
+                <section key={group.id} aria-label={group.label} className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => onToggleGroup?.(group.id)}
+                    aria-expanded={expanded}
+                    className={`flex w-full items-center justify-between rounded-2xl px-2 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 hover:bg-white/70 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${compactMode ? "justify-center" : ""}`}
+                  >
+                    {compactMode ? <span className="sr-only">{group.label}</span> : <span>{group.label}</span>}
+                    <Chevron expanded={expanded} />
+                  </button>
+                  {expanded ? (
+                    <div className={`space-y-1 ${compactMode ? "flex flex-col items-center" : ""}`}>
+                      {group.links.map((link) => {
+                        const active = isActiveRoute(pathname, link.href);
+                        return (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            onClick={onCloseMobile}
+                            aria-current={active ? "page" : undefined}
+                            aria-label={link.label}
+                            title={link.label}
+                            className={`group flex min-h-10 items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${compactMode ? "justify-center px-2" : ""} ${
                               active
-                                ? "bg-white text-violet-600 shadow-sm"
-                                : "bg-slate-100 text-slate-500 group-hover:bg-violet-100 group-hover:text-violet-600"
+                                ? "bg-gradient-to-r from-violet-100 to-fuchsia-50 text-violet-800 shadow-sm"
+                                : "text-slate-600 hover:bg-white/80 hover:text-violet-700"
                             }`}
                           >
-                            {link.icon}
-                          </span>
-                          {!compactMode ? <span className="truncate">{link.label}</span> : <span className="sr-only">{link.label}</span>}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
-        </nav>
-      </div>
+                            <span
+                              className={`grid h-8 w-8 shrink-0 place-items-center rounded-2xl text-xs ${
+                                active
+                                  ? "bg-white text-violet-600 shadow-sm"
+                                  : "bg-slate-100 text-slate-500 group-hover:bg-violet-100 group-hover:text-violet-600"
+                              }`}
+                            >
+                              {link.icon}
+                            </span>
+                            {!compactMode ? <span className="truncate">{link.label}</span> : <span className="sr-only">{link.label}</span>}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
+          </nav>
 
-      <div data-sidebar-footer className="shrink-0 border-t border-white/80 px-4 py-4">
-        <div className="rounded-3xl border border-white bg-white/75 p-4 shadow-[0_18px_45px_rgba(76,61,139,0.09)]">
+          <div className="min-h-6 flex-1" aria-hidden="true" />
+
+          <div data-sidebar-footer className="mt-6 shrink-0 border-t border-white/80 px-3 pt-3">
+            <div className="rounded-2xl border border-white bg-white/75 p-3 shadow-[0_18px_45px_rgba(76,61,139,0.09)]">
           {!compactMode ? (
             <>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
                 Active account
               </p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
+              <p className="mt-1.5 text-[13px] font-semibold text-slate-900">
                 {primaryAccountName || "Workspace pending"}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-0.5 text-[11px] text-slate-500">
                 {viewerEmail || "Signed-in user"}
               </p>
-              <div className="mt-3">
+              <div className="mt-2.5">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
                   Help Mode
                 </p>
-                <div className="mt-2">
+                <div className="mt-1.5 [&>div]:gap-1 [&>div]:p-0.5 [&_button]:px-2.5 [&_button]:py-1 [&_button]:text-[11px]">
                   {helpModeSlot}
                 </div>
               </div>
-              <p className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p className="mt-2.5 rounded-2xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-slate-600">
                 Secure demo-account switching is deferred to the next phase so browser state cannot grant elevated access.
               </p>
             </>
           ) : (
-            <div className="flex flex-col items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700" title={primaryAccountName || "Workspace pending"} aria-label={primaryAccountName || "Workspace pending"}>
+            <div className="flex flex-col items-center gap-2">
+              <span className="grid h-9 w-9 place-items-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-700" title={primaryAccountName || "Workspace pending"} aria-label={primaryAccountName || "Workspace pending"}>
                 {(primaryAccountName || "W").slice(0, 1).toUpperCase()}
               </span>
-              <div title="Help mode controls" aria-label="Help mode controls" className="w-full">
+              <div
+                title="Help mode controls"
+                aria-label="Help mode controls"
+                className="w-full [&>div]:w-full [&>div]:justify-center [&>div]:gap-1 [&>div]:p-0.5 [&_button]:px-2 [&_button]:py-1 [&_button]:text-[10px]"
+              >
                 {helpModeSlot}
               </div>
             </div>
           )}
-          <div className={`${compactMode ? "mt-3" : ""}`}>
+          <div className={`${compactMode ? "mt-2" : "mt-1"} [&_button]:mt-2 [&_button]:min-h-8 [&_button]:py-1.5`}>
             {signOutSlot}
+          </div>
+            </div>
           </div>
         </div>
       </div>
