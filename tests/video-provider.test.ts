@@ -32,8 +32,9 @@ describe("video provider model selection", () => {
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(String(requestInit.body)) as { model: string };
-    expect(body.model).toBe("wan-video/wan-2.2-t2v-fast");
+    const body = JSON.parse(String(requestInit.body)) as { version: string; model?: string };
+    expect(body.version).toBe("wan-video/wan-2.2-t2v-fast");
+    expect(body.model).toBeUndefined();
   });
 
   it("prefers REPLICATE_WAN_22_FAST_MODEL override", async () => {
@@ -54,8 +55,8 @@ describe("video provider model selection", () => {
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(String(requestInit.body)) as { model: string };
-    expect(body.model).toBe("custom/wan-fast");
+    const body = JSON.parse(String(requestInit.body)) as { version: string };
+    expect(body.version).toBe("custom/wan-fast");
   });
 
   it("normalizes short alias from env override to official slug", async () => {
@@ -76,8 +77,8 @@ describe("video provider model selection", () => {
     });
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(String(requestInit.body)) as { model: string };
-    expect(body.model).toBe("wan-video/wan-2.2-t2v-fast");
+    const body = JSON.parse(String(requestInit.body)) as { version: string };
+    expect(body.version).toBe("wan-video/wan-2.2-t2v-fast");
   });
 
   it("sends supported replicate input payload fields", async () => {
@@ -98,6 +99,7 @@ describe("video provider model selection", () => {
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(requestInit.body)) as {
+      version: string;
       input: {
         prompt: string;
         aspect_ratio: string;
@@ -107,11 +109,64 @@ describe("video provider model selection", () => {
       };
     };
 
+    expect(body.version).toBe("wan-video/wan-2.2-t2v-fast");
     expect(body.input.prompt).toBe("Prompt");
     expect(body.input.aspect_ratio).toBe("9:16");
     expect(body.input.resolution).toBe("480p");
     expect(body.input.duration).toBe(15);
     expect(body.input.frames_per_second).toBe(16);
+  });
+
+  it("logs safe metadata and hides provider payload details on failure", async () => {
+    process.env.REPLICATE_API_TOKEN = "token";
+
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 402,
+      json: async () => ({
+        error: "token=secret prompt=hidden",
+        body: { prompt: "hidden" },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    await expect(
+      startVideoProviderJob({
+        providerKey: "REPLICATE",
+        model: "wan-video/wan-2.2-t2v-fast",
+        prompt: "Prompt",
+        seconds: 8,
+      }),
+    ).rejects.toThrow("REPLICATE_BILLING_REQUIRED");
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      "[video-workflow] provider-start-attempt",
+      expect.objectContaining({
+        providerKey: "REPLICATE",
+        model: "wan-video/wan-2.2-t2v-fast",
+        duration: 8,
+        aspectRatio: "9:16",
+      }),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[video-workflow] provider-start-failure",
+      expect.objectContaining({
+        providerKey: "REPLICATE",
+        model: "wan-video/wan-2.2-t2v-fast",
+        status: 402,
+        safeErrorCode: "REPLICATE_BILLING_REQUIRED",
+      }),
+    );
+
+    const loggedText = `${JSON.stringify(infoSpy.mock.calls)} ${JSON.stringify(errorSpy.mock.calls)}`;
+    expect(loggedText).not.toContain("secret");
+    expect(loggedText).not.toContain("Prompt");
+    expect(loggedText).not.toContain("hidden");
+
+    infoSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it("maps provider codes to safe actionable user messages", () => {

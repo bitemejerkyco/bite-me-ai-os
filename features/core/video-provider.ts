@@ -122,6 +122,12 @@ export async function startVideoProviderJob(input: {
     if (!token || !model) providerError("REPLICATE_NOT_CONFIGURED");
 
     const safeDuration = Math.max(8, Math.min(15, Math.round(input.seconds)));
+    console.info("[video-workflow] provider-start-attempt", {
+      providerKey,
+      model,
+      duration: safeDuration,
+      aspectRatio: "9:16",
+    });
 
     const response = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
@@ -131,7 +137,7 @@ export async function startVideoProviderJob(input: {
         Accept: "application/json",
       },
       body: JSON.stringify({
-        model,
+        version: model,
         input: {
           prompt: input.prompt,
           aspect_ratio: "9:16",
@@ -143,7 +149,16 @@ export async function startVideoProviderJob(input: {
       cache: "no-store",
     });
     const payload = await readJsonResponse(response);
-    if (!response.ok) providerError(mapReplicateHttpError(response.status));
+    if (!response.ok) {
+      const safeErrorCode = mapReplicateHttpError(response.status);
+      console.error("[video-workflow] provider-start-failure", {
+        providerKey,
+        model,
+        status: response.status,
+        safeErrorCode,
+      });
+      providerError(safeErrorCode);
+    }
 
     const predictionId = extractPredictionId(payload);
     if (!predictionId) providerError("REPLICATE_START_FAILED");

@@ -19,6 +19,7 @@ import {
   fetchVideoProviderJob,
   getVideoProviderUnavailableMessage,
   mapProviderErrorCodeToMessage,
+  type SafeVideoProviderErrorCode,
   startVideoProviderJob,
 } from "@/features/core/video-provider";
 import { buildShortVideoWorkflowKey } from "@/features/core/video-idempotency";
@@ -199,9 +200,88 @@ function toSafeProviderMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error || "");
   if (!raw) return getVideoProviderUnavailableMessage();
   if (/^[A-Z_]+$/.test(raw)) {
-    return mapProviderErrorCodeToMessage(raw as never);
+    return mapProviderErrorCodeToMessage(raw as SafeVideoProviderErrorCode);
   }
   return getVideoProviderUnavailableMessage();
+}
+
+function toSafeProviderErrorCode(error: unknown): SafeVideoProviderErrorCode {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  if (
+    raw === "REPLICATE_NOT_CONFIGURED"
+    || raw === "REPLICATE_AUTH_FAILED"
+    || raw === "REPLICATE_BILLING_REQUIRED"
+    || raw === "REPLICATE_MODEL_NOT_FOUND"
+    || raw === "REPLICATE_RATE_LIMITED"
+    || raw === "REPLICATE_BAD_REQUEST"
+    || raw === "REPLICATE_START_FAILED"
+    || raw === "REPLICATE_STATUS_FAILED"
+    || raw === "REPLICATE_CANCEL_FAILED"
+  ) {
+    return raw;
+  }
+  return "VIDEO_PROVIDER_UNAVAILABLE";
+}
+
+async function failProviderStart(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  projectId: string;
+  workflowKey: string;
+  creditRequestId: string | null;
+  currentCreditStatus: VideoCreditStatusState | null;
+  currentFailureReferenceId: string | null;
+  currentWorkflowPercentage: number | null;
+  currentProviderProgress: number | null;
+  currentProviderJobId: string | null;
+  providerError: unknown;
+}) {
+  const safeErrorCode = toSafeProviderErrorCode(input.providerError);
+  const failureReferenceId = input.currentFailureReferenceId || newFailureReferenceId();
+  let creditStatus: VideoCreditStatusState = input.currentCreditStatus || "RESERVED";
+
+  if (input.currentCreditStatus !== "REFUNDED" && input.creditRequestId) {
+    const refund = await input.supabase.rpc("refund_my_video_credits", {
+      credit_request_id: input.creditRequestId,
+      refund_reason: "workflow-provider-start-failed",
+    });
+    if (!refund.error) {
+      creditStatus = "REFUNDED";
+    }
+  }
+
+  await updateProjectWorkflow({
+    supabase: input.supabase,
+    projectId: input.projectId,
+    workflowKey: input.workflowKey,
+    stage: "FAILED",
+    progress: Math.min(30, Math.max(0, input.currentWorkflowPercentage ?? input.currentProviderProgress ?? 30)),
+    status: "FAILED",
+    providerStatus: "failed",
+    providerProgress: input.currentProviderProgress ?? 0,
+    providerJobId: input.currentProviderJobId || null,
+    creditStatus,
+    creditRefundedAt: creditStatus === "REFUNDED" ? new Date().toISOString() : null,
+    failureReason: safeErrorCode,
+    failureReferenceId,
+  });
+
+  console.error("[video-workflow] provider-start-failure", {
+    projectId: input.projectId,
+    workflowKey: input.workflowKey,
+    safeErrorCode,
+  });
+
+  return NextResponse.json(
+    {
+      ok: false,
+      errorCode: safeErrorCode,
+      error: mapProviderErrorCodeToMessage(safeErrorCode),
+      projectId: input.projectId,
+      workflowKey: input.workflowKey,
+      failureReferenceId,
+    },
+    { status: 503 },
+  );
 }
 
 function logVideoPlanFailure(input: {
@@ -853,7 +933,7 @@ export async function POST(request: Request) {
 
     const routerSettings = await loadVideoRouterSettings();
     const profile = resolveVideoRouterProfile({
-      requestedTier: null,
+      requestedTier: "ECONOMY",
       mode: routerSettings.mode,
       seconds: durationSeconds,
       settings: routerSettings,
@@ -882,10 +962,18 @@ export async function POST(request: Request) {
         seconds: durationSeconds,
       });
     } catch (providerError) {
-      return NextResponse.json(
-        { ok: false, error: toSafeProviderMessage(providerError) },
-        { status: 503 },
-      );
+      return failProviderStart({
+        supabase,
+        projectId,
+        workflowKey,
+        creditRequestId: existing?.credit_request_id || creditRequestId,
+        currentCreditStatus: existing?.credit_status || "RESERVED",
+        currentFailureReferenceId: existing?.failure_reference_id || null,
+        currentWorkflowPercentage: existing?.workflow_percentage ?? null,
+        currentProviderProgress: existing?.provider_progress ?? null,
+        currentProviderJobId: existing?.provider_job_id || null,
+        providerError,
+      });
     }
 
     const { error: projectError } = await supabase.from("video_projects").upsert({
@@ -928,7 +1016,7 @@ export async function POST(request: Request) {
     } as never);
 
     if (projectError) {
-      return NextResponse.json({ error: SAFE_TRANSIENT_ERROR }, { status: 503 });
+      return NextResponse.json({ ok: false, error: SAFE_TRANSIENT_ERROR, errorCode: "VIDEO_PROVIDER_UNAVAILABLE" }, { status: 503 });
     }
 
     logStageTransition({
@@ -954,7 +1042,11 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || "");
     return NextResponse.json(
-      { ok: false, error: message.includes("temporarily unavailable") ? SAFE_TRANSIENT_ERROR : safeError(message) },
+      {
+        ok: false,
+        error: message.includes("temporarily unavailable") ? SAFE_TRANSIENT_ERROR : safeError(message),
+        errorCode: message.includes("temporarily unavailable") ? "VIDEO_PROVIDER_UNAVAILABLE" : toSafeProviderErrorCode(message),
+      },
       { status: 503 },
     );
   }
@@ -1047,7 +1139,11 @@ export async function GET(request: Request) {
       });
     } catch (providerError) {
       return NextResponse.json(
-        { ok: false, error: toSafeProviderMessage(providerError) },
+        {
+          ok: false,
+          error: toSafeProviderMessage(providerError),
+          errorCode: toSafeProviderErrorCode(providerError),
+        },
         { status: 503 },
       );
     }
