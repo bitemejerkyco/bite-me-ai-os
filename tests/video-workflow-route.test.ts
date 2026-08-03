@@ -928,6 +928,7 @@ describe("video workflow route", () => {
     const scenes = Array.isArray(project?.scenes) ? project?.scenes as Array<Record<string, unknown>> : [];
     expect(scenes.length).toBeGreaterThan(0);
     expect(scenes.every((scene) => scene.productAssetId === "product-2")).toBe(true);
+    expect(scenes.every((scene) => scene.productAssetStoragePath === "workspace-1/user-1/product-2.png")).toBe(true);
 
     const second = await POST(
       new Request("https://postmotive.example/api/ai/video-workflow", {
@@ -942,6 +943,7 @@ describe("video workflow route", () => {
       ? projectAfterRetry?.scenes as Array<Record<string, unknown>>
       : [];
     expect(retryScenes.every((scene) => scene.productAssetId === "product-2")).toBe(true);
+    expect(retryScenes.every((scene) => scene.productAssetStoragePath === "workspace-1/user-1/product-2.png")).toBe(true);
   });
 
   it("refunds and persists a failed state when provider startup fails", async () => {

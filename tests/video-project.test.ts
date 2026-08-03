@@ -90,6 +90,7 @@ describe("video project foundation", () => {
             onScreenText: "Trail ready",
             productAssetId: "asset-1",
             productAssetName: "Trail jerky pack",
+            productAssetStoragePath: "workspace/user/asset-1.png",
             productMode: "EXACT_PRODUCT",
             productPlacement: "center frame",
             productScale: "large and readable",
@@ -106,6 +107,7 @@ describe("video project foundation", () => {
     expect(parsed?.callToAction).toBe("Shop now");
       expect(parsed?.scenes[0].productAssetId).toBe("asset-1");
       expect(parsed?.scenes[0].productMode).toBe("EXACT_PRODUCT");
+        expect(parsed?.scenes[0].productAssetStoragePath).toBe("workspace/user/asset-1.png");
   });
 
   it("parses JSON wrapped in fenced markdown", () => {

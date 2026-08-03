@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   loadCloudVideoProjects,
   loadCloudCreativeVersions,
-  loadCloudMedia,
   resolveCloudMediaUrl,
   saveCloudCreativeVersion,
   saveCloudDraft,
@@ -42,6 +41,16 @@ import {
   type CreationMode,
 } from "@/features/core/creative-spec";
 import {
+  EXACT_PRODUCT_REQUIRED_MESSAGE,
+  applyProductSceneMetadata,
+  buildProductAssetChoices,
+  deriveSelectedProductAssetFromProject,
+  describeAssetDimensions,
+  isApprovedProductAsset,
+  validateProductImageUpload,
+  type ProductAssetChoice,
+} from "@/features/core/product-asset-selector";
+import {
   createEmptyTimeline,
   createMemeStarterTimeline,
   type CreatorTimeline,
@@ -59,34 +68,6 @@ type VideoPlanPayload = {
   complianceNote?: string;
   scenes?: VideoProject["scenes"];
   error?: string;
-};
-
-type ProductAssetChoice = {
-  id: string;
-  name: string;
-  storagePath: string;
-  type: string;
-  productMetadata?: {
-    productId?: string;
-    productName?: string;
-    assetRole?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
-    isPrimaryProductImage?: boolean;
-    role?: "PRIMARY" | "ALTERNATE" | "REFERENCE";
-    angle?: string;
-    locked?: boolean;
-    approvedForGeneration?: boolean;
-    transparentBackground?: boolean;
-    originalAssetId?: string;
-    exactProductMode?: boolean;
-    allowAiMotion?: boolean;
-    preserveOriginalAsset?: boolean;
-    originalStoragePath?: string;
-    background?: string;
-    position?: string;
-    scale?: string;
-    safeArea?: string;
-    notes?: string;
-  };
 };
 
 type WorkflowStatusPayload = {
@@ -115,6 +96,22 @@ type VideoQualityEstimatePayload = {
   expectedGenerationTime?: { label?: string };
   providerDisplayName?: string;
   estimateDisclaimer?: string;
+  error?: string;
+};
+
+type ProductAssetsApiPayload = {
+  ok?: boolean;
+  assets?: Array<{
+    id: string;
+    name: string;
+    storagePath: string;
+    type: string;
+    width?: number;
+    height?: number;
+    tags?: string[];
+    approvedForGeneration?: boolean;
+    productMetadata?: ProductAssetChoice["productMetadata"];
+  }>;
   error?: string;
 };
 
@@ -151,31 +148,6 @@ function composeRenderPrompt(project: VideoProject): string {
   ].join("\n");
 }
 
-function applyProductSceneMetadata(
-  scenes: VideoProject["scenes"],
-  productAsset: ProductAssetChoice | null,
-  allowMotion: boolean,
-): VideoProject["scenes"] {
-  if (!productAsset) return scenes;
-  return scenes.map((scene) => ({
-    ...scene,
-    productAssetId: productAsset.id,
-    productAssetName: productAsset.name,
-    productMode: allowMotion ? "AI_PRODUCT_MOTION" : "EXACT_PRODUCT",
-    productPlacement: productAsset.productMetadata?.position || "center frame",
-    productScale: productAsset.productMetadata?.scale || "large and readable",
-    productOpacity: scene.productOpacity ?? 1,
-    productShadow: scene.productShadow ?? true,
-    productRotation: scene.productRotation ?? 0,
-    productEntrance: scene.productEntrance ?? "FADE_IN",
-    productExit: scene.productExit ?? "FADE_OUT",
-    productZoom: scene.productZoom ?? "NONE",
-    productBackground: productAsset.productMetadata?.background || "brand-safe neutral background",
-    productSafeArea: productAsset.productMetadata?.safeArea || "leave room for overlays",
-    productLocked: productAsset.productMetadata?.locked ?? true,
-    preserveOriginalAsset: productAsset.productMetadata?.preserveOriginalAsset ?? true,
-  }));
-}
 export function isDatabaseUuid(value: unknown): value is string {
   return typeof value === "string"
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -312,6 +284,14 @@ export default function VideoStudio({
     useState<VideoCreditStatus | null>(null);
   const [creditError, setCreditError] = useState("");
   const [productAssets, setProductAssets] = useState<ProductAssetChoice[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerShowAllImages, setPickerShowAllImages] = useState(false);
+  const [pickerActionError, setPickerActionError] = useState("");
+  const [productUploadWorking, setProductUploadWorking] = useState(false);
+  const [productApproveWorkingId, setProductApproveWorkingId] = useState("");
+  const [productSelectionWarning, setProductSelectionWarning] = useState("");
+  const [pickerPreviewUrls, setPickerPreviewUrls] = useState<Record<string, string>>({});
   const [selectedProductAssetId, setSelectedProductAssetId] = useState("");
   const [selectedProductPreviewUrl, setSelectedProductPreviewUrl] = useState("");
   const [exactProductMode, setExactProductMode] = useState(true);
@@ -324,6 +304,7 @@ export default function VideoStudio({
   const checkRenderRef = useRef<() => Promise<void>>(async () => undefined);
   const renderCheckInFlightRef = useRef(false);
   const sceneEditorRef = useRef<HTMLDivElement | null>(null);
+  const productUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -370,39 +351,94 @@ export default function VideoStudio({
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  const syncSelectedProductAsset = (asset: ProductAssetChoice | null) => {
+    if (!asset) return;
+    setSelectedProductAssetId(asset.id);
+    setExactProductMode(true);
+    setLockProductAppearance(true);
+    setAllowAiProductMotion(
+      Boolean(
+        asset.productMetadata?.allowAiMotion
+          && asset.productMetadata?.exactProductMode === false,
+      ),
+    );
+    setProductPlacement(asset.productMetadata?.position || "center frame");
+    setProductScale(asset.productMetadata?.scale || "large and readable");
+    setProductBackground(
+      asset.productMetadata?.background || "brand-safe neutral background",
+    );
+    setProductSafeArea(
+      asset.productMetadata?.safeArea || "leave room for overlays",
+    );
+    setProductSelectionWarning("");
+  };
+
+  const refreshProductAssets = useCallback(async () => {
+    setPickerLoading(true);
+    setPickerActionError("");
+    try {
+      const response = await fetch("/api/media/product-assets?includeAll=true", {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as ProductAssetsApiPayload;
+      if (!response.ok || !payload.ok || !Array.isArray(payload.assets)) {
+        throw new Error(payload.error || "Unable to load product images.");
+      }
+
+      const choices = buildProductAssetChoices(
+        payload.assets.map((asset) => ({
+          id: asset.id,
+          name: asset.name,
+          storagePath: asset.storagePath,
+          type: asset.type,
+          width: asset.width,
+          height: asset.height,
+          size: 0,
+          tags: asset.tags || [],
+          createdAt: "",
+          productMetadata: asset.productMetadata,
+        })),
+        { includeUnapproved: true },
+      );
+
+      setProductAssets(choices);
+    } catch (caught) {
+      setProductAssets([]);
+      setPickerActionError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to load product images.",
+      );
+    } finally {
+      setPickerLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void loadCloudMedia({ includeArchived: false })
-        .then((items) => {
-          const approvedProductAssets = items
-            .filter((item) => item.type.startsWith("image/"))
-            .filter((item) => item.productMetadata?.approvedForGeneration || item.tags.includes("product"))
-            .map((item) => ({
-              id: item.id,
-              name: item.name,
-              storagePath: item.storagePath || "",
-              type: item.type,
-              productMetadata: item.productMetadata,
-            }));
-          setProductAssets(approvedProductAssets);
-          const params = new URLSearchParams(window.location.search);
-          const assetId = params.get("assetId") || "";
-          const matched = approvedProductAssets.find((item) => item.id === assetId) || approvedProductAssets[0] || null;
-          if (matched) {
-            setSelectedProductAssetId(matched.id);
-            setExactProductMode(true);
-            setLockProductAppearance(true);
-            setAllowAiProductMotion(Boolean(matched.productMetadata?.allowAiMotion && matched.productMetadata?.exactProductMode === false));
-            setProductPlacement(matched.productMetadata?.position || "center frame");
-            setProductScale(matched.productMetadata?.scale || "large and readable");
-            setProductBackground(matched.productMetadata?.background || "brand-safe neutral background");
-            setProductSafeArea(matched.productMetadata?.safeArea || "leave room for overlays");
-          }
-        })
-        .catch(() => setProductAssets([]));
+      void refreshProductAssets();
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [refreshProductAssets]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (!selectedProductAssetId) return;
+      const selected = productAssets.find((item) => item.id === selectedProductAssetId) || null;
+      if (!selected) {
+        setSelectedProductAssetId("");
+        setProductSelectionWarning(
+          "The selected product image is no longer accessible. Choose or upload an approved product image.",
+        );
+        return;
+      }
+      if (!isApprovedProductAsset(selected)) {
+        setSelectedProductAssetId("");
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [productAssets, selectedProductAssetId]);
 
   const refreshCreditStatus = async () => {
     try {
@@ -599,6 +635,56 @@ export default function VideoStudio({
   const selectedProductAsset =
     productAssets.find((item) => item.id === selectedProductAssetId) || null;
 
+  const canGenerateInExactMode =
+    !exactProductMode || Boolean(selectedProductAsset && isApprovedProductAsset(selectedProductAsset));
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const params = new URLSearchParams(window.location.search);
+      const queryAssetId = params.get("assetId") || "";
+      if (!queryAssetId || selectedProductAssetId) return;
+
+      const matched = productAssets.find((item) => item.id === queryAssetId) || null;
+      if (matched && isApprovedProductAsset(matched)) {
+        syncSelectedProductAsset(matched);
+        return;
+      }
+
+      if (matched && !isApprovedProductAsset(matched)) {
+        setProductSelectionWarning(
+          "This product image must be approved for product use before selection.",
+        );
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [productAssets, selectedProductAssetId]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (!project) return;
+      const derived = deriveSelectedProductAssetFromProject(project);
+      if (!derived?.assetId) return;
+
+      if (selectedProductAssetId && selectedProductAssetId === derived.assetId) {
+        return;
+      }
+
+      const matched = productAssets.find((item) => item.id === derived.assetId) || null;
+      if (matched && isApprovedProductAsset(matched)) {
+        syncSelectedProductAsset(matched);
+        return;
+      }
+
+      setProductSelectionWarning(
+        "The previously selected product image is no longer available. Choose or upload an approved product image to continue.",
+      );
+      setSelectedProductAssetId("");
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [project, productAssets, selectedProductAssetId]);
+
   useEffect(() => {
     let cancelled = false;
     const frame = requestAnimationFrame(() => {
@@ -644,6 +730,189 @@ export default function VideoStudio({
         },
       }
     : undefined;
+
+  const visibleProductAssets = useMemo(
+    () =>
+      productAssets.filter((asset) =>
+        pickerShowAllImages ? true : isApprovedProductAsset(asset),
+      ),
+    [pickerShowAllImages, productAssets],
+  );
+
+  useEffect(() => {
+    if (!pickerOpen || !visibleProductAssets.length) return;
+    const unresolved = visibleProductAssets
+      .filter((asset) => !pickerPreviewUrls[asset.id])
+      .slice(0, 24);
+    if (!unresolved.length) return;
+
+    let cancelled = false;
+    void Promise.all(
+      unresolved.map(async (asset) => {
+        if (!asset.storagePath) return [asset.id, ""] as const;
+        try {
+          const url = await resolveCloudMediaUrl(asset.storagePath);
+          return [asset.id, url] as const;
+        } catch {
+          return [asset.id, ""] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setPickerPreviewUrls((current) => {
+        const next = { ...current };
+        for (const [assetId, url] of entries) {
+          if (url) next[assetId] = url;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pickerOpen, pickerPreviewUrls, visibleProductAssets]);
+
+  const selectApprovedProductAsset = (asset: ProductAssetChoice) => {
+    if (!isApprovedProductAsset(asset)) {
+      setPickerActionError(
+        "Approve this image for product use before selecting it in Exact Product Mode.",
+      );
+      return;
+    }
+    syncSelectedProductAsset(asset);
+    setPickerOpen(false);
+    setPickerActionError("");
+  };
+
+  const approveProductAssetForUse = async (asset: ProductAssetChoice) => {
+    setProductApproveWorkingId(asset.id);
+    setPickerActionError("");
+    try {
+      const response = await fetch("/api/media/product-assets", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assetId: asset.id }),
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        asset?: {
+          id: string;
+          name: string;
+          storagePath: string;
+          type: string;
+          width?: number;
+          height?: number;
+          tags?: string[];
+          productMetadata?: ProductAssetChoice["productMetadata"];
+        };
+      };
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Unable to approve product image.");
+      }
+      await refreshProductAssets();
+      const approvedAsset = payload.asset
+        ? buildProductAssetChoices(
+          [{
+            id: payload.asset.id,
+            name: payload.asset.name,
+            storagePath: payload.asset.storagePath,
+            type: payload.asset.type,
+            width: payload.asset.width,
+            height: payload.asset.height,
+            size: 0,
+            tags: payload.asset.tags || [],
+            createdAt: "",
+            productMetadata: payload.asset.productMetadata,
+          }],
+          { includeUnapproved: true },
+        )[0] || null
+        : null;
+      if (approvedAsset && isApprovedProductAsset(approvedAsset)) {
+        syncSelectedProductAsset(approvedAsset);
+        setPickerOpen(false);
+      }
+    } catch (caught) {
+      setPickerActionError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to approve product image.",
+      );
+    } finally {
+      setProductApproveWorkingId("");
+    }
+  };
+
+  const inferImageDimensions = async (file: File): Promise<{ width?: number; height?: number }> => {
+    if (!file.type.startsWith("image/")) return {};
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve({ width: image.width, height: image.height });
+        image.onerror = () => reject(new Error("Unable to read image dimensions."));
+        image.src = objectUrl;
+      });
+      return dimensions;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  const uploadAndSelectProductImage = async (file: File) => {
+    const validationError = validateProductImageUpload(file);
+    if (validationError) {
+      setPickerActionError(validationError);
+      return;
+    }
+
+    setProductUploadWorking(true);
+    setPickerActionError("");
+    try {
+      const dimensions = await inferImageDimensions(file);
+      const uploaded = await uploadCloudMedia(
+        file,
+        ["product", "exact-product"],
+        undefined,
+        {
+          source: "UPLOADED",
+          generationStatus: "READY",
+          width: dimensions.width,
+          height: dimensions.height,
+          productMetadata: {
+            approvedForGeneration: false,
+            role: "PRIMARY",
+            assetRole: "PRIMARY",
+            isPrimaryProductImage: true,
+            locked: true,
+            exactProductMode: true,
+            allowAiMotion: false,
+            preserveOriginalAsset: true,
+          },
+        },
+      );
+
+      const uploadedChoice = buildProductAssetChoices([uploaded], { includeUnapproved: true })[0] || null;
+      if (!uploadedChoice) {
+        throw new Error("Uploaded image is not supported for exact product mode.");
+      }
+
+      await approveProductAssetForUse(uploadedChoice);
+      await refreshProductAssets();
+    } catch (caught) {
+      setPickerActionError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to upload product image.",
+      );
+    } finally {
+      setProductUploadWorking(false);
+      if (productUploadInputRef.current) {
+        productUploadInputRef.current.value = "";
+      }
+    }
+  };
 
   const overlaySpellingIssues = useMemo(
     () => (project?.scenes || []).flatMap((scene, index) =>
@@ -714,8 +983,8 @@ export default function VideoStudio({
       if (project?.scenes.length && !ensureOverlaySpellingIsValid()) {
         return;
       }
-      if (exactProductMode && !selectedProductAsset) {
-        throw new Error("Select an approved product image before generating an exact product video.");
+      if (!canGenerateInExactMode) {
+        throw new Error(EXACT_PRODUCT_REQUIRED_MESSAGE);
       }
       const retry = Boolean(options?.retry);
       const activeWorkflowKey = retry
@@ -812,8 +1081,8 @@ export default function VideoStudio({
     setError("");
     setNotice("");
     try {
-      if (exactProductMode && !selectedProductAsset) {
-        throw new Error("Select an approved product image before creating an exact product plan.");
+      if (!canGenerateInExactMode) {
+        throw new Error(EXACT_PRODUCT_REQUIRED_MESSAGE);
       }
       const response = await fetch("/api/ai/video-plan", {
         method: "POST",
@@ -1780,50 +2049,188 @@ export default function VideoStudio({
               </option>
             </select>
           </label>
-          <label className="block text-sm text-slate-700">
-            Select actual product image.
-            <select
-              value={selectedProductAssetId}
-              onChange={(event) => {
-                const assetId = event.target.value;
-                setSelectedProductPreviewUrl("");
-                setSelectedProductAssetId(assetId);
-                const asset = productAssets.find((item) => item.id === assetId) || null;
-                setExactProductMode(true);
-                setLockProductAppearance(true);
-                setAllowAiProductMotion(false);
-                setProductPlacement(asset?.productMetadata?.position || "center frame");
-                setProductScale(asset?.productMetadata?.scale || "large and readable");
-                setProductBackground(asset?.productMetadata?.background || "brand-safe neutral background");
-                setProductSafeArea(asset?.productMetadata?.safeArea || "leave room for overlays");
-              }}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"
-            >
-              <option value="">Select an approved product image</option>
-              {productAssets.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.name}{asset.productMetadata?.productName ? ` · ${asset.productMetadata.productName}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          {selectedProductAsset ? (
-            <div className="rounded-2xl border border-sky-300 bg-sky-50 p-3">
-              <div className="flex items-center gap-3">
-                {selectedProductPreviewUrl ? (
-                  <img
-                    src={selectedProductPreviewUrl}
-                    alt={selectedProductAsset.name}
-                    className="h-16 w-16 rounded-lg border border-sky-200 object-cover"
-                  />
-                ) : (
-                  <div className="h-16 w-16 rounded-lg border border-sky-200 bg-white" />
-                )}
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{selectedProductAsset.name}</p>
-                  <p className="mt-1 inline-flex rounded-full bg-sky-700 px-2 py-0.5 text-xs font-bold tracking-wide text-white">
-                    EXACT PRODUCT
-                  </p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Actual Product Image</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Choose or upload an approved product image from this workspace before generating in Exact Product Mode.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerOpen(true);
+                    setPickerActionError("");
+                  }}
+                  className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+                >
+                  Choose from Media Library
+                </button>
+                <button
+                  type="button"
+                  disabled={productUploadWorking}
+                  onClick={() => productUploadInputRef.current?.click()}
+                  className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50 disabled:opacity-60"
+                >
+                  {productUploadWorking ? "Uploading..." : "Upload product image"}
+                </button>
+                <input
+                  ref={productUploadInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    void uploadAndSelectProductImage(file);
+                  }}
+                />
+              </div>
+            </div>
+
+            {selectedProductAsset ? (
+              <div className="mt-4 rounded-2xl border border-sky-300 bg-sky-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {selectedProductPreviewUrl ? (
+                      <img
+                        src={selectedProductPreviewUrl}
+                        alt={selectedProductAsset.name}
+                        className="h-16 w-16 rounded-lg border border-sky-200 object-cover"
+                      />
+                    ) : (
+                      <div className="h-16 w-16 rounded-lg border border-sky-200 bg-white" />
+                    )}
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{selectedProductAsset.name}</p>
+                      <p className="mt-1 text-xs text-slate-600">{describeAssetDimensions(selectedProductAsset)}</p>
+                      <p className="mt-1 inline-flex rounded-full bg-sky-700 px-2 py-0.5 text-xs font-bold tracking-wide text-white">
+                        Approved product image
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen(true)}
+                      className="rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700"
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProductAssetId("");
+                        setSelectedProductPreviewUrl("");
+                        setProductSelectionWarning("");
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {EXACT_PRODUCT_REQUIRED_MESSAGE}
+              </p>
+            )}
+
+            {productSelectionWarning ? (
+              <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {productSelectionWarning}
+              </p>
+            ) : null}
+            {pickerActionError ? (
+              <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {pickerActionError}
+              </p>
+            ) : null}
+          </div>
+
+          {pickerOpen ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+              <div className="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Select Product Image</p>
+                    <p className="text-xs text-slate-500">Workspace-scoped Media Library images only.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(false)}
+                    className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-600"
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={pickerShowAllImages}
+                      onChange={(event) => setPickerShowAllImages(event.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    Show all workspace images
+                  </label>
+                </div>
+                <div className="max-h-[58vh] overflow-y-auto px-4 py-3">
+                  {pickerLoading ? (
+                    <p className="text-sm text-slate-500">Loading product images...</p>
+                  ) : visibleProductAssets.length ? (
+                    <div className="space-y-3">
+                      {visibleProductAssets.map((asset) => {
+                        const approved = isApprovedProductAsset(asset);
+                        const preview = pickerPreviewUrls[asset.id] || "";
+                        return (
+                          <div key={asset.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                            <div className="flex items-center gap-3">
+                              {preview ? (
+                                <img src={preview} alt={asset.name} className="h-14 w-14 rounded-lg border border-slate-200 object-cover" />
+                              ) : (
+                                <div className="h-14 w-14 rounded-lg border border-slate-200 bg-slate-50" />
+                              )}
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">{asset.name}</p>
+                                <p className="text-xs text-slate-500">{describeAssetDimensions(asset)}</p>
+                                <p className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${approved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                  {approved ? "Approved" : "Approval required"}
+                                </p>
+                              </div>
+                            </div>
+                            {approved ? (
+                              <button
+                                type="button"
+                                onClick={() => selectApprovedProductAsset(asset)}
+                                className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white"
+                              >
+                                Select
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={productApproveWorkingId === asset.id}
+                                onClick={() => void approveProductAssetForUse(asset)}
+                                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-60"
+                              >
+                                {productApproveWorkingId === asset.id ? "Approving..." : "Approve for product use"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      {pickerShowAllImages
+                        ? "No workspace images are available yet. Upload a PNG, JPEG, or WEBP image."
+                        : "No approved product images yet. Toggle \"Show all workspace images\" to approve one."}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1833,7 +2240,12 @@ export default function VideoStudio({
               <input
                 type="checkbox"
                 checked={exactProductMode}
-                onChange={(event) => setExactProductMode(event.target.checked)}
+                onChange={(event) => {
+                  if (!event.target.checked && selectedProductAsset) {
+                    return;
+                  }
+                  setExactProductMode(event.target.checked);
+                }}
                 className="mt-1 h-4 w-4"
               />
               <span>
@@ -1863,7 +2275,12 @@ export default function VideoStudio({
               <input
                 type="checkbox"
                 checked={lockProductAppearance}
-                onChange={(event) => setLockProductAppearance(event.target.checked)}
+                onChange={(event) => {
+                  if (!event.target.checked && selectedProductAsset) {
+                    return;
+                  }
+                  setLockProductAppearance(event.target.checked);
+                }}
                 className="mt-1 h-4 w-4"
               />
               <span>
@@ -1905,7 +2322,7 @@ export default function VideoStudio({
             </label>
           </div>
           <button
-            disabled={Boolean(working) || activeJob}
+            disabled={Boolean(working) || activeJob || !canGenerateInExactMode}
             onClick={() => void startWorkflow()}
             className="w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold hover:bg-violet-500 disabled:opacity-60"
           >
@@ -1913,6 +2330,11 @@ export default function VideoStudio({
               ? "Generating video…"
               : "Generate full video"}
           </button>
+          {!canGenerateInExactMode ? (
+            <p className="text-xs text-amber-700">
+              {EXACT_PRODUCT_REQUIRED_MESSAGE}
+            </p>
+          ) : null}
           <button
             type="button"
             disabled={Boolean(working) || activeJob}
