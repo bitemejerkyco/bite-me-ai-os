@@ -64,18 +64,38 @@ export function buildCreativeSpecFromVideoProject(input: {
       opacity: 1,
       text: scene.onScreenText,
       style: {
-        fontFamily: "Inter",
-        fontSize: 42,
-        fontWeight: 800,
-        color: "#ffffff",
+        fontFamily: scene.overlayFontFamily || "Inter",
+        fontSize: scene.overlayFontSize || 42,
+        fontWeight: scene.overlayFontWeight || 800,
+        color: scene.overlayColor || "#ffffff",
         shadow: "0 8px 20px rgba(0,0,0,0.45)",
         alignment: "center",
       },
-      animationIn: "WORD_BY_WORD",
+      animationIn: scene.overlayAnimation || "WORD_BY_WORD",
       animationOut: "FADE",
       locked: false,
       muted: false,
     });
+
+    if (scene.audioCue) {
+      timelineItems.push({
+        id: `audio-scene-${scene.order}`,
+        trackId: "track-audio",
+        trackType: "AUDIO",
+        startFrame: frameCursor,
+        durationFrames: sceneFrames,
+        zIndex: 0,
+        position: { x: 0, y: 0 },
+        scale: 1,
+        rotation: 0,
+        opacity: Math.max(0.05, Math.min(1, scene.audioVolume ?? 0.75)),
+        text: scene.audioCue,
+        animationIn: "NONE",
+        animationOut: "NONE",
+        locked: false,
+        muted: false,
+      });
+    }
 
     if (scene.productAssetId) {
       timelineItems.push({

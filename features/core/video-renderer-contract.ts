@@ -49,7 +49,7 @@ export type RendererProgressEvent = {
 
 export interface VideoRendererQueue {
   createJob(input: CreateRenderJobInput): Promise<RenderJobRecord>;
-  claimJob(workerId: string): Promise<RenderJobRecord | null>;
+  claimJob(input: { workspaceId: string; workerId: string }): Promise<RenderJobRecord | null>;
   updateProgress(event: RendererProgressEvent): Promise<RenderJobRecord>;
   completeJob(input: { jobId: string; outputUrl: string }): Promise<RenderJobRecord>;
   failJob(input: { jobId: string; failureCode: string; failureReason: string }): Promise<RenderJobRecord>;

@@ -37,7 +37,10 @@ import {
   quoteVideoCredits,
   type VideoCreditStatus,
 } from "@/features/core/video-credits";
-import type { CreationMode } from "@/features/core/creative-spec";
+import {
+  getOverlaySpellingIssues,
+  type CreationMode,
+} from "@/features/core/creative-spec";
 import {
   createEmptyTimeline,
   createMemeStarterTimeline,
@@ -642,6 +645,19 @@ export default function VideoStudio({
       }
     : undefined;
 
+  const overlaySpellingIssues = useMemo(
+    () => (project?.scenes || []).flatMap((scene, index) =>
+      getOverlaySpellingIssues(scene.onScreenText).map((issue) => `Scene ${index + 1}: ${issue}`),
+    ),
+    [project?.scenes],
+  );
+
+  const ensureOverlaySpellingIsValid = (): boolean => {
+    if (!overlaySpellingIssues.length) return true;
+    setError(`Fix on-screen text spelling before continuing. ${overlaySpellingIssues[0]}`);
+    return false;
+  };
+
   const addVersion = async (version: CreativeVersion) => {
     await saveCloudCreativeVersion(version);
     setVersions((current) => [version, ...current]);
@@ -695,6 +711,9 @@ export default function VideoStudio({
     setError("");
     setNotice("");
     try {
+      if (project?.scenes.length && !ensureOverlaySpellingIsValid()) {
+        return;
+      }
       if (exactProductMode && !selectedProductAsset) {
         throw new Error("Select an approved product image before generating an exact product video.");
       }
@@ -929,6 +948,7 @@ export default function VideoStudio({
 
   const startRender = async () => {
     if (!project) return;
+    if (!ensureOverlaySpellingIsValid()) return;
     if (!renderPermission.allowed) {
       setError(renderPermission.reason || "Video credits are unavailable.");
       return;
@@ -989,6 +1009,7 @@ export default function VideoStudio({
     requestOverride?: string,
   ) => {
     if (!project?.videoStoragePath) return;
+    if (!ensureOverlaySpellingIsValid()) return;
     const requestedChange = (requestOverride || revisionRequest).trim();
     if (!requestedChange) {
       setError("Describe the video change you want first.");
@@ -1212,6 +1233,7 @@ export default function VideoStudio({
 
   const savePlanEdits = async () => {
     if (!project) return;
+    if (!ensureOverlaySpellingIsValid()) return;
     setWorking("save");
     setError("");
     try {
@@ -2232,6 +2254,11 @@ export default function VideoStudio({
                         }
                         className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
                       />
+                      {getOverlaySpellingIssues(scene.onScreenText).length ? (
+                        <p className="mt-1 text-[11px] text-amber-700">
+                          {getOverlaySpellingIssues(scene.onScreenText).join(" · ")}
+                        </p>
+                      ) : null}
                     </label>
                   </div>
                 ))}
@@ -2288,6 +2315,128 @@ export default function VideoStudio({
                         />
                       </label>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <label className="block text-xs text-slate-700">
+                          Overlay font family
+                          <input
+                            value={scene.overlayFontFamily || "Inter"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, overlayFontFamily: event.target.value }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Overlay color
+                          <input
+                            type="color"
+                            value={scene.overlayColor || "#ffffff"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, overlayColor: event.target.value }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-2 py-1"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Overlay font size
+                          <input
+                            type="number"
+                            min={18}
+                            max={96}
+                            step={1}
+                            value={scene.overlayFontSize ?? 42}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, overlayFontSize: Number(event.target.value) }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Overlay animation
+                          <select
+                            value={scene.overlayAnimation || "WORD_BY_WORD"}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? {
+                                        ...item,
+                                        overlayAnimation: event.target.value as NonNullable<typeof scene.overlayAnimation>,
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          >
+                            <option value="WORD_BY_WORD">Word by word</option>
+                            <option value="FADE">Fade</option>
+                            <option value="POP">Pop</option>
+                            <option value="SLIDE">Slide</option>
+                            <option value="TYPEWRITER">Typewriter</option>
+                            <option value="NONE">None</option>
+                          </select>
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Audio cue
+                          <input
+                            value={scene.audioCue || ""}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, audioCue: event.target.value }
+                                    : item,
+                                ),
+                              })
+                            }
+                            placeholder="e.g. subtle whoosh + soft riser"
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-700">
+                          Audio volume (0-1)
+                          <input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={scene.audioVolume ?? 0.75}
+                            onChange={(event) =>
+                              setProject({
+                                ...project,
+                                scenes: project.scenes.map((item, itemIndex) =>
+                                  itemIndex === sceneIndex
+                                    ? { ...item, audioVolume: Number(event.target.value) }
+                                    : item,
+                                ),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+                          />
+                        </label>
                         <label className="block text-xs text-slate-700">
                           Product position
                           <input

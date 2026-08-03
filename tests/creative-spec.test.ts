@@ -165,4 +165,83 @@ describe("creative spec validation", () => {
     expect(constraint).toContain("Do not render words");
     expect(constraint).toContain("deterministic overlay");
   });
+
+  it("flags common spelling mistakes in deterministic overlays", () => {
+    const result = validateCreativeSpec({
+      id: "spec-3",
+      workspaceId: "workspace-1",
+      projectId: "project-3",
+      creationMode: "PRODUCT_DEMO",
+      title: "Spelling Validation",
+      templateId: "template-product-reveal",
+      concept: "Validate deterministic overlay spelling.",
+      objective: "Protect spelling quality",
+      callToAction: "Learn more",
+      channel: "TikTok",
+      durationSeconds: 8,
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      durationFrames: 240,
+      qualityTier: "ECONOMY",
+      caption: "Caption",
+      hashtags: ["#quality"],
+      productAssetIds: [],
+      exactProductMode: false,
+      strictTextlessFrames: true,
+      tracks: [
+        { id: "track-video", type: "VIDEO", label: "Video", hidden: false, locked: false, muted: false },
+        { id: "track-caption", type: "CAPTION", label: "Caption", hidden: false, locked: false, muted: false },
+      ],
+      timelineItems: [
+        {
+          id: "video-1",
+          trackId: "track-video",
+          trackType: "VIDEO",
+          startFrame: 0,
+          durationFrames: 240,
+          zIndex: 1,
+          position: { x: 50, y: 50 },
+          scale: 1,
+          rotation: 0,
+          opacity: 1,
+          text: "",
+          src: "video.mp4",
+          animationIn: "FADE",
+          animationOut: "FADE",
+          locked: false,
+          muted: false,
+        },
+        {
+          id: "caption-1",
+          trackId: "track-caption",
+          trackType: "CAPTION",
+          startFrame: 0,
+          durationFrames: 240,
+          zIndex: 10,
+          position: { x: 50, y: 85 },
+          scale: 1,
+          rotation: 0,
+          opacity: 1,
+          text: "Definately trail ready",
+          animationIn: "WORD_BY_WORD",
+          animationOut: "FADE",
+          locked: false,
+          muted: false,
+        },
+      ],
+      scenes: [
+        {
+          order: 1,
+          seconds: 8,
+          visualDirection: "Hero product shot with clean framing.",
+          narration: "Keep this short and clear.",
+          overlayText: "Recieve more energy",
+        },
+      ],
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes("Possible misspelling"))).toBe(true);
+  });
 });

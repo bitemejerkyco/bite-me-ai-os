@@ -41,6 +41,13 @@ export type VideoScene = {
   visual: string;
   narration: string;
   onScreenText: string;
+  overlayFontFamily?: string;
+  overlayFontSize?: number;
+  overlayFontWeight?: number;
+  overlayColor?: string;
+  overlayAnimation?: "NONE" | "POP" | "FADE" | "SLIDE" | "WORD_BY_WORD" | "TYPEWRITER";
+  audioCue?: string;
+  audioVolume?: number;
   mediaStoragePath?: string;
   mediaAssetId?: string;
   productAssetId?: string;

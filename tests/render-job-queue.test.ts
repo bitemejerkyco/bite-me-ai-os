@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
-import { InMemoryRenderJobQueue, resetRenderJobQueue } from "@/features/core/render-job-queue";
+import { InMemoryRenderJobQueue } from "@/features/core/render-job-queue.in-memory";
 
 vi.mock("server-only", () => ({}));
 
+const queue = new InMemoryRenderJobQueue();
+
 beforeEach(() => {
-  resetRenderJobQueue();
+  queue.reset();
 });
 
 describe("render job queue", () => {
   it("keeps idempotency by workflow key", async () => {
-    const queue = new InMemoryRenderJobQueue();
     const first = await queue.createJob({
       workspaceId: "workspace-1",
       projectId: "project-1",
@@ -33,7 +34,6 @@ describe("render job queue", () => {
   });
 
   it("supports claim, progress, complete, fail and retry lifecycle", async () => {
-    const queue = new InMemoryRenderJobQueue();
     const created = await queue.createJob({
       workspaceId: "workspace-1",
       projectId: "project-2",
@@ -44,7 +44,7 @@ describe("render job queue", () => {
       provider: "INTERNAL",
     });
 
-    const claimed = await queue.claimJob("worker-1");
+    const claimed = await queue.claimJob({ workspaceId: "workspace-1", workerId: "worker-1" });
     expect(claimed?.id).toBe(created.id);
 
     const inProgress = await queue.updateProgress({
@@ -71,7 +71,6 @@ describe("render job queue", () => {
   });
 
   it("does not leak jobs across workspace when keyed differently", async () => {
-    const queue = new InMemoryRenderJobQueue();
     const a = await queue.createJob({
       workspaceId: "workspace-1",
       projectId: "project-a",

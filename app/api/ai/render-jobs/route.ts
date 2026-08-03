@@ -45,7 +45,10 @@ export async function POST(request: Request) {
     }
 
     if (action === "claim") {
-      const claimed = await renderJobQueue.claimJob(context.userId);
+      const claimed = await renderJobQueue.claimJob({
+        workspaceId: context.workspaceId,
+        workerId: context.userId,
+      });
       return NextResponse.json({ ok: true, data: claimed });
     }
 

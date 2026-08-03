@@ -161,6 +161,22 @@ const SPEC_LIMITS = {
 } as const;
 
 const BANNED_RENDERED_TEXT_PATTERN = /\b(?:price|\$\d|promo code|coupon|limited time|buy now|shop now)\b/i;
+const COMMON_SPELLING_MISTAKES: Record<string, string> = {
+  recieve: "receive",
+  adress: "address",
+  seperate: "separate",
+  occassion: "occasion",
+  definately: "definitely",
+  accomodate: "accommodate",
+  guranteed: "guaranteed",
+  persistance: "persistence",
+  succesful: "successful",
+  sucess: "success",
+  wierd: "weird",
+  freind: "friend",
+  thier: "their",
+  enviroment: "environment",
+};
 
 function sanitizeText(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -172,6 +188,29 @@ function sanitizeText(value: unknown): string {
 
 function asSafeArray(input: unknown): unknown[] {
   return Array.isArray(input) ? input : [];
+}
+
+function tokenizeForSpelling(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s-]/g, " ")
+    .split(/\s+/)
+    .map((token) => token.replace(/^['-]+|['-]+$/g, ""))
+    .filter(Boolean);
+}
+
+export function getOverlaySpellingIssues(text: string): string[] {
+  const tokens = tokenizeForSpelling(text);
+  const issues = new Set<string>();
+
+  for (const token of tokens) {
+    const correction = COMMON_SPELLING_MISTAKES[token];
+    if (correction) {
+      issues.add(`Possible misspelling: \"${token}\" (did you mean \"${correction}\"?)`);
+    }
+  }
+
+  return [...issues];
 }
 
 export function normalizeCreationMode(value: unknown): CreationMode {
@@ -385,6 +424,9 @@ export function validateCreativeSpec(input: unknown): CreativeSpecValidationResu
       if (spec.strictTextlessFrames && BANNED_RENDERED_TEXT_PATTERN.test(item.text || "")) {
         errors.push(`Timeline item ${item.id} text violates text safety constraints.`);
       }
+      for (const issue of getOverlaySpellingIssues(item.text || "")) {
+        errors.push(`Timeline item ${item.id}: ${issue}`);
+      }
     }
   }
   if (spec.scenes.length < SPEC_LIMITS.scenesMin || spec.scenes.length > SPEC_LIMITS.scenesMax) {
@@ -402,6 +444,9 @@ export function validateCreativeSpec(input: unknown): CreativeSpecValidationResu
     }
     if (!scene.overlayText || scene.overlayText.length > SPEC_LIMITS.sceneOverlayMax) {
       errors.push(`Scene ${scene.order}: overlay text is required and must be <= ${SPEC_LIMITS.sceneOverlayMax} characters.`);
+    }
+    for (const issue of getOverlaySpellingIssues(scene.overlayText)) {
+      errors.push(`Scene ${scene.order}: ${issue}`);
     }
     if (spec.strictTextlessFrames && BANNED_RENDERED_TEXT_PATTERN.test(scene.visualDirection)) {
       errors.push(`Scene ${scene.order}: visual direction appears to ask for rendered text in-frame.`);
