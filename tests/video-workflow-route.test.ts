@@ -27,6 +27,21 @@ vi.mock("@/features/core/video-provider", () => ({
   startVideoProviderJob: startVideoProviderJobMock,
   fetchVideoProviderJob: fetchVideoProviderJobMock,
   getVideoProviderUnavailableMessage: () => "Video generation is temporarily unavailable.",
+  mapProviderErrorCodeToMessage: (code: string) => {
+    const messages: Record<string, string> = {
+      REPLICATE_NOT_CONFIGURED: "Video generation is not configured. Add the Replicate API token in Vercel.",
+      REPLICATE_AUTH_FAILED: "The video provider rejected its credentials. Update the Replicate API token.",
+      REPLICATE_BILLING_REQUIRED: "Replicate billing must be enabled before generating videos.",
+      REPLICATE_MODEL_NOT_FOUND: "The configured Economy video model is unavailable.",
+      REPLICATE_RATE_LIMITED: "The video provider is busy. Please retry in a moment.",
+      REPLICATE_BAD_REQUEST: "The video provider could not start this render. Please retry.",
+      REPLICATE_START_FAILED: "The video provider could not start this render. Please retry.",
+      REPLICATE_STATUS_FAILED: "The video provider could not start this render. Please retry.",
+      REPLICATE_CANCEL_FAILED: "The video provider could not start this render. Please retry.",
+      VIDEO_PROVIDER_UNAVAILABLE: "The video provider could not start this render. Please retry.",
+    };
+    return messages[code] || messages.VIDEO_PROVIDER_UNAVAILABLE;
+  },
 }));
 
 type ProjectRow = {
@@ -579,6 +594,19 @@ describe("video workflow route", () => {
     const harness = createHarness();
     createClientMock.mockResolvedValue(harness.supabase);
 
+    loadVideoRouterSettingsMock.mockResolvedValueOnce({
+      mode: "BALANCED",
+      defaultTier: "BALANCED",
+      economyModel: "wan-video/wan-2.2-t2v-fast",
+      balancedModel: "sora-2-pro",
+      premiumModel: "sora-2-pro",
+      economyCostCentsPerSecond: 45,
+      balancedCostCentsPerSecond: 70,
+      premiumCostCentsPerSecond: 110,
+      maxRetries: 2,
+      emergencyDisabled: false,
+    });
+
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -647,6 +675,9 @@ describe("video workflow route", () => {
     expect(payload.stage).toBe("GENERATING_SCENES");
     expect((payload.progress || 0) < 100).toBe(true);
     expect(harness.reserveCalls).toHaveLength(1);
+    expect(resolveVideoRouterProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requestedTier: "ECONOMY" }),
+    );
     expect(startVideoProviderJobMock).toHaveBeenCalledWith(
       expect.objectContaining({ model: "wan-video/wan-2.2-t2v-fast" }),
     );
@@ -662,6 +693,93 @@ describe("video workflow route", () => {
     expect(second.status).toBe(200);
     expect(harness.reserveCalls).toHaveLength(1);
     expect(startVideoProviderJobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds and persists a failed state when provider startup fails", async () => {
+    const harness = createHarness();
+    createClientMock.mockResolvedValue(harness.supabase);
+
+    harness.projects.set("project-start-fail", {
+      id: "project-start-fail",
+      workspace_id: "workspace-1",
+      content_draft_id: null,
+      workflow_key: "wf-start-fail",
+      credit_request_id: "credit-start-fail",
+      title: "Project",
+      channel: "TikTok",
+      objective: "Engagement",
+      prompt: "Prompt",
+      script: "Script",
+      caption: "Caption",
+      hashtags: [],
+      call_to_action: "Shop now",
+      scenes: [],
+      duration_seconds: 12,
+      voice: "marin",
+      music_mode: "NONE",
+      provider: "REPLICATE",
+      routing_tier: "ECONOMY",
+      provider_model: null,
+      provider_job_id: null,
+      provider_job_status: null,
+      provider_progress: 0,
+      status: "DRAFT",
+      failure_reason: null,
+      failure_reference_id: null,
+      workflow_stage: null,
+      workflow_percentage: 0,
+      credit_status: "RESERVED",
+      credit_refunded_at: null,
+      media_asset_id: null,
+      video_storage_path: null,
+      workflow_started_at: new Date().toISOString(),
+      workflow_completed_at: null,
+      updated_at: new Date().toISOString(),
+    });
+
+    startVideoProviderJobMock.mockRejectedValueOnce(new Error("REPLICATE_RATE_LIMITED"));
+
+    const { POST } = await import("@/app/api/ai/video-workflow/route");
+
+    const response = await POST(
+      new Request("https://postmotive.example/api/ai/video-workflow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          channel: "TikTok",
+          objective: "Engagement",
+          message: "Show product",
+          callToAction: "Shop now",
+          durationSeconds: 12,
+          voice: "marin",
+          musicMode: "NONE",
+          workflowKey: "wf-start-fail",
+          projectId: "project-start-fail",
+        }),
+      }),
+    );
+
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      error?: string;
+      errorCode?: string;
+      failureReferenceId?: string;
+    };
+
+    expect(response.status).toBe(503);
+    expect(payload.ok).toBe(false);
+    expect(payload.errorCode).toBe("REPLICATE_RATE_LIMITED");
+    expect(payload.error).toBe("The video provider is busy. Please retry in a moment.");
+    expect(payload.failureReferenceId).toBeTruthy();
+    expect(harness.refundCalls).toEqual(["credit-start-fail"]);
+
+    const stored = harness.projects.get("project-start-fail");
+    expect(stored?.status).toBe("FAILED");
+    expect(stored?.workflow_stage).toBe("FAILED");
+    expect(stored?.provider_job_status).toBe("failed");
+    expect(stored?.credit_status).toBe("REFUNDED");
+    expect(stored?.failure_reason).toBe("REPLICATE_RATE_LIMITED");
+    expect(stored?.failure_reference_id).toBeTruthy();
   });
 
   it("caps in-progress status below 90 and finalizes completed output once", async () => {

@@ -95,6 +95,85 @@ function composeRenderPrompt(project: VideoProject): string {
   ].join("\n");
 }
 
+export function isDatabaseUuid(value: unknown): value is string {
+  return typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function createPendingVideoProject(input: {
+  project: VideoProject | null;
+  channel: VideoProject["channel"];
+  objective: string;
+  message: string;
+  callToAction: string;
+  duration: VideoProject["durationSeconds"];
+  voice: VideoVoice;
+  musicMode: VideoMusicMode;
+  workflowKey: string;
+}): VideoProject {
+  const now = new Date().toISOString();
+  return {
+    id: input.project?.id || `pending-${crypto.randomUUID()}`,
+    title: input.project?.title || `Creating ${input.channel} video`,
+    channel: input.channel,
+    objective: input.objective,
+    prompt: input.project?.prompt || "",
+    script: input.project?.script || "",
+    caption: input.project?.caption || "",
+    hashtags: input.project?.hashtags || [],
+    callToAction: input.callToAction,
+    scenes: input.project?.scenes || [],
+    durationSeconds: input.duration,
+    aspectRatio: "9:16",
+    voice: input.voice,
+    voiceDisclosure: true,
+    musicMode: input.musicMode,
+    provider: "OPENAI_SORA_TEMPORARY",
+    providerJobStatus: "queued",
+    providerProgress: 5,
+    workflowKey: input.workflowKey,
+    workflowStage: "PREPARING_VIDEO_PLAN",
+    workflowProgress: 5,
+    creditStatus: input.project?.creditStatus || "NONE",
+    status: "GENERATING",
+    failureReason: undefined,
+    failureReferenceId: undefined,
+    workflowStartedAt: input.project?.workflowStartedAt || now,
+    createdAt: input.project?.createdAt || now,
+    updatedAt: now,
+  };
+}
+
+export function markPendingWorkflowFailed(input: {
+  project: VideoProject;
+  errorMessage: string;
+}): VideoProject {
+  return {
+    ...input.project,
+    status: "FAILED",
+    providerJobStatus: "failed",
+    providerProgress: Math.min(30, Math.max(0, input.project.providerProgress || 5)),
+    workflowStage: "FAILED",
+    workflowProgress: Math.min(30, Math.max(0, input.project.workflowProgress || 5)),
+    failureReason: input.errorMessage,
+    failureReferenceId: input.project.failureReferenceId || `vf-${crypto.randomUUID().slice(0, 8)}`,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function shouldPollVideoWorkflow(project: VideoProject | null): boolean {
+  return Boolean(project && project.status === "GENERATING" && isDatabaseUuid(project.id));
+}
+
+export function resolveRetryProjectId(project: VideoProject | null, retry: boolean): string | undefined {
+  if (!retry) return undefined;
+  return isDatabaseUuid(project?.id) ? project?.id : undefined;
+}
+
+export function removePendingVideoProjects(projects: VideoProject[]): VideoProject[] {
+  return projects.filter((item) => isDatabaseUuid(item.id));
+}
+
 function formatWorkflowElapsed(startedAt?: string): string {
   if (!startedAt) return "";
   const start = new Date(startedAt).getTime();
@@ -228,7 +307,7 @@ export default function VideoStudio({
 
   useEffect(() => {
     const projectId = project?.id;
-    if (!projectId) return;
+    if (!isDatabaseUuid(projectId)) return;
     const frame = requestAnimationFrame(() => {
       void loadCloudCreativeVersions(projectId)
         .then((items) => {
@@ -292,6 +371,9 @@ export default function VideoStudio({
         ? current.map((item) => (item.id === next.id ? next : item))
         : [next, ...current];
     });
+    if (!isDatabaseUuid(next.id)) {
+      return;
+    }
     await saveCloudVideoProject(next);
   };
 
@@ -340,6 +422,7 @@ export default function VideoStudio({
 
   const startNewVideo = () => {
     setProject(null);
+    setProjects((current) => removePendingVideoProjects(current));
     setWorkflowKey("");
     setProviderStatus("");
     setNotice("");
@@ -349,6 +432,7 @@ export default function VideoStudio({
     setVoiceoverUrl("");
     setRevisionRequest("");
     setComplianceNote("");
+    renderCheckInFlightRef.current = false;
   };
 
   const startWorkflow = async (options?: { retry?: boolean }) => {
@@ -364,37 +448,17 @@ export default function VideoStudio({
         setWorkflowKey(activeWorkflowKey);
       }
 
-      const now = new Date().toISOString();
-      const optimisticProject: VideoProject = {
-        id: project?.id || `pending-${crypto.randomUUID()}`,
-        title: project?.title || `Creating ${channel} video`,
+      const optimisticProject = createPendingVideoProject({
+        project,
         channel,
         objective,
-        prompt: project?.prompt || "",
-        script: project?.script || "",
-        caption: project?.caption || "",
-        hashtags: project?.hashtags || [],
+        message,
         callToAction: cta,
-        scenes: project?.scenes || [],
-        durationSeconds: duration,
-        aspectRatio: "9:16",
+        duration,
         voice,
-        voiceDisclosure: true,
         musicMode,
-        provider: "OPENAI_SORA_TEMPORARY",
-        providerJobStatus: "queued",
-        providerProgress: 5,
         workflowKey: activeWorkflowKey,
-        workflowStage: "PREPARING_VIDEO_PLAN",
-        workflowProgress: 5,
-        creditStatus: project?.creditStatus || "NONE",
-        status: "GENERATING",
-        failureReason: undefined,
-        failureReferenceId: undefined,
-        workflowStartedAt: project?.workflowStartedAt || now,
-        createdAt: project?.createdAt || now,
-        updatedAt: now,
-      };
+      });
       setProject(optimisticProject);
       setProjects((current) => {
         const exists = current.some((item) => item.id === optimisticProject.id);
@@ -415,7 +479,7 @@ export default function VideoStudio({
           voice,
           musicMode,
           workflowKey: activeWorkflowKey,
-          projectId: retry ? project?.id : undefined,
+          projectId: resolveRetryProjectId(project, retry),
           retry,
         }),
       });
@@ -437,6 +501,17 @@ export default function VideoStudio({
         "You may safely leave this page. Generation will continue.",
       );
     } catch (caught) {
+      if (project) {
+        setProject(markPendingWorkflowFailed({
+          project,
+          errorMessage:
+            caught instanceof Error
+              ? caught.message
+              : "Video generation could not start.",
+        }));
+      }
+      setPollAttempt(0);
+      renderCheckInFlightRef.current = false;
       setError(
         caught instanceof Error
           ? caught.message
@@ -735,7 +810,8 @@ export default function VideoStudio({
   };
 
   const checkRender = async (silent = false) => {
-    if (!project?.id) return;
+    const activeProject = project;
+    if (!activeProject || !shouldPollVideoWorkflow(activeProject)) return;
     if (renderCheckInFlightRef.current) {
       if (!silent) {
         setNotice("A render status check is already in progress.");
@@ -747,7 +823,7 @@ export default function VideoStudio({
     setError("");
     try {
       const response = await fetch(
-        `/api/ai/video-workflow?projectId=${encodeURIComponent(project.id)}&workflowKey=${encodeURIComponent(project.workflowKey || workflowKey)}`,
+        `/api/ai/video-workflow?projectId=${encodeURIComponent(activeProject.id)}&workflowKey=${encodeURIComponent(activeProject.workflowKey || workflowKey)}`,
         { cache: "no-store" },
       );
       const payload = (await response.json().catch(() => null)) as WorkflowStatusPayload | null;
@@ -761,14 +837,14 @@ export default function VideoStudio({
 
       if (payload.status === "failed") {
         await updateProject({
-          ...project,
+          ...activeProject,
           status: "FAILED",
           providerJobStatus: nextProviderStatus,
           providerProgress: Math.min(94, providerProgress),
           workflowStage: payload.stage || "FAILED",
           workflowProgress: Math.min(94, providerProgress),
-          creditStatus: payload.creditStatus || project.creditStatus || "REFUNDED",
-          failureReferenceId: payload.failureReferenceId || project.failureReferenceId,
+          creditStatus: payload.creditStatus || activeProject.creditStatus || "REFUNDED",
+          failureReferenceId: payload.failureReferenceId || activeProject.failureReferenceId,
           failureReason: payload.error || "Video generation didn't complete.",
           updatedAt: new Date().toISOString(),
         });
@@ -777,15 +853,15 @@ export default function VideoStudio({
 
       if (payload.status === "completed") {
         await updateProject({
-          ...project,
+          ...activeProject,
           status: "READY",
           providerJobStatus: "completed",
           providerProgress: 100,
           workflowStage: "COMPLETE",
           workflowProgress: 100,
-          creditStatus: payload.creditStatus || project.creditStatus || "RESERVED",
-          mediaAssetId: payload.mediaAssetId || project.mediaAssetId,
-          contentDraftId: payload.draftId || project.contentDraftId,
+          creditStatus: payload.creditStatus || activeProject.creditStatus || "RESERVED",
+          mediaAssetId: payload.mediaAssetId || activeProject.mediaAssetId,
+          contentDraftId: payload.draftId || activeProject.contentDraftId,
           updatedAt: new Date().toISOString(),
         });
         setPollAttempt(0);
@@ -794,13 +870,13 @@ export default function VideoStudio({
       }
 
       await updateProject({
-        ...project,
+        ...activeProject,
         status: "GENERATING",
         providerJobStatus: nextProviderStatus,
         providerProgress,
         workflowStage: payload.stage || (providerProgress >= 70 ? "RENDERING_FINAL_VIDEO" : "GENERATING_SCENES"),
         workflowProgress: Math.min(94, Math.max(providerProgress, Number(payload.progress || 0))),
-        creditStatus: payload.creditStatus || project.creditStatus || "RESERVED",
+        creditStatus: payload.creditStatus || activeProject.creditStatus || "RESERVED",
         updatedAt: new Date().toISOString(),
       });
       setNotice("You may safely leave this page. Generation will continue.");
@@ -983,10 +1059,11 @@ export default function VideoStudio({
   });
 
   useEffect(() => {
-    if (!project || project.status !== "GENERATING") {
+    const activeProject = project;
+    if (!activeProject || !shouldPollVideoWorkflow(activeProject)) {
       return;
     }
-    if (project.creditStatus === "REFUNDED") {
+    if (activeProject.creditStatus === "REFUNDED") {
       return;
     }
     const timeout = window.setTimeout(
