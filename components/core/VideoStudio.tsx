@@ -47,6 +47,7 @@ import {
   deriveSelectedProductAssetFromProject,
   describeAssetDimensions,
   isApprovedProductAsset,
+  isExplicitProductAsset,
   validateProductImageUpload,
   type ProductAssetChoice,
 } from "@/features/core/product-asset-selector";
@@ -103,6 +104,7 @@ type ProductAssetsApiPayload = {
   ok?: boolean;
   assets?: Array<{
     id: string;
+    workspaceId?: string;
     name: string;
     storagePath: string;
     type: string;
@@ -373,11 +375,11 @@ export default function VideoStudio({
     setProductSelectionWarning("");
   };
 
-  const refreshProductAssets = useCallback(async () => {
+  const refreshProductAssets = useCallback(async (includeAll: boolean) => {
     setPickerLoading(true);
     setPickerActionError("");
     try {
-      const response = await fetch("/api/media/product-assets?includeAll=true", {
+      const response = await fetch(includeAll ? "/api/media/product-assets?includeAll=true" : "/api/media/product-assets", {
         cache: "no-store",
       });
       const payload = (await response.json()) as ProductAssetsApiPayload;
@@ -388,6 +390,7 @@ export default function VideoStudio({
       const choices = buildProductAssetChoices(
         payload.assets.map((asset) => ({
           id: asset.id,
+          workspaceId: asset.workspaceId,
           name: asset.name,
           storagePath: asset.storagePath,
           type: asset.type,
@@ -398,7 +401,7 @@ export default function VideoStudio({
           createdAt: "",
           productMetadata: asset.productMetadata,
         })),
-        { includeUnapproved: true },
+        { includeUnapproved: includeAll, activeWorkspaceId: workspace.id },
       );
 
       setProductAssets(choices);
@@ -412,20 +415,28 @@ export default function VideoStudio({
     } finally {
       setPickerLoading(false);
     }
-  }, []);
+  }, [workspace.id]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void refreshProductAssets();
+      void refreshProductAssets(false);
     });
     return () => cancelAnimationFrame(frame);
   }, [refreshProductAssets]);
 
   useEffect(() => {
+    if (!pickerOpen) return;
+    const frame = requestAnimationFrame(() => {
+      void refreshProductAssets(pickerShowAllImages);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pickerOpen, pickerShowAllImages, refreshProductAssets]);
+
+  useEffect(() => {
     const frame = requestAnimationFrame(() => {
       if (!selectedProductAssetId) return;
       const selected = productAssets.find((item) => item.id === selectedProductAssetId) || null;
-      if (!selected) {
+      if (!selected || !isExplicitProductAsset(selected, workspace.id)) {
         setSelectedProductAssetId("");
         setProductSelectionWarning(
           "The selected product image is no longer accessible. Choose or upload an approved product image.",
@@ -438,7 +449,7 @@ export default function VideoStudio({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [productAssets, selectedProductAssetId]);
+  }, [productAssets, selectedProductAssetId, workspace.id]);
 
   const refreshCreditStatus = async () => {
     try {
@@ -636,7 +647,7 @@ export default function VideoStudio({
     productAssets.find((item) => item.id === selectedProductAssetId) || null;
 
   const canGenerateInExactMode =
-    !exactProductMode || Boolean(selectedProductAsset && isApprovedProductAsset(selectedProductAsset));
+    !exactProductMode || Boolean(selectedProductAsset && isExplicitProductAsset(selectedProductAsset, workspace.id) && isApprovedProductAsset(selectedProductAsset));
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -645,7 +656,7 @@ export default function VideoStudio({
       if (!queryAssetId || selectedProductAssetId) return;
 
       const matched = productAssets.find((item) => item.id === queryAssetId) || null;
-      if (matched && isApprovedProductAsset(matched)) {
+      if (matched && isExplicitProductAsset(matched, workspace.id) && isApprovedProductAsset(matched)) {
         syncSelectedProductAsset(matched);
         return;
       }
@@ -658,7 +669,7 @@ export default function VideoStudio({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [productAssets, selectedProductAssetId]);
+  }, [productAssets, selectedProductAssetId, workspace.id]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -671,7 +682,7 @@ export default function VideoStudio({
       }
 
       const matched = productAssets.find((item) => item.id === derived.assetId) || null;
-      if (matched && isApprovedProductAsset(matched)) {
+      if (matched && isExplicitProductAsset(matched, workspace.id) && isApprovedProductAsset(matched)) {
         syncSelectedProductAsset(matched);
         return;
       }
@@ -683,7 +694,7 @@ export default function VideoStudio({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [project, productAssets, selectedProductAssetId]);
+  }, [project, productAssets, selectedProductAssetId, workspace.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -731,13 +742,7 @@ export default function VideoStudio({
       }
     : undefined;
 
-  const visibleProductAssets = useMemo(
-    () =>
-      productAssets.filter((asset) =>
-        pickerShowAllImages ? true : isApprovedProductAsset(asset),
-      ),
-    [pickerShowAllImages, productAssets],
-  );
+  const visibleProductAssets = useMemo(() => productAssets, [productAssets]);
 
   useEffect(() => {
     if (!pickerOpen || !visibleProductAssets.length) return;
@@ -811,11 +816,12 @@ export default function VideoStudio({
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || "Unable to approve product image.");
       }
-      await refreshProductAssets();
+      await refreshProductAssets(pickerShowAllImages);
       const approvedAsset = payload.asset
         ? buildProductAssetChoices(
           [{
             id: payload.asset.id,
+            workspaceId: workspace.id,
             name: payload.asset.name,
             storagePath: payload.asset.storagePath,
             type: payload.asset.type,
@@ -826,7 +832,7 @@ export default function VideoStudio({
             createdAt: "",
             productMetadata: payload.asset.productMetadata,
           }],
-          { includeUnapproved: true },
+          { includeUnapproved: true, activeWorkspaceId: workspace.id },
         )[0] || null
         : null;
       if (approvedAsset && isApprovedProductAsset(approvedAsset)) {
@@ -899,7 +905,7 @@ export default function VideoStudio({
       }
 
       await approveProductAssetForUse(uploadedChoice);
-      await refreshProductAssets();
+      await refreshProductAssets(pickerShowAllImages);
     } catch (caught) {
       setPickerActionError(
         caught instanceof Error

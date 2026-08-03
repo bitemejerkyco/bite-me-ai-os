@@ -117,6 +117,19 @@ describe("media product assets route", () => {
         archived_at: null,
       },
       {
+        id: "asset-archived",
+        workspace_id: "workspace-1",
+        storage_path: "workspace-1/user-1/archived.png",
+        file_name: "archived.png",
+        mime_type: "image/png",
+        size_bytes: 1024,
+        tags: ["product"],
+        metadata: { productAsset: { approvedForGeneration: true } },
+        width: 1200,
+        height: 1200,
+        archived_at: new Date().toISOString(),
+      },
+      {
         id: "asset-other-workspace",
         workspace_id: "workspace-2",
         storage_path: "workspace-2/user-1/other.png",
@@ -203,6 +216,37 @@ describe("media product assets route", () => {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ assetId: "asset-gif" }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = (await response.json()) as { error?: string };
+    expect(payload.error).toContain("Unsupported product image type");
+  });
+
+  it("rejects non-image assets during approval", async () => {
+    makeContext([
+      {
+        id: "asset-video",
+        workspace_id: "workspace-1",
+        storage_path: "workspace-1/user-1/video.mp4",
+        file_name: "video.mp4",
+        mime_type: "video/mp4",
+        size_bytes: 1024,
+        tags: [],
+        metadata: {},
+        width: 1920,
+        height: 1080,
+        archived_at: null,
+      },
+    ]);
+
+    const { PATCH } = await import("@/app/api/media/product-assets/route");
+    const response = await PATCH(
+      new Request("https://postmotive.example/api/media/product-assets", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assetId: "asset-video" }),
       }),
     );
 
