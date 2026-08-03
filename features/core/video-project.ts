@@ -41,6 +41,13 @@ export type VideoScene = {
   visual: string;
   narration: string;
   onScreenText: string;
+  overlayFontFamily?: string;
+  overlayFontSize?: number;
+  overlayFontWeight?: number;
+  overlayColor?: string;
+  overlayAnimation?: "NONE" | "POP" | "FADE" | "SLIDE" | "WORD_BY_WORD" | "TYPEWRITER";
+  audioCue?: string;
+  audioVolume?: number;
   mediaStoragePath?: string;
   mediaAssetId?: string;
   productAssetId?: string;
@@ -155,6 +162,118 @@ export type VideoPlanInput = {
   allowAiProductMotion?: boolean;
 };
 
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+const PLACEHOLDER_TEXT = /\b(?:lorem ipsum|tbd|to be determined|placeholder|sample text|insert text|your text here|n\/?a)\b/i;
+
+function sanitizeStructuredText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(CONTROL_CHARACTERS, "")
+    .replace(/[\uFFFD]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function validateTextField(value: string, constraints: { min: number; max: number }): boolean {
+  if (!value || value.length < constraints.min || value.length > constraints.max) {
+    return false;
+  }
+  if (PLACEHOLDER_TEXT.test(value)) {
+    return false;
+  }
+  return true;
+}
+
+function lockImmutableName(value: string, immutableName?: string): string {
+  const canonical = sanitizeStructuredText(immutableName || "");
+  if (!canonical) return value;
+  const escaped = canonical.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matcher = new RegExp(escaped, "gi");
+  return value.replace(matcher, canonical);
+}
+
+export function validateStructuredVideoPlanText(input: {
+  title: string;
+  script: string;
+  caption: string;
+  renderPrompt: string;
+  complianceNote: string;
+  callToAction: string;
+  hashtags: string[];
+  scenes: VideoScene[];
+  immutableBrandName?: string;
+  immutableProductName?: string;
+}): {
+  plan: {
+    title: string;
+    script: string;
+    caption: string;
+    renderPrompt: string;
+    complianceNote: string;
+    callToAction: string;
+    hashtags: string[];
+    scenes: VideoScene[];
+  } | null;
+  valid: boolean;
+} {
+  const title = lockImmutableName(sanitizeStructuredText(input.title), input.immutableBrandName);
+  const script = lockImmutableName(
+    lockImmutableName(sanitizeStructuredText(input.script), input.immutableBrandName),
+    input.immutableProductName,
+  );
+  const caption = lockImmutableName(
+    lockImmutableName(sanitizeStructuredText(input.caption), input.immutableBrandName),
+    input.immutableProductName,
+  );
+  const renderPrompt = sanitizeStructuredText(input.renderPrompt);
+  const complianceNote = sanitizeStructuredText(input.complianceNote);
+  const callToAction = sanitizeStructuredText(input.callToAction);
+  const hashtags = input.hashtags
+    .map((item) => sanitizeStructuredText(item).replace(/\s+/g, ""))
+    .filter(Boolean)
+    .slice(0, 12);
+
+  if (!validateTextField(title, { min: 3, max: 140 })) return { plan: null, valid: false };
+  if (!validateTextField(script, { min: 10, max: 3000 })) return { plan: null, valid: false };
+  if (!validateTextField(caption, { min: 6, max: 1000 })) return { plan: null, valid: false };
+  if (!validateTextField(renderPrompt, { min: 12, max: 2500 })) return { plan: null, valid: false };
+  if (!validateTextField(complianceNote, { min: 6, max: 600 })) return { plan: null, valid: false };
+  if (!validateTextField(callToAction, { min: 2, max: 120 })) return { plan: null, valid: false };
+
+  const scenes = input.scenes.map((scene, index) => ({
+    ...scene,
+    order: Number(scene.order) || index + 1,
+    visual: sanitizeStructuredText(scene.visual),
+    narration: lockImmutableName(
+      lockImmutableName(sanitizeStructuredText(scene.narration), input.immutableBrandName),
+      input.immutableProductName,
+    ),
+    onScreenText: lockImmutableName(
+      lockImmutableName(sanitizeStructuredText(scene.onScreenText), input.immutableBrandName),
+      input.immutableProductName,
+    ),
+  }));
+
+  if (!scenes.length) return { plan: null, valid: false };
+  if (scenes.some((scene) => !validateTextField(scene.visual, { min: 6, max: 600 }))) return { plan: null, valid: false };
+  if (scenes.some((scene) => !validateTextField(scene.narration || "Narration", { min: 4, max: 600 }))) return { plan: null, valid: false };
+  if (scenes.some((scene) => !validateTextField(scene.onScreenText || "Overlay", { min: 2, max: 160 }))) return { plan: null, valid: false };
+
+  return {
+    valid: true,
+    plan: {
+      title,
+      script,
+      caption,
+      renderPrompt,
+      complianceNote,
+      callToAction,
+      hashtags,
+      scenes,
+    },
+  };
+}
+
 export function isVideoVoice(value: unknown): value is VideoVoice {
   return typeof value === "string" &&
     (VIDEO_VOICES as readonly string[]).includes(value);
@@ -224,6 +343,7 @@ export function buildVideoPlanningPrompt(input: VideoPlanInput): string {
     "scenes must be an array of 2-5 objects with order, seconds, visual, narration, and onScreenText.",
     "Scene seconds must total the requested duration.",
     "Keep on-screen text brief and readable. Include burned-in caption wording in the scene plan.",
+    "Do not render words, captions, logos, labels, product names, prices, calls to action, or readable packaging text in generated frames. Leave clean visual space for deterministic overlays.",
     "Never invent prices, discounts, certifications, testimonials, legal approval, or product claims.",
     "Do not request real people, celebrities, copyrighted characters, copyrighted music, or third-party watermarks.",
     "If a product asset is supplied, each scene must reference the real product asset, preserve packaging copy exactly, and describe position, scale, opacity, shadow, entrance, exit, zoom, background, and safe area.",
@@ -248,7 +368,8 @@ export function parseVideoPlanResponse(value: string): {
 export type VideoPlanParseFailureCategory =
   | "empty"
   | "json_parse_error"
-  | "validation_failed";
+  | "validation_failed"
+  | "text_validation_failed";
 
 export function parseVideoPlanResponseDetailed(value: string): {
   plan: {
@@ -368,16 +489,29 @@ export function parseVideoPlanResponseDetailed(value: string): {
     if (!scenes.length || scenes.some((scene) => !scene.visual)) {
       return { plan: null, failureCategory: "validation_failed" };
     }
+    const validated = validateStructuredVideoPlanText({
+      title: parsed.title,
+      script: parsed.script,
+      caption: parsed.caption,
+      renderPrompt: parsed.renderPrompt,
+      complianceNote: parsed.complianceNote,
+      callToAction: parsed.callToAction,
+      hashtags: parsed.hashtags.map((item) => String(item).trim()),
+      scenes,
+    });
+    if (!validated.valid || !validated.plan) {
+      return { plan: null, failureCategory: "text_validation_failed" };
+    }
     return {
       plan: {
-        title: parsed.title,
-        script: parsed.script,
-        caption: parsed.caption,
-        renderPrompt: parsed.renderPrompt,
-        complianceNote: parsed.complianceNote,
-        hashtags: parsed.hashtags.map((item) => String(item).trim()).filter(Boolean),
-        callToAction: parsed.callToAction,
-        scenes,
+        title: validated.plan.title,
+        script: validated.plan.script,
+        caption: validated.plan.caption,
+        renderPrompt: validated.plan.renderPrompt,
+        complianceNote: validated.plan.complianceNote,
+        hashtags: validated.plan.hashtags,
+        callToAction: validated.plan.callToAction,
+        scenes: validated.plan.scenes,
       },
       failureCategory: null,
     };

@@ -36,7 +36,14 @@ type LibraryFolderRow = {
   created_at: string;
 };
 
-export default async function MediaPage() {
+export default async function MediaPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+  const initialTab = typeof tabParam === "string" ? tabParam : undefined;
   const context = await requireWorkspaceContext();
   const supabase = await createClient();
 
@@ -122,6 +129,7 @@ export default async function MediaPage() {
         initialFolders={initialFolders}
         initialRoleLabel={initialRoleLabel}
         initialCapabilities={initialCapabilities}
+        initialTab={initialTab}
       />
     </AppShell>
   );

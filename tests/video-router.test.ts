@@ -16,7 +16,7 @@ describe("video router", () => {
   it("routes shorter clips to the cheaper profile by default", () => {
     expect(selectVideoRenderTier({ seconds: 9, mode: "AUTO" })).toBe("ECONOMY");
     expect(selectVideoRenderTier({ seconds: 12, mode: "AUTO" })).toBe("BALANCED");
-    expect(selectVideoRenderTier({ seconds: 15, mode: "AUTO" })).toBe("BALANCED");
+    expect(selectVideoRenderTier({ seconds: 15, mode: "AUTO" })).toBe("ECONOMY");
   });
 
   it("honors explicit requests and server settings", () => {

@@ -1,10 +1,12 @@
 import { EventEmitter } from "node:events";
-import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockedStaticFfmpegPath = vi.hoisted(() => `${process.env.TEMP || process.env.TMP || "C:/Windows/Temp"}/vitest-ffmpeg-static-bin`);
+const mockedStaticFfmpegPath = vi.hoisted(
+  () => `${process.env.TEMP || process.env.TMP || (process.platform === "win32" ? "C:/Windows/Temp" : "/tmp")}/vitest-ffmpeg-static-bin`,
+);
 const spawnMock = vi.hoisted(() => vi.fn());
 
 vi.mock("server-only", () => ({}));
@@ -18,6 +20,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 function ensureFile(path: string): void {
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, "ffmpeg-binary");
 }
 

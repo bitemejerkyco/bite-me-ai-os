@@ -113,10 +113,10 @@ describe("video project foundation", () => {
       "```json\n" +
         JSON.stringify({
           title: "Fenced plan",
-          script: "Script",
-          caption: "Caption",
-          renderPrompt: "Prompt",
-          complianceNote: "Review.",
+          script: "Script for a short vertical video.",
+          caption: "Caption for social publishing.",
+          renderPrompt: "Prompt with enough detail for safe rendering.",
+          complianceNote: "Review for compliance before publishing.",
           hashtags: ["#a"],
           callToAction: "Shop now",
           scenes: [
@@ -140,10 +140,10 @@ describe("video project foundation", () => {
     const parsed = parseVideoPlanResponse(
       `Here is your plan:\n${JSON.stringify({
         title: "Wrapped plan",
-        script: "Script",
-        caption: "Caption",
-        renderPrompt: "Prompt",
-        complianceNote: "Review.",
+        script: "Script for a short vertical video.",
+        caption: "Caption for social publishing.",
+        renderPrompt: "Prompt with enough detail for safe rendering.",
+        complianceNote: "Review for compliance before publishing.",
         hashtags: ["#wrapped"],
         callToAction: "Learn more",
         scenes: [

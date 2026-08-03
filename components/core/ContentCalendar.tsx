@@ -986,7 +986,7 @@ export default function ContentCalendar() {
       <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5">
         <h2 className="text-xl font-bold">Publishing queue</h2>
         <div className="mt-4 space-y-3">
-          {posts.length === 0 ? <GuidedEmptyState title="Nothing scheduled yet" description="Approve content and schedule your first post." estimatedTime="2 minutes" primaryAction={{ label: "Open Approved Content", href: "/content?status=APPROVED" }} secondaryAction={{ label: "Create Campaign", href: "/marketing/campaigns" }} /> : posts.map((post) => (
+          {posts.length === 0 ? <GuidedEmptyState title="Nothing scheduled yet" description="Approve content and schedule your first post." estimatedTime="2 minutes" primaryAction={{ label: "Open Approved Content", href: "/media?tab=APPROVED" }} secondaryAction={{ label: "Create Campaign", href: "/marketing/campaigns" }} /> : posts.map((post) => (
             <article key={post.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
