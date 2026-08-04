@@ -216,7 +216,7 @@ export default function MarketingDirectorDashboardView({
                   Take a 2-Minute Tour
                 </button>
                 <button type="button" onClick={() => setAssistantOpen(true)} className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-50">
-                  Ask PostMotive
+                  Ask Motive
                 </button>
               </div>
             </>

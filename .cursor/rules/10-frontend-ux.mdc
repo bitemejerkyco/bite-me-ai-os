@@ -1,0 +1,21 @@
+---
+description: Frontend, React, Tailwind, accessibility, and novice-first UX requirements
+globs: app/**/*.{ts,tsx},components/**/*.{ts,tsx},src/**/*.{ts,tsx},**/*.css
+alwaysApply: false
+---
+
+# Frontend and UX
+
+- Use functional React components and TypeScript.
+- Follow existing App Router and component patterns.
+- Prefer server components unless interactivity requires a client component.
+- Keep client boundaries small.
+- Preserve responsive behavior.
+- Provide loading, success, empty, error, and retry states.
+- Use one visually dominant primary action per view.
+- Explain unfamiliar terms inline.
+- Do not expose internal provider names, IDs, or technical errors to end users.
+- Use accessible labels, keyboard support, focus states, and adequate contrast.
+- Avoid dense layouts and excessive cards.
+- Use existing design tokens and shared components before adding new styling systems.
+- Customer-facing copy should be confident, friendly, and direct.

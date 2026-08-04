@@ -1,0 +1,20 @@
+---
+description: AI content, image, video, voice, scoring, prompt, and credit workflow rules
+globs: app/api/ai/**/*.ts,app/api/**/video*.ts,src/**/*ai*.ts,lib/**/*ai*.ts,**/*prompt*.ts
+alwaysApply: false
+---
+
+# AI generation
+
+- The platform should ask business questions and generate recommendations; users should not need to invent prompts.
+- Use brand profile, audience, industry, goals, campaign, platform, and compliance context.
+- Keep outputs editable and traceable.
+- Do not claim content was published unless provider confirmation exists.
+- Reserve credits before paid generation.
+- Refund credits on definitive failure.
+- Prevent duplicate charging through idempotency.
+- Store provider job IDs and status transitions.
+- Make asynchronous state visible: queued, generating, processing, completed, failed, cancelled.
+- Prefer economical provider routing when quality is acceptable.
+- Avoid hard-coding one provider where a provider-neutral adapter exists.
+- Save completed media into the Media Library and working content into the Content Library when the established workflow requires it.

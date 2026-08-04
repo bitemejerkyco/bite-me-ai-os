@@ -1,0 +1,19 @@
+---
+description: API routes, server actions, authentication, authorization, validation, and error handling
+globs: app/api/**/*.ts,app/**/actions*.ts,src/server/**/*.ts,lib/**/*.ts
+alwaysApply: false
+---
+
+# API and security
+
+- Authenticate every protected request.
+- Verify workspace or tenant ownership server-side.
+- Validate all external inputs.
+- Keep secrets server-only.
+- Return stable error codes and safe messages.
+- Log enough context for diagnosis without logging secrets or sensitive payloads.
+- Apply rate limiting or abuse controls to expensive endpoints.
+- Use idempotency for generation, publishing, billing, and webhook operations.
+- Time out external provider calls and handle retries deliberately.
+- Do not swallow provider errors.
+- Separate user-facing messages from internal diagnostic detail.

@@ -16,10 +16,16 @@ function extractTerms(filePath) {
   return [...source.matchAll(/term:\s*"([^"]+)"/g)].map((match) => match[1]);
 }
 
+function routePathname(route) {
+  const [pathname] = route.split(/[?#]/);
+  return pathname || route;
+}
+
 function routeExists(route) {
-  const normalized = route === "/" ? ["app/page.tsx"] : [
-    `app${route}/page.tsx`,
-    `app${route}/route.ts`,
+  const pathname = routePathname(route);
+  const normalized = pathname === "/" ? ["app/page.tsx"] : [
+    `app${pathname}/page.tsx`,
+    `app${pathname}/route.ts`,
   ];
   return normalized.some((relativePath) => fs.existsSync(path.join(repoRoot, relativePath)));
 }

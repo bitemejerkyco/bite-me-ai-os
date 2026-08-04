@@ -1,0 +1,19 @@
+---
+description: Testing, validation, migrations, and release discipline
+globs: **/*.{ts,tsx,sql,mjs},.github/**/*,vercel.json
+alwaysApply: false
+---
+
+# Testing and release
+
+For meaningful changes:
+
+- Add focused unit or integration tests.
+- Test success, authorization failure, validation failure, and provider failure.
+- For UI flows, test loading, empty, error, and retry states.
+- Run lint, tests, build, diff check, and status.
+- Run help registry validation when applicable.
+- Confirm migrations are ordered and safe for production data.
+- Review environment-variable requirements.
+- Report exactly what was validated and what was not.
+- Do not say a deployment is successful without evidence from the deployment platform or production URL.

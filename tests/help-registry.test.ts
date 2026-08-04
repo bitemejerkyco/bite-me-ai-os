@@ -51,6 +51,20 @@ describe("help registry coverage", () => {
     });
   });
 
+  it("maps query-param help routes to existing app pages", () => {
+    const queryRoutes = [
+      ...PAGE_HELP_REGISTRY.map((entry) => entry.route),
+      ...WALKTHROUGH_REGISTRY.map((entry) => entry.route),
+    ].filter((route) => route.includes("?"));
+
+    expect(queryRoutes.length).toBeGreaterThan(0);
+    queryRoutes.forEach((route) => {
+      const pathname = route.split(/[?#]/)[0];
+      expect(pathname).toBe("/media");
+      expect(route).toContain("tab=CONTENT_DRAFTS");
+    });
+  });
+
   it("uses the expanded 8-step dashboard walkthrough with explicit help targets", () => {
     const dashboardWalkthrough = WALKTHROUGH_REGISTRY.find((entry) => entry.id === "dashboard-overview");
     expect(dashboardWalkthrough?.version).toBe("2");

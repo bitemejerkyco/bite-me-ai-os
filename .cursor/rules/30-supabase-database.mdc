@@ -1,0 +1,18 @@
+---
+description: Supabase schema, RLS, migrations, storage, and tenant-isolation rules
+globs: supabase/**/*.sql,**/*supabase*.ts,**/migrations/**/*.sql
+alwaysApply: false
+---
+
+# Supabase and database
+
+- Inspect existing migrations and generated types before changing schema.
+- Add new migrations; do not rewrite migrations that may be deployed.
+- Use snake_case for database fields.
+- Preserve legacy data through backfills before enforcing new constraints.
+- Add constraints only after existing data is compatible.
+- Ensure RLS policies cover SELECT, INSERT, UPDATE, and DELETE as appropriate.
+- Test cross-workspace access denial.
+- Use transactions or equivalent atomic operations for credits and paid generation.
+- Maintain created_at and updated_at conventions already used by the repository.
+- Document destructive or irreversible changes.

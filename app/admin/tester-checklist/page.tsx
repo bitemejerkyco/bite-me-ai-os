@@ -13,7 +13,7 @@ const TEST_FLOW_STEPS = [
   "Schedule content",
   "Open Analytics",
   "Use Help Search",
-  "Ask PostMotive five questions",
+  "Ask Motive five questions",
   "Complete one Academy lesson",
   "Submit one feedback report",
 ] as const;
