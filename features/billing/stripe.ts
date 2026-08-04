@@ -40,6 +40,23 @@ export function getStripeClient(): Stripe {
   return stripeClient;
 }
 
+export function getStripeWebhookSecret(): string {
+  const secret = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+  if (!secret) {
+    throw new Error("STRIPE_WEBHOOK_NOT_CONFIGURED:STRIPE_WEBHOOK_SECRET is required.");
+  }
+  return secret;
+}
+
+export function constructStripeWebhookEvent(
+  rawBody: string,
+  signature: string,
+  webhookSecret: string,
+): Stripe.Event {
+  const stripe = getStripeClient();
+  return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+}
+
 export async function resolveOrCreateStripeCustomer(input: {
   workspaceId: string;
   email: string;

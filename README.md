@@ -86,10 +86,25 @@ Copy `.env.example` to `.env.local` and set values for your environment. Names o
 
 - TikTok: `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI`, `TIKTOK_TOKEN_ENCRYPTION_KEY`
 - Resend: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
-- Stripe: `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_*`
+- Stripe: `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*`
 - Amazon Ads: `AMAZON_ADS_*`
 
 Central validation: `lib/env.ts`. Public config must use `NEXT_PUBLIC_*` only for browser-safe values. Service-role keys and provider secrets must stay server-side.
+
+## Stripe webhook architecture
+
+Billing webhooks sync Stripe customers, subscriptions, invoices, and workspace billing status only. They do not write to `credit_ledger`, `workspace_credit_balances`, or `video_credit_accounts`.
+
+```
+Stripe
+  → POST /api/billing/webhook
+  → signature verification (STRIPE_WEBHOOK_SECRET)
+  → idempotency check (integration_webhook_events)
+  → event dispatcher
+  → customer / subscription / invoice / workspace billing status sync
+```
+
+Handler code: `app/api/billing/webhook/route.ts`, `features/billing/stripe-webhook.ts`.
 
 ## Supabase migrations
 

@@ -284,8 +284,98 @@ export async function loadPlatformHealth(): Promise<{
     });
   }
 
-  checks.push(process.env.STRIPE_SECRET_KEY ? configuredButUnavailable("stripe", "Stripe", "Configured, but checkout synchronization is still deferred.") : notConfigured("stripe", "Stripe"));
-  checks.push(configuredButUnavailable("webhooks", "Webhooks", "No webhook heartbeat source is implemented."));
+  const stripeSecretKey = String(process.env.STRIPE_SECRET_KEY || "").trim();
+  const stripeWebhookSecret = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+
+  if (!stripeSecretKey) {
+    checks.push(notConfigured("stripe", "Stripe"));
+  } else if (!stripeWebhookSecret) {
+    checks.push({
+      key: "stripe",
+      displayName: "Stripe",
+      status: "warning",
+      message: "Configured; missing webhook secret.",
+      checkedAt: now,
+      latencyMs: null,
+      metadata: {},
+      source: "configuration",
+    });
+  } else {
+    checks.push({
+      key: "stripe",
+      displayName: "Stripe",
+      status: "unavailable",
+      message: "Configured; handler available at /api/billing/webhook.",
+      checkedAt: now,
+      latencyMs: null,
+      metadata: {},
+      source: "configuration",
+    });
+  }
+
+  if (!stripeWebhookSecret) {
+    checks.push(notConfigured("stripe_webhooks", "Stripe Webhooks", "Missing webhook secret."));
+  } else {
+    try {
+      const { data, error } = await admin
+        .from("integration_webhook_events")
+        .select("id,status,processed_at")
+        .eq("provider", "stripe")
+        .eq("status", "PROCESSED")
+        .order("processed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        checks.push({
+          key: "stripe_webhooks",
+          displayName: "Stripe Webhooks",
+          status: "warning",
+          message: "Handler available; webhook confirmation lookup failed.",
+          checkedAt: now,
+          latencyMs: null,
+          metadata: sanitizeHealthMetadata({ error: error.message }),
+          source: "supabase",
+        });
+      } else if (data) {
+        const row = data as { processed_at?: string | null };
+        checks.push({
+          key: "stripe_webhooks",
+          displayName: "Stripe Webhooks",
+          status: "healthy",
+          message: "Handler available; recent webhook confirmation recorded.",
+          checkedAt: now,
+          latencyMs: null,
+          metadata: sanitizeHealthMetadata({
+            lastProcessedAt: row.processed_at ?? null,
+          }),
+          source: "supabase",
+        });
+      } else {
+        checks.push({
+          key: "stripe_webhooks",
+          displayName: "Stripe Webhooks",
+          status: "unavailable",
+          message: "Handler available; no recent webhook confirmation.",
+          checkedAt: now,
+          latencyMs: null,
+          metadata: {},
+          source: "supabase",
+        });
+      }
+    } catch (error) {
+      checks.push({
+        key: "stripe_webhooks",
+        displayName: "Stripe Webhooks",
+        status: "warning",
+        message: "Handler available; webhook confirmation lookup is unavailable.",
+        checkedAt: now,
+        latencyMs: null,
+        metadata: sanitizeHealthMetadata({ error: String(error) }),
+        source: "supabase",
+      });
+    }
+  }
 
   return {
     overallStatus: summarizeOverallHealth(checks),
