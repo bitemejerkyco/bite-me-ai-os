@@ -1,5 +1,6 @@
 import {
   TIKTOK_REQUIRED_SCOPES,
+  TIKTOK_REQUESTED_SCOPES,
   normalizeTikTokIntegrationMode,
   type TikTokIntegrationMode,
 } from "@/features/integrations/tiktok/types";
@@ -33,7 +34,7 @@ export function loadTikTokConfig(): TikTokConfig {
     webhooksEnabled: value("TIKTOK_WEBHOOKS_ENABLED").toLowerCase() === "true",
     mediaBaseUrl: value("TIKTOK_MEDIA_BASE_URL"),
     verifiedUrlPrefix: value("TIKTOK_VERIFIED_URL_PREFIX"),
-    scopes: [...TIKTOK_REQUIRED_SCOPES],
+    scopes: [...TIKTOK_REQUESTED_SCOPES],
   };
 }
 

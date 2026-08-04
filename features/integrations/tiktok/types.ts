@@ -3,6 +3,11 @@ export const TIKTOK_REQUIRED_SCOPES = [
   "video.upload",
 ] as const;
 
+export const TIKTOK_REQUESTED_SCOPES = [
+  ...TIKTOK_REQUIRED_SCOPES,
+  "video.publish",
+] as const;
+
 export const TIKTOK_INTEGRATION_MODES = [
   "disabled",
   "sandbox",

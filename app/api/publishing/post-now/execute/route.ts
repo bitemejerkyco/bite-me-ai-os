@@ -1,8 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorkspaceContext } from "@/features/marketing-director/workspace-context";
-import { TikTokConnectionService } from "@/features/integrations/tiktok/service";
+import { TikTokPublishJobService } from "@/features/integrations/tiktok/publish-jobs";
 import { hasDuplicatePublish, isPostNowEligible } from "@/features/core/post-now-policy";
 
 function normalizeChannel(input: string): "TikTok" | "Instagram" | "Facebook" {
@@ -20,6 +19,13 @@ export async function POST(request: Request) {
       videoProjectId?: unknown;
       channel?: unknown;
       idempotencyKey?: unknown;
+      mode?: unknown;
+      privacyLevel?: unknown;
+      disableComment?: unknown;
+      disableDuet?: unknown;
+      disableStitch?: unknown;
+      commercialContentDisclosure?: unknown;
+      brandedContentToggle?: unknown;
     } | null;
 
     const videoProjectId = String(payload?.videoProjectId || "").trim();
@@ -32,7 +38,7 @@ export async function POST(request: Request) {
 
     const { data: project, error: projectError } = await admin
       .from("video_projects")
-      .select("id,title,caption,status,video_storage_path")
+      .select("id,title,caption,status,video_storage_path,media_asset_id")
       .eq("workspace_id", context.workspaceId)
       .eq("id", videoProjectId)
       .maybeSingle();
@@ -50,26 +56,23 @@ export async function POST(request: Request) {
 
     const { data: existingRows, error: existingError } = await admin
       .from("scheduled_posts")
-      .select("id,status,created_at")
+      .select("video_project_id,status")
       .eq("workspace_id", context.workspaceId)
       .eq("video_project_id", videoProjectId)
       .in("status", ["SCHEDULED", "PUBLISHING", "DELIVERED_TO_INBOX", "PUBLISHED"])
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .limit(10);
 
     if (existingError) throw new Error(`POST_NOW_DUPLICATE_CHECK_FAILED:${existingError.message}`);
-    const existing = ((existingRows as Array<Record<string, unknown>> | null) || [])[0] || null;
     const existingAll = ((existingRows as Array<Record<string, unknown>> | null) || []).map((row) => ({
-      videoProjectId,
+      videoProjectId: String(row.video_project_id || ""),
       status: String(row.status || ""),
     }));
-    if (hasDuplicatePublish(existingAll, videoProjectId) && existing) {
+    if (hasDuplicatePublish(existingAll, videoProjectId)) {
       return NextResponse.json({
         ok: true,
         duplicate: true,
         data: {
-          scheduledPostId: String(existing.id || ""),
-          status: String(existing.status || "SCHEDULED"),
+          status: "PUBLISHING",
           idempotencyKey,
         },
       });
@@ -86,69 +89,62 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: tiktokConnection, error: tiktokError } = await admin
-      .from("tiktok_connections")
-      .select("status")
-      .eq("workspace_id", context.workspaceId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (tiktokError) throw new Error(`POST_NOW_TIKTOK_LOOKUP_FAILED:${tiktokError.message}`);
-    const connectionStatus = String((tiktokConnection as Record<string, unknown> | null)?.status || "disconnected");
-    if (connectionStatus !== "connected") {
-      return NextResponse.json(
-        {
-          ok: false,
-          setupRedirect: "/settings/integrations/tiktok",
-          error: "POST_NOW_SETUP_REQUIRED:TikTok is not connected. Reconnect TikTok before posting now.",
-        },
-        { status: 409 },
-      );
+    let mediaAssetId = String(projectRow.media_asset_id || "").trim();
+    if (!mediaAssetId) {
+      const { data: mediaByPath, error: mediaLookupError } = await admin
+        .from("media_assets")
+        .select("id")
+        .eq("workspace_id", context.workspaceId)
+        .eq("storage_path", String(projectRow.video_storage_path || ""))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (mediaLookupError) {
+        throw new Error(`POST_NOW_MEDIA_LOOKUP_FAILED:${mediaLookupError.message}`);
+      }
+      mediaAssetId = String((mediaByPath as { id?: string } | null)?.id || "").trim();
     }
-
-    const scheduledPostId = randomUUID();
-    const nowIso = new Date().toISOString();
-
-    const { error: insertError } = await admin
-      .from("scheduled_posts")
-      .insert({
-        id: scheduledPostId,
-        workspace_id: context.workspaceId,
-        created_by: context.userId,
-        entry_type: "POST",
-        channel,
-        title: String(projectRow.title || "Video post"),
-        content: String(projectRow.caption || ""),
-        scheduled_for: nowIso,
-        timezone: "UTC",
-        status: "SCHEDULED",
-        approved_by: context.userId,
-        approved_at: nowIso,
-        content_draft_id: null,
-        video_project_id: videoProjectId,
-        media_storage_path: String(projectRow.video_storage_path || ""),
-      } as never);
-
-    if (insertError) throw new Error(`POST_NOW_INSERT_FAILED:${insertError.message}`);
+    if (!mediaAssetId) {
+      throw new Error("POST_NOW_INVALID:The approved video asset is not available for TikTok publishing.");
+    }
 
     const actor = {
       supabase: admin,
       userId: context.userId,
       workspaceId: context.workspaceId,
     };
+    const modeRaw = String(payload?.mode || "UPLOAD_DRAFT").toUpperCase();
+    const mode = modeRaw === "DIRECT_POST" ? "DIRECT_POST" : "UPLOAD_DRAFT";
+    const hashtags = String(projectRow.caption || "")
+      .split(/\s+/u)
+      .map((part) => part.trim())
+      .filter((part) => part.startsWith("#"))
+      .slice(0, 8);
 
-    const publishId = await new TikTokConnectionService().sendScheduledVideoToInbox(
-      actor,
-      scheduledPostId,
-    );
+    const publishService = new TikTokPublishJobService();
+    const job = await publishService.createTikTokPublishJob(actor, {
+      mediaAssetId,
+      caption: String(projectRow.caption || ""),
+      hashtags,
+      consent: true,
+      mode,
+      privacyLevel: String(payload?.privacyLevel || "").trim() || undefined,
+      disableComment: payload?.disableComment === true,
+      disableDuet: payload?.disableDuet === true,
+      disableStitch: payload?.disableStitch === true,
+      commercialContentDisclosure: payload?.commercialContentDisclosure === true,
+      brandedContentToggle: payload?.brandedContentToggle === true,
+      idempotencyKey: idempotencyKey || undefined,
+    });
+    const initialized = await publishService.initializeTikTokPublish(actor, job.id);
 
     return NextResponse.json({
       ok: true,
       data: {
-        scheduledPostId,
-        publishId,
-        status: "PUBLISHING",
+        jobId: initialized.id,
+        publishId: initialized.publishId,
+        status: initialized.status,
+        mode,
         idempotencyKey,
       },
     });

@@ -98,6 +98,71 @@ describe("TikTok routes and admin gate", () => {
     expect(JSON.stringify(payload)).not.toContain("refresh_token");
   });
 
+  it("passes direct-post mode and controls into shared upload job creation", async () => {
+    publishJobService.createTikTokPublishJob.mockResolvedValue({ id: "job-direct" });
+    publishJobService.initializeTikTokInboxUpload.mockResolvedValue({
+      id: "job-direct",
+      workspaceId: "workspace-1",
+      connectionId: "connection-1",
+      mediaAssetId: "media-1",
+      publishMode: "direct_post",
+      publishId: "publish-direct",
+      status: "processing",
+      caption: "Direct caption",
+      errorCode: null,
+      errorMessage: null,
+      consentedAt: new Date().toISOString(),
+      submittedAt: new Date().toISOString(),
+      completedAt: null,
+      failedAt: null,
+      progress: 75,
+      reconnectRequired: false,
+      retryable: false,
+      message: "TikTok is still processing the upload.",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      mediaAsset: { id: "media-1", name: "clip.mp4", mimeType: "video/mp4", sizeBytes: 100 },
+    });
+
+    const { POST } = await import("@/app/api/integrations/tiktok/upload/route");
+    const response = await POST(
+      new Request("https://postmotive.example/api/integrations/tiktok/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mediaAssetId: "media-1",
+          caption: "Direct caption",
+          hashtags: ["#brand"],
+          consent: true,
+          mode: "DIRECT_POST",
+          privacyLevel: "SELF_ONLY",
+          disableComment: true,
+          disableDuet: false,
+          disableStitch: true,
+          commercialContentDisclosure: true,
+          brandedContentToggle: false,
+          idempotencyKey: "job-direct-key",
+        }),
+      }) as never,
+    );
+
+    expect(response.ok).toBe(true);
+    expect(publishJobService.createTikTokPublishJob).toHaveBeenCalledWith(
+      fakeActor,
+      expect.objectContaining({
+        mediaAssetId: "media-1",
+        mode: "DIRECT_POST",
+        privacyLevel: "SELF_ONLY",
+        disableComment: true,
+        disableDuet: false,
+        disableStitch: true,
+        commercialContentDisclosure: true,
+        brandedContentToggle: false,
+        idempotencyKey: "job-direct-key",
+      }),
+    );
+  });
+
   it("returns safe job status data from the job polling route", async () => {
     publishJobService.refreshTikTokPublishStatus.mockResolvedValue({
       id: "job-1",

@@ -10,6 +10,8 @@ const REVOKE_ENDPOINT = "https://open.tiktokapis.com/v2/oauth/revoke/";
 const USER_INFO_ENDPOINT = "https://open.tiktokapis.com/v2/user/info/";
 const INBOX_VIDEO_INIT_ENDPOINT =
   "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
+const DIRECT_POST_INIT_ENDPOINT =
+  "https://open.tiktokapis.com/v2/post/publish/video/init/";
 const PUBLISH_STATUS_ENDPOINT =
   "https://open.tiktokapis.com/v2/post/publish/status/fetch/";
 const CREATOR_INFO_ENDPOINT =
@@ -247,6 +249,59 @@ export class TikTokApiClient {
         `TIKTOK_UPLOAD_INIT_FAILED:${payload.error?.code || response.status}.`,
       );
     }
+    return payload.data.publish_id;
+  }
+
+  async initializeDirectPostFromUrl(input: {
+    accessToken: string;
+    videoUrl: string;
+    title: string;
+    privacyLevel: string;
+    disableComment: boolean;
+    disableDuet: boolean;
+    disableStitch: boolean;
+    commercialContentDisclosure: boolean;
+    brandedContentToggle: boolean;
+  }): Promise<string> {
+    const response = await this.fetchImpl(DIRECT_POST_INIT_ENDPOINT, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${input.accessToken}`,
+        "content-type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        post_info: {
+          title: input.title,
+          privacy_level: input.privacyLevel,
+          disable_comment: input.disableComment,
+          disable_duet: input.disableDuet,
+          disable_stitch: input.disableStitch,
+          video_cover_timestamp_ms: 1000,
+          brand_content_toggle: input.commercialContentDisclosure,
+          brand_organic_toggle: input.brandedContentToggle,
+        },
+        source_info: {
+          source: "PULL_FROM_URL",
+          video_url: input.videoUrl,
+        },
+      }),
+    });
+
+    const payload = (await response.json()) as {
+      data?: { publish_id?: string };
+      error?: { code?: string; message?: string };
+    };
+
+    if (
+      !response.ok ||
+      payload.error?.code !== "ok" ||
+      !payload.data?.publish_id
+    ) {
+      throw new Error(
+        `TIKTOK_DIRECT_INIT_FAILED:${payload.error?.code || response.status}.`,
+      );
+    }
+
     return payload.data.publish_id;
   }
 

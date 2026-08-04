@@ -1341,21 +1341,28 @@ export default function MediaLibrary({
 
                     {asset.type.startsWith("video/") ? (
                       <div className="mt-1">
-                        {tiktokView?.status === "connected" && tiktokView.uploadToDraftEnabled && tiktokView.verifiedMediaReady ? (
+                        {tiktokView?.status === "connected" && tiktokView.directPostEnabled && tiktokView.verifiedMediaReady ? (
                           <Link
-                            href={`/settings/integrations/tiktok?assetId=${asset.id}`}
+                            href={`/settings/integrations/tiktok?assetId=${asset.id}&mode=direct`}
+                            className="inline-flex rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Post to TikTok
+                          </Link>
+                        ) : tiktokView?.status === "connected" && tiktokView.uploadToDraftEnabled && tiktokView.verifiedMediaReady ? (
+                          <Link
+                            href={`/settings/integrations/tiktok?assetId=${asset.id}&mode=draft`}
                             className="inline-flex rounded-xl border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
                           >
-                            Send to TikTok drafts
+                            Send draft to TikTok
                           </Link>
                         ) : (
-                          <button
-                            type="button"
-                            disabled
-                            className="inline-flex cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-400"
-                          >
-                            TikTok upload unavailable
-                          </button>
+                          <span className="inline-flex rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                            {tiktokView?.status !== "connected"
+                              ? "Connect TikTok to publish"
+                              : !tiktokView?.verifiedMediaReady
+                                ? "Verify production media domain"
+                                : "Authorize video.upload or video.publish"}
+                          </span>
                         )}
                       </div>
                     ) : null}

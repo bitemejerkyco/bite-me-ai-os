@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import type { SafeTikTokPublishJob } from "@/features/integrations/tiktok/publish-jobs";
 
 type EligibleItem = {
   id: string;
   videoProjectId: string;
+  mediaAssetId: string | null;
   title: string;
   channel: string;
   caption: string;
@@ -26,6 +28,12 @@ export default function HomePostNowDrawer({ open, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [jobByProjectId, setJobByProjectId] = useState<Record<string, SafeTikTokPublishJob>>({});
+
+  const activeStatuses = useMemo(
+    () => new Set(["draft", "validating", "initializing", "uploading", "processing", "reconnect_required"]),
+    [],
+  );
 
   async function loadEligible() {
     setBusy(true);
@@ -85,6 +93,69 @@ export default function HomePostNowDrawer({ open, onClose }: Props) {
   const hasItems = useMemo(() => items.length > 0, [items.length]);
 
   async function postNow(item: EligibleItem) {
+    if (!item.mediaAssetId) {
+      setMessage("This approved video is missing a linked media asset. Open it in AI Studio and regenerate, then retry.");
+      return;
+    }
+
+    type PreflightPayload = {
+      ok?: boolean;
+      data?: {
+        directPostAllowed: boolean;
+        uploadDraftAllowed: boolean;
+        requiresPrivateOnly: boolean;
+        modeMessage: string;
+        creator?: { privacyOptions?: string[] | null };
+        blockers?: Array<{ code?: string; message?: string; action?: string }>;
+      };
+      error?: string;
+    };
+
+    let mode: "DIRECT_POST" | "UPLOAD_DRAFT" = "UPLOAD_DRAFT";
+    let privacyLevel = "";
+
+    try {
+      const preflightResponse = await fetch(
+        `/api/publishing/post-now/preflight?mediaAssetId=${encodeURIComponent(item.mediaAssetId)}`,
+        { cache: "no-store" },
+      );
+      const preflightPayload = (await preflightResponse.json()) as PreflightPayload;
+      if (!preflightResponse.ok || !preflightPayload.ok || !preflightPayload.data) {
+        throw new Error(preflightPayload.error || "Unable to validate TikTok publishing requirements.");
+      }
+
+      if (!preflightPayload.data.directPostAllowed && !preflightPayload.data.uploadDraftAllowed) {
+        const firstBlocker = preflightPayload.data.blockers?.[0];
+        throw new Error(
+          firstBlocker
+            ? `${firstBlocker.message || "Publishing is blocked."} ${firstBlocker.action || "Reconnect TikTok and review publishing settings."}`
+            : "Publishing is blocked. Reconnect TikTok and review publishing settings.",
+        );
+      }
+
+      mode = preflightPayload.data.directPostAllowed ? "DIRECT_POST" : "UPLOAD_DRAFT";
+      if (mode === "DIRECT_POST") {
+        const options = preflightPayload.data.creator?.privacyOptions || [];
+        const defaultOption = options[0] || "SELF_ONLY";
+        const selected = window.prompt(
+          `Select TikTok privacy (${options.join(", ") || "SELF_ONLY"}).${preflightPayload.data.requiresPrivateOnly ? " TikTok currently allows private-only posting for this account." : ""}`,
+          defaultOption,
+        );
+        if (!selected) {
+          setMessage("Posting canceled. Privacy level selection is required.");
+          return;
+        }
+        privacyLevel = selected.trim();
+        if (!privacyLevel || (options.length > 0 && !options.includes(privacyLevel))) {
+          setMessage("Posting canceled. Choose one of the privacy levels returned by TikTok.");
+          return;
+        }
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+      return;
+    }
+
     const idempotencyKey = `${item.videoProjectId}:${new Date().toISOString().slice(0, 16)}`;
     setBusy(true);
     setMessage(null);
@@ -96,13 +167,15 @@ export default function HomePostNowDrawer({ open, onClose }: Props) {
           videoProjectId: item.videoProjectId,
           channel: item.channel,
           idempotencyKey,
+          mode,
+          privacyLevel,
         }),
       });
       const payload = (await response.json()) as {
         ok?: boolean;
         duplicate?: boolean;
         setupRedirect?: string;
-        data?: { scheduledPostId?: string; status?: string };
+        data?: { jobId?: string; publishId?: string; status?: string; mode?: string };
         error?: string;
       };
       if (!response.ok || !payload.ok) {
@@ -115,8 +188,24 @@ export default function HomePostNowDrawer({ open, onClose }: Props) {
       setMessage(
         payload.duplicate
           ? "This item was already queued or published. Duplicate posting was prevented."
-          : "Post now queued successfully. Track delivery status in the publishing queue.",
+          : "TikTok publish request submitted. Live status is shown below.",
       );
+      const jobId = String(payload.data?.jobId || "").trim();
+      if (jobId) {
+        const jobResponse = await fetch(`/api/integrations/tiktok/jobs/${jobId}`, {
+          cache: "no-store",
+        });
+        const jobPayload = (await jobResponse.json()) as {
+          ok?: boolean;
+          data?: SafeTikTokPublishJob;
+        };
+        if (jobResponse.ok && jobPayload.ok && jobPayload.data) {
+          setJobByProjectId((current) => ({
+            ...current,
+            [item.videoProjectId]: jobPayload.data as SafeTikTokPublishJob,
+          }));
+        }
+      }
       await loadEligible();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -124,6 +213,49 @@ export default function HomePostNowDrawer({ open, onClose }: Props) {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!open) return;
+    const activeJobs = Object.values(jobByProjectId).filter((job) => activeStatuses.has(job.status));
+    if (!activeJobs.length) return;
+    let disposed = false;
+
+    async function poll() {
+      await Promise.all(
+        activeJobs.map(async (job) => {
+          try {
+            const response = await fetch(`/api/integrations/tiktok/jobs/${job.id}`, {
+              cache: "no-store",
+            });
+            const payload = (await response.json()) as {
+              ok?: boolean;
+              data?: SafeTikTokPublishJob;
+            };
+            if (!disposed && response.ok && payload.ok && payload.data) {
+              const next = payload.data;
+              setJobByProjectId((current) => {
+                const key = Object.keys(current).find((projectId) => current[projectId]?.id === next.id);
+                if (!key) return current;
+                return { ...current, [key]: next };
+              });
+            }
+          } catch {
+            // Polling is best-effort.
+          }
+        }),
+      );
+    }
+
+    void poll();
+    const timer = window.setInterval(() => {
+      void poll();
+    }, 7000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [activeStatuses, jobByProjectId, open]);
 
   if (!open) return null;
 
@@ -188,6 +320,14 @@ export default function HomePostNowDrawer({ open, onClose }: Props) {
                       Open in AI Studio
                     </Link>
                   </div>
+                  {jobByProjectId[item.videoProjectId] ? (
+                    <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                      TikTok: {jobByProjectId[item.videoProjectId]!.status.replaceAll("_", " ")}
+                      {jobByProjectId[item.videoProjectId]!.publishId
+                        ? ` · publish id ${jobByProjectId[item.videoProjectId]!.publishId}`
+                        : ""}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </article>

@@ -164,6 +164,58 @@ describe("TikTok sandbox integration", () => {
     });
   });
 
+  it("initializes a direct post from a protected URL with privacy and disclosure controls", async () => {
+    let capturedUrl = "";
+    let capturedBody = "";
+    const fetchImpl = vi.fn(
+      async (input: URL | RequestInfo, init?: RequestInit) => {
+        capturedUrl = String(input);
+        capturedBody = String(init?.body || "");
+        return new Response(
+          JSON.stringify({
+            data: { publish_id: "publish-direct-1" },
+            error: { code: "ok", message: "", log_id: "log" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    );
+
+    const publishId = await new TikTokApiClient(config, {
+      fetchImpl: fetchImpl as typeof fetch,
+    }).initializeDirectPostFromUrl({
+      accessToken: "access",
+      videoUrl: "https://postmotive.example/api/integrations/tiktok/media?token=protected",
+      title: "New product launch",
+      privacyLevel: "SELF_ONLY",
+      disableComment: true,
+      disableDuet: false,
+      disableStitch: true,
+      commercialContentDisclosure: true,
+      brandedContentToggle: false,
+    });
+
+    expect(publishId).toBe("publish-direct-1");
+    expect(capturedUrl).toBe("https://open.tiktokapis.com/v2/post/publish/video/init/");
+    expect(JSON.parse(capturedBody)).toEqual({
+      post_info: {
+        title: "New product launch",
+        privacy_level: "SELF_ONLY",
+        disable_comment: true,
+        disable_duet: false,
+        disable_stitch: true,
+        video_cover_timestamp_ms: 1000,
+        brand_content_toggle: true,
+        brand_organic_toggle: false,
+      },
+      source_info: {
+        source: "PULL_FROM_URL",
+        video_url:
+          "https://postmotive.example/api/integrations/tiktok/media?token=protected",
+      },
+    });
+  });
+
   it("reads TikTok inbox delivery status without treating delivery as publication", async () => {
     const fetchImpl = vi.fn(async () =>
       new Response(

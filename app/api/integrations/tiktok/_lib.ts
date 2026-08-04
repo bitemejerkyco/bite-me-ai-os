@@ -17,20 +17,34 @@ export async function resolveTikTokActor(): Promise<TikTokActorContext> {
   if (userError || !user) {
     throw new Error("AUTH_REQUIRED:Sign in to connect TikTok.");
   }
-  const { data: workspace, error: workspaceError } = await supabase
-    .from("workspaces")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (workspaceError) throw new Error(`WORKSPACE_FAILED:${workspaceError.message}`);
-  if (!workspace?.id) {
+  const { data: primaryWorkspaceId, error: primaryWorkspaceError } = await supabase.rpc("my_primary_workspace_id");
+  if (primaryWorkspaceError) {
+    throw new Error(`WORKSPACE_FAILED:${primaryWorkspaceError.message}`);
+  }
+
+  let workspaceId = String(primaryWorkspaceId || "").trim();
+  if (!workspaceId) {
+    const { data: membership, error: membershipError } = await supabase
+      .from("workspace_memberships")
+      .select("workspace_id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (membershipError) {
+      throw new Error(`WORKSPACE_FAILED:${membershipError.message}`);
+    }
+    workspaceId = String((membership as { workspace_id?: string } | null)?.workspace_id || "").trim();
+  }
+
+  if (!workspaceId) {
     throw new Error("WORKSPACE_REQUIRED:Complete Business Setup first.");
   }
+
   return {
     supabase,
     userId: user.id,
-    workspaceId: String(workspace.id),
+    workspaceId,
   };
 }
 

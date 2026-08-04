@@ -15,6 +15,14 @@ export async function POST(request: NextRequest) {
       caption?: unknown;
       hashtags?: unknown;
       consent?: unknown;
+      mode?: unknown;
+      privacyLevel?: unknown;
+      disableComment?: unknown;
+      disableDuet?: unknown;
+      disableStitch?: unknown;
+      commercialContentDisclosure?: unknown;
+      brandedContentToggle?: unknown;
+      idempotencyKey?: unknown;
       scheduledPostId?: unknown;
     };
     const actor = await resolveTikTokActor();
@@ -25,14 +33,27 @@ export async function POST(request: NextRequest) {
         ? input.hashtags.map((value) => String(value || "").trim()).filter(Boolean)
         : [];
       const consent = input.consent === true || String(input.consent || "").toLowerCase() === "true";
+      const modeRaw = String(input.mode || "UPLOAD_DRAFT").toUpperCase();
+      const mode = modeRaw === "DIRECT_POST" ? "DIRECT_POST" : "UPLOAD_DRAFT";
       const service = new TikTokPublishJobService();
       const job = await service.createTikTokPublishJob(actor, {
         mediaAssetId,
         caption,
         hashtags,
         consent,
+        mode,
+        privacyLevel: String(input.privacyLevel || "").trim() || undefined,
+        disableComment: input.disableComment === true,
+        disableDuet: input.disableDuet === true,
+        disableStitch: input.disableStitch === true,
+        commercialContentDisclosure: input.commercialContentDisclosure === true,
+        brandedContentToggle: input.brandedContentToggle === true,
+        idempotencyKey: String(input.idempotencyKey || "").trim() || undefined,
       });
-      const initialized = await service.initializeTikTokInboxUpload(actor, job.id);
+      const initializer = (service as { initializeTikTokPublish?: (actorArg: typeof actor, jobId: string) => Promise<unknown> }).initializeTikTokPublish;
+      const initialized = initializer
+        ? await initializer(actor, job.id)
+        : await service.initializeTikTokInboxUpload(actor, job.id);
       return NextResponse.json({ ok: true, data: initialized }, { headers: { "cache-control": "no-store" } });
     }
     const scheduledPostId = String(input.scheduledPostId || "").trim();

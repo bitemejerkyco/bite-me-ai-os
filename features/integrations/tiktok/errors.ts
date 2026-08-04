@@ -32,7 +32,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok authorization expired. Reconnect the account.",
       reconnectRequired: true,
       retryable: false,
-      internalErrorCode: "expired_token",
+      internalErrorCode: "TIKTOK_TOKEN_EXPIRED",
       providerCode,
     };
   }
@@ -42,7 +42,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok authorization is invalid. Reconnect the account.",
       reconnectRequired: true,
       retryable: false,
-      internalErrorCode: "invalid_token",
+      internalErrorCode: "TIKTOK_REAUTH_REQUIRED",
       providerCode,
     };
   }
@@ -52,7 +52,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok is missing a required permission.",
       reconnectRequired: true,
       retryable: false,
-      internalErrorCode: "missing_scope",
+      internalErrorCode: "TIKTOK_SCOPE_MISSING",
       providerCode,
     };
   }
@@ -62,7 +62,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok is rate limiting requests. Please try again shortly.",
       reconnectRequired: false,
       retryable: true,
-      internalErrorCode: "rate_limit",
+      internalErrorCode: "TIKTOK_RATE_LIMITED",
       providerCode,
     };
   }
@@ -72,7 +72,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok cannot reach the configured media URL.",
       reconnectRequired: false,
       retryable: false,
-      internalErrorCode: "unverified_url",
+      internalErrorCode: "TIKTOK_URL_NOT_VERIFIED",
       providerCode,
     };
   }
@@ -82,7 +82,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok does not accept this media file.",
       reconnectRequired: false,
       retryable: false,
-      internalErrorCode: "unsupported_media",
+      internalErrorCode: "TIKTOK_MEDIA_INVALID",
       providerCode,
     };
   }
@@ -92,7 +92,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok has reached the pending share limit.",
       reconnectRequired: false,
       retryable: true,
-      internalErrorCode: "pending_share_limit",
+      internalErrorCode: "TIKTOK_DAILY_LIMIT_REACHED",
       providerCode,
     };
   }
@@ -102,7 +102,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok rejected the publish request because the account is restricted.",
       reconnectRequired: false,
       retryable: false,
-      internalErrorCode: "posting_restriction",
+      internalErrorCode: "TIKTOK_DIRECT_POST_NOT_APPROVED",
       providerCode,
     };
   }
@@ -112,7 +112,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok rejected the video during moderation.",
       reconnectRequired: false,
       retryable: false,
-      internalErrorCode: "moderation_failure",
+      internalErrorCode: "TIKTOK_POST_REJECTED",
       providerCode,
     };
   }
@@ -122,7 +122,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok took too long to respond. Try again shortly.",
       reconnectRequired: false,
       retryable: true,
-      internalErrorCode: "timeout",
+      internalErrorCode: "TIKTOK_STATUS_TIMEOUT",
       providerCode,
     };
   }
@@ -132,7 +132,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
       message: "TikTok is temporarily unavailable.",
       reconnectRequired: false,
       retryable: true,
-      internalErrorCode: "provider_unavailable",
+      internalErrorCode: "TIKTOK_PROVIDER_UNAVAILABLE",
       providerCode,
     };
   }
@@ -141,7 +141,7 @@ export function mapTikTokError(input: unknown): TikTokErrorMapping {
     message: "TikTok returned an unexpected error.",
     reconnectRequired: false,
     retryable: false,
-    internalErrorCode: providerCode || "unknown_provider_error",
+    internalErrorCode: providerCode || "TIKTOK_PROVIDER_UNAVAILABLE",
     providerCode,
   };
 }

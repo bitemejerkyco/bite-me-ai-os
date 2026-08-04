@@ -6,6 +6,7 @@ import { isPostNowEligible } from "@/features/core/post-now-policy";
 export type PostNowEligibleItem = {
   id: string;
   videoProjectId: string;
+  mediaAssetId: string | null;
   title: string;
   channel: "TikTok" | "Instagram Reels" | "Facebook Reels" | "YouTube Shorts";
   caption: string;
@@ -91,6 +92,7 @@ export async function GET() {
         return {
           id: `post-now-${String(row.id || "")}`,
           videoProjectId: String(row.id || ""),
+          mediaAssetId: mediaAssetId || null,
           title: String(row.title || "Completed video"),
           channel,
           caption: String(row.caption || ""),
